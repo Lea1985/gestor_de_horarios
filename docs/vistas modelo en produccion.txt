@@ -1,0 +1,323 @@
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Articulos = db.define('articulo', {
+    idArticulo: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    articulo: {
+        type: Sequelize.STRING,
+        allowNull: false // Indica que este campo no puede ser nulo
+    },
+    sueldo: {
+        type: Sequelize.STRING
+    },
+    ingreso: {
+        type: Sequelize.DATE // Cambiado a tipo DATE para almacenar fechas
+    },
+    requisitos: {
+        type: Sequelize.TEXT // Cambiado a tipo TEXT para almacenar texto largo
+    },
+    cantDias: {
+        type: Sequelize.STRING
+    },
+    dias: {
+        type: Sequelize.STRING
+    },
+    generaReemplazo: {
+        type: Sequelize.STRING
+    }
+}, {
+    tableName: 'articulo' // Especifica el nombre de la tabla
+});
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Ausencias = db.define('ausencia', {
+    idAusencia: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    idCargo: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    articulo: {
+        type: Sequelize.INTEGER,
+    },
+    fechaDesde: {
+        type: Sequelize.DATE,
+        allowNull: true
+    },
+    fechaHasta: {
+        type: Sequelize.DATE,
+        allowNull: true
+    },
+    idAusenciaMadre: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    idHorario: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    observacion: {
+        type: Sequelize.STRING,
+        allowNull: true
+    },
+    idProfesor: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+}, {
+    tableName: 'ausencia' // Especifica el nombre de la tabla
+});
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Cargos = db.define('cargo', {
+    idCargo: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    idSarh: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    nombreCargo: {
+        type: Sequelize.STRING
+    },
+    hs: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    idCurso: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    idProfesor: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+}, {
+    tableName: 'cargo' // Especifica el nombre de la tabla
+});
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Historico = db.define('historico', {
+    idHistorico: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    horario: {
+        type: Sequelize.TEXT('medium') // Cambia el tipo de datos a MEDIUMTEXT
+    },
+    fechaVigencia: {
+        type: Sequelize.DATE,
+        allowNull: true
+    },
+
+}, {
+    tableName: 'historico' // Especifica el nombre de la tabla
+});
+
+
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+const Horario = db.define('modulo', {
+    idModulo: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    idCurso: {
+        type: Sequelize.INTEGER,
+        allowNull: false
+    },
+
+    idModuloHorario: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    fechaVigencia: {
+        type: Sequelize.DATE,
+        allowNull: false
+    },
+    idCargo: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+}, {
+    tableName: 'modulo', // Nombre de la tabla en la base de datos
+    timestamps: false // Si no deseas los campos de timestamp como createdAt y updatedAt
+});
+
+
+
+export default Horario;
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Modulo = db.define('modulo', {
+    idModulo: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    idCurso: {
+        type: Sequelize.INTEGER,
+        allowNull: false
+    },
+
+    idModuloHorario: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+
+    ,
+    fechaVigencia: {
+        type: Sequelize.DATE,
+        allowNull: false
+    },
+    idCargo: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+}, {
+    tableName: 'modulo' // Especifica el nombre de la tabla
+});
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const ModuloHorario = db.define('modulohorario', {
+    idModuloHorario: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    dia: {
+        type: Sequelize.STRING,
+        allowNull: false
+    },
+    horaDesde: {
+        type: Sequelize.TIME,
+        allowNull: true // Permitimos valores NULL según la definición de la tabla
+    },
+    horaHasta: {
+        type: Sequelize.TIME,
+        allowNull: true // Permitimos valores NULL según la definición de la tabla
+    }
+}, {
+    tableName: 'modulohorario' // Especifica el nombre de la tabla
+});
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Profesores = db.define('profesor', {
+    idProfesor: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    nombreProfesor: {
+        type: Sequelize.STRING
+    },
+    apellidoProfesor: {
+        type: Sequelize.STRING
+    },
+    domicilioProfesor: {
+        type: Sequelize.STRING
+    },
+    telefonoProfesor: {
+        type: Sequelize.STRING
+    },
+    mailPersonal: {
+        type: Sequelize.STRING
+    },
+    mailLaboral: {
+        type: Sequelize.STRING
+    },
+    dniProfesor: {
+        type: Sequelize.INTEGER
+    },
+    sitRevista: {
+        type: Sequelize.STRING
+    }
+}, {
+    tableName: 'profesor' // Especifica el nombre de la tabla
+});
+
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Reemplazos = db.define('reemplazo', {
+    idReemplazo: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    idAusencia: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    },
+    idProfesor: {
+        type: Sequelize.INTEGER
+    },
+    fechaDesde: {
+        type: Sequelize.DATE,
+        allowNull: true
+    },
+    fechaHasta: {
+        type: Sequelize.DATE,
+        allowNull: true
+    }
+}, {
+    tableName: 'reemplazo' // Especifica el nombre de la tabla
+});
+
+import Sequelize from 'sequelize';
+import db from '../config/db.js';
+
+export const Modulo = db.define('modulo', {
+    idModulo: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    idCurso: {
+        type: Sequelize.INTEGER,
+        allowNull: false
+    },
+
+    idModuloHorario: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+
+    ,
+    fechaVigencia: {
+        type: Sequelize.DATE,
+        allowNull: false
+    },
+    idCargo: {
+        type: Sequelize.INTEGER,
+        allowNull: true
+    }
+}, {
+    tableName: 'modulo' // Especifica el nombre de la tabla
+});

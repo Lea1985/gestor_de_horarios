@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Institucion {
+  id         Int       @id @default(autoincrement())
+  nombre     String
+  configuracion Json?
+  domicilio  String?
+  telefono   String?
+  email      String?
+  cuit       String?
+  estado     String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  personas      Persona[]
+  unidades      UnidadOrganizativa[]
+  asignaciones  Asignacion[]
+  modulos       ModuloHorario[]
+}
+
+model Persona {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  institucion   Institucion @relation(fields: [institucionId], references: [id], onDelete: Restrict)
+
+  nombre        String
+  apellido      String
+  documento     String
+  email         String
+  telefono      String?
+  domicilio     String?
+  estado        String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  asignaciones  Asignacion[]
+
+  @@unique([institucionId, documento])
+  @@index([institucionId])
+}
+
+model UnidadOrganizativa {
+  id            Int        @id @default(autoincrement())
+  institucionId Int
+  institucion   Institucion @relation(fields: [institucionId], references: [id], onDelete: Restrict)
+
+  codigoUnidad  Int
+  nombre        String
+  tipo          String?
+  estado        String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  asignaciones  Asignacion[]
+
+  @@index([institucionId])
+}
+
+model Asignacion {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  personaId     Int
+  unidadId      Int
+
+  institucion   Institucion @relation(fields: [institucionId], references: [id], onDelete: Restrict)
+  persona       Persona      @relation(fields: [personaId], references: [id], onDelete: Restrict)
+  unidad        UnidadOrganizativa @relation(fields: [unidadId], references: [id], onDelete: Restrict)
+
+  estado        String
+  identificadorEstructural String?
+  fecha_inicio  DateTime
+  fecha_fin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  distribuciones DistribucionHoraria[]
+  incidencias   Incidencia[]
+
+  @@unique([institucionId, identificadorEstructural])
+  @@index([institucionId, personaId])
+}
+
+model ModuloHorario {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  institucion   Institucion @relation(fields: [institucionId], references: [id], onDelete: Restrict)
+
+  dia_semana    Int
+  hora_desde    String
+  hora_hasta    String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  distribuciones DistribucionModulo[]
+
+  @@index([institucionId])
+}
+
+model DistribucionHoraria {
+  id            Int       @id @default(autoincrement())
+  asignacionId  Int
+  asignacion    Asignacion @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+
+  version       Int
+  fecha_vigencia_desde DateTime
+  fecha_vigencia_hasta DateTime?
+  estado        String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  distribucionModulos DistribucionModulo[]
+
+  @@index([asignacionId])
+}
+
+model DistribucionModulo {
+  distribucionHorariaId Int
+  moduloHorarioId       Int
+
+  distribucionHoraria   DistribucionHoraria @relation(fields: [distribucionHorariaId], references: [id], onDelete: Cascade)
+  moduloHorario         ModuloHorario       @relation(fields: [moduloHorarioId], references: [id], onDelete: Restrict)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@id([distribucionHorariaId, moduloHorarioId])
+}
+
+model Incidencia {
+  id               Int       @id @default(autoincrement())
+  asignacionId     Int
+  asignacion       Asignacion @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+
+  fecha_desde      DateTime
+  fecha_hasta      DateTime
+  tipo             String
+  incidenciaPadreId Int?
+  observacion      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  hijos            Incidencia[] @relation("incidenciaPadre")
+  padre            Incidencia?  @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
+  
+  @@index([asignacionId])
+}
