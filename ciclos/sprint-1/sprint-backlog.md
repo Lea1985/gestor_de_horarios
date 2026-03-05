@@ -84,7 +84,7 @@ El sprint se considera terminado cuando:
 - Migración inicial aplicada correctamente
 - Base de datos creada con tablas base
 - Seeds ejecutados correctamente
-- Documentación del sprint almacenada en `/docs/sprints/sprint-01.md`
+- Documentación del sprint almacenada en `/docs/sprints/sprint-01`
 - Todo committeado y pusheado a GitHub
 
 ---

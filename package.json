@@ -2,8 +2,11 @@
   "name": "gestor_tmp",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
+    "check": "node tests/ejecutarTests.js",
+    "check:watch": "nodemon --watch app --watch src --watch prisma --ext js,ts,json --exec \"node tests/ejecutarTests.js\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -22,6 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "nodemon": "^3.1.14",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
