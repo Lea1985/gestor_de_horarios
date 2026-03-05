@@ -101,11 +101,10 @@ Tests automáticos implementados
 El proyecto queda preparado para comenzar el desarrollo funcional del dominio en el Sprint 02.
 
 🚀 Estado del Proyecto
-Arquitectura:     ✔ Definida
-Infraestructura:  ✔ Operativa
-Base de datos:    ✔ Migraciones activas
-API base:         ✔ Funcionando
-Tests técnicos:   ✔ Implementados
+Arquitectura: ✔ Definida
+Infraestructura: ✔ Operativa
+Base de datos: ✔ Migraciones activas
+API base: ✔ Funcionando
+Tests técnicos: ✔ Implementados
 
 Nivel de riesgo técnico actual: Bajo
-

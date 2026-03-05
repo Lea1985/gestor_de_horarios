@@ -17,16 +17,19 @@ Esto genera una estructura tipo árbol.
 Asignación A
 
 Incidencia 1:
+
 - fecha_inicio: 01/03
 - fecha_fin: 31/03
 - padre: null
 
 Incidencia 2:
+
 - fecha_inicio: 10/03
 - fecha_fin: 20/03
 - padre: Incidencia 1
 
 Incidencia 3:
+
 - fecha_inicio: 15/03
 - fecha_fin: 18/03
 - padre: Incidencia 2

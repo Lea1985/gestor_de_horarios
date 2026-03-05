@@ -233,24 +233,31 @@ Objetivo: validar flujo completo del sistema.
 # 📊 Roadmap Sugerido
 
 ## Sprint 0
+
 EPIC 0 – Consolidación del núcleo
 
 ## Sprint 1
+
 EPIC 1 + EPIC 2
 
 ## Sprint 2
+
 EPIC 3
 
 ## Sprint 3
+
 EPIC 4 + EPIC 5
 
 ## Sprint 4
+
 EPIC 6 + EPIC 8
 
 ## Sprint 5
+
 EPIC 9 + EPIC 10
 
 ## Sprint 6
+
 EPIC 7 + EPIC 11 + EPIC 12
 
 ---

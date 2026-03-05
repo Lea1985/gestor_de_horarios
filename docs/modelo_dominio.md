@@ -11,6 +11,7 @@ Modelo alineado con:
 ---
 
 ## ⚙️ Campos comunes
+
 La mayoría de las entidades del sistema comparten varios atributos de auditoría o control:
 
 - `id` (PK autonumérica)
@@ -284,7 +285,7 @@ DistribucionHoraria (versionada)
 ↓  
 DistribucionModulo  
 ↓  
-ModuloHorario  
+ModuloHorario
 
 Asignacion  
 ↓  

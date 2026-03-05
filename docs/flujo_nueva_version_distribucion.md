@@ -26,9 +26,10 @@ Crear una nueva versión de DistribucionHoraria sin romper integridad histórica
 5️⃣ Marca versión actual como CERRADA.
 
 6️⃣ Crea nueva DistribucionHoraria:
-   - estado = VIGENTE
-   - version = version_anterior + 1
-   - fecha_creacion = now()
+
+- estado = VIGENTE
+- version = version_anterior + 1
+- fecha_creacion = now()
 
 7️⃣ Inserta registros en DistribucionModulo.
 

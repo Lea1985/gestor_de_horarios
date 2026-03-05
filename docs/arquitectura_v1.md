@@ -287,26 +287,32 @@ El sistema debe soportar:
 ## 10. Stack Tecnológico
 
 Backend:
+
 - Node.js + TypeScript
 - Clean Architecture interna
 
 ORM:
+
 - Prisma
 
 Base de Datos:
+
 - PostgreSQL
 - Soporte para CTE recursivas
 - Constraints por institución
 - Índices estratégicos para consultas horarias
 
 Frontend:
+
 - Next.js + TypeScript
 
 Seguridad:
+
 - JWT
 - Roles por institución
 
 Testing:
+
 - Unitarios (dominio puro)
 - Integración (casos de uso)
 - Validaciones horarias

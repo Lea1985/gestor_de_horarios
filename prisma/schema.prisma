@@ -14,14 +14,17 @@ model Institucion {
   domicilio     String?
   telefono      String?
   email         String?
-  cuit          String?
-  estado        String
+  cuit          String?              @unique
+  estado        String               @default("ACTIVA")
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
+
   asignaciones  Asignacion[]
   modulos       ModuloHorario[]
   personas      Persona[]
   unidades      UnidadOrganizativa[]
+
+  @@index([estado])
 }
 
 model Persona {
@@ -30,12 +33,13 @@ model Persona {
   nombre        String
   apellido      String
   documento     String
-  email         String
+  email         String?
   telefono      String?
   domicilio     String?
-  estado        String
+  estado        String       @default("ACTIVO")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+
   asignaciones  Asignacion[]
   institucion   Institucion  @relation(fields: [institucionId], references: [id])
 
@@ -49,12 +53,14 @@ model UnidadOrganizativa {
   codigoUnidad  Int
   nombre        String
   tipo          String?
-  estado        String
+  estado        String       @default("ACTIVA")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+
   asignaciones  Asignacion[]
   institucion   Institucion  @relation(fields: [institucionId], references: [id])
 
+  @@unique([institucionId, codigoUnidad])
   @@index([institucionId])
 }
 
@@ -63,15 +69,17 @@ model Asignacion {
   institucionId            Int
   personaId                Int
   unidadId                 Int
-  estado                   String
+  estado                   String                @default("ACTIVA")
   identificadorEstructural String?
   fecha_inicio             DateTime
   fecha_fin                DateTime?
   createdAt                DateTime              @default(now())
   updatedAt                DateTime              @updatedAt
+
   institucion              Institucion           @relation(fields: [institucionId], references: [id])
   persona                  Persona               @relation(fields: [personaId], references: [id])
   unidad                   UnidadOrganizativa    @relation(fields: [unidadId], references: [id])
+
   distribuciones           DistribucionHoraria[]
   incidencias              Incidencia[]
 
@@ -87,6 +95,7 @@ model ModuloHorario {
   hora_hasta     String
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
+
   distribuciones DistribucionModulo[]
   institucion    Institucion          @relation(fields: [institucionId], references: [id])
 
@@ -99,10 +108,12 @@ model DistribucionHoraria {
   version              Int
   fecha_vigencia_desde DateTime
   fecha_vigencia_hasta DateTime?
-  estado               String
+  estado               String               @default("ACTIVA")
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
+
   asignacion           Asignacion           @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+
   distribucionModulos  DistribucionModulo[]
 
   @@index([asignacionId])
@@ -113,6 +124,7 @@ model DistribucionModulo {
   moduloHorarioId       Int
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
+
   distribucionHoraria   DistribucionHoraria @relation(fields: [distribucionHorariaId], references: [id], onDelete: Cascade)
   moduloHorario         ModuloHorario       @relation(fields: [moduloHorarioId], references: [id])
 
@@ -129,7 +141,9 @@ model Incidencia {
   observacion       String?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+
   asignacion        Asignacion   @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+
   padre             Incidencia?  @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
   hijos             Incidencia[] @relation("incidenciaPadre")
 

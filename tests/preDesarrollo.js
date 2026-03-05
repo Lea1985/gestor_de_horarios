@@ -17,7 +17,10 @@ async function testPostgres() {
 function testDocker() {
   console.log('🔹 Verificando contenedores Docker activos...');
   try {
-    const containers = execSync('docker ps --format "table {{.Names}}\t{{.Status}}"', { encoding: 'utf8' });
+    const containers = execSync(
+      'docker ps --format "table {{.Names}}\t{{.Status}}"',
+      { encoding: 'utf8' }
+    );
     console.log(containers);
   } catch (err) {
     console.error('❌ Error verificando Docker:', err.message);

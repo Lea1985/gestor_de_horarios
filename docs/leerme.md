@@ -77,6 +77,7 @@ El V1 no incluye:
 ---
 
 ## 📂 Estructura del proyecto
+
 nuevoSistema/
 │
 ├── README.md
@@ -129,7 +130,6 @@ nuevoSistema/
 │ │ └── middlewares/
 │ │
 └── main.ts
-
 
 ---
 

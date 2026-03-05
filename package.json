@@ -9,7 +9,8 @@
     "check:watch": "nodemon --watch app --watch src --watch prisma --ext js,ts,json --exec \"node tests/ejecutarTests.js\"",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -26,6 +27,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "nodemon": "^3.1.14",
+    "prettier": "^3.8.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

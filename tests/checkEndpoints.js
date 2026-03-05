@@ -1,23 +1,20 @@
-console.log("🔹 Probando endpoints de Next.js...");
+console.log('🔹 Probando endpoints de Next.js...');
 
-import { spawn } from "child_process";
+import { spawn } from 'child_process';
 
 async function esperar(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function testEndpoints() {
-
-  const next = spawn("npm", ["run", "dev"], {
-    stdio: "ignore",
-    shell: true
+  const next = spawn('npm', ['run', 'dev'], {
+    stdio: 'ignore',
+    shell: true,
   });
 
   await esperar(4000);
 
-  const endpoints = [
-    "http://localhost:3000/api/instituciones"
-  ];
+  const endpoints = ['http://localhost:3000/api/instituciones'];
 
   for (const url of endpoints) {
     try {
@@ -31,12 +28,12 @@ async function testEndpoints() {
 
   try {
     process.kill(next.pid);
-    console.log("🛑 Servidor Next.js detenido");
+    console.log('🛑 Servidor Next.js detenido');
   } catch (e) {
-    console.log("⚠️ El servidor ya estaba detenido");
+    console.log('⚠️ El servidor ya estaba detenido');
   }
 
-  console.log("🎯 Test de endpoints finalizado");
+  console.log('🎯 Test de endpoints finalizado');
 }
 
 testEndpoints();
