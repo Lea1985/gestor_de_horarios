@@ -1,231 +1,199 @@
+🗂 Sprint Planning – Sprint 02
+🎯 Objetivo del Sprint
+
+Implementar el aislamiento multi-tenant real del sistema, garantizando que cada institución opere dentro de su propio contexto de datos.
+
+Además, sentar las bases para configuración institucional extensible.
+
+📦 Sprint Goal
+
+"El sistema debe poder operar con múltiples instituciones manteniendo aislamiento lógico completo de datos."
+
+🧩 Alcance del Sprint
+
+Incluye:
+
+Entidad Institucion operativa
+
+Middleware de tenant
+
+Contexto institucional en requests
+
+Aislamiento de queries por institucionId
+
+Configuración institucional básica
+
+No incluye:
+
+Autenticación multiusuario
+
+Panel de administración
+
+CRUD completos de entidades
+
+Reglas de negocio complejas
+
 🛠 Sprint Backlog – Sprint 02
-🔵 1. Multi-Tenant Foundation
-🟢 1.1 Modelado de Tenant (Institución)
+🔵 1. Multi-Tenant Core
+🟢 2.1 Modelo Institución
 
-Crear modelo Institucion en Prisma.
+Estado actual: ya implementado en Prisma
 
-Campos iniciales:
+Tareas restantes:
 
-id
+Revisar integridad del schema
 
-nombre
+Validar migración
 
-codigo
+Crear seed inicial de institución
 
-createdAt
+Tareas:
 
-updatedAt
+Seed Institucion
 
-Relaciones:
-
-Una institución tendrá:
-
-Cursos
-
-Comisiones
-
-Cargos
-
-Personas
-
-Configuraciones
-
-Objetivo:
-
-Establecer la raíz del tenant del sistema.
-
-🟢 1.2 Adaptación de Modelos Existentes
-
-Agregar institucionId en las entidades principales:
-
-Persona
-
-Curso
-
-Comisión
-
-Cargo
-
-MóduloHorario
-
-CargoModuloHorario
-
-Ausencia
-
-Cada registro debe pertenecer obligatoriamente a una institución.
-
-Cambios requeridos:
-
-relaciones Prisma
-
-migración nueva
-
-actualización de seeds
-
-🔵 2. Aislamiento de Datos
-🟢 2.1 Estrategia de Aislamiento
-
-Implementar logical tenant isolation.
-
-Regla:
-
-Todas las queries del sistema deben filtrar por:
-
-institucionId
+Crear institución demo
 
 Ejemplo:
 
-where: {
-  institucionId: tenantId
-}
+Institucion:
+- id: 1
+- nombre: "Institución Demo"
+🟢 2.2 Contexto Institucional
 
-Objetivo:
+Crear mecanismo para identificar la institución activa del request.
 
-Evitar acceso a datos de otras instituciones.
-
-🟢 2.2 Middleware de Tenant
-
-Crear middleware que determine el tenant.
-
-Estrategias posibles:
+Opciones posibles:
 
 Header HTTP
 
 Subdominio
 
-Configuración de sesión
+Token
 
-Para esta etapa inicial:
+Query param (solo dev)
 
-Header HTTP
+Para el MVP se recomienda:
 
-x-tenant-id
+x-institucion-id
 
-El middleware debe:
+Ejemplo request:
 
-leer el header
+GET /api/personas
+x-institucion-id: 1
+🟢 2.3 Middleware Tenant
 
-validar existencia
+Crear middleware que:
 
-inyectar el tenantId en el request context
+1️⃣ Lea institucionId
+2️⃣ Valide existencia
+3️⃣ Lo agregue al contexto
 
-🔵 3. Configuración por Institución
-🟢 3.1 Modelo ConfiguracionInstitucion
+Ubicación sugerida:
 
-Crear entidad:
+src/interfaces/http/middlewares/tenantMiddleware.ts
 
-ConfiguracionInstitucion
+Responsabilidad:
 
-Campos iniciales:
+request
+   ↓
+leer institucionId
+   ↓
+validar
+   ↓
+inyectar en contexto
+🟢 2.4 Aislamiento de Queries
 
-institucionId
-
-duracionModulo
-
-extensionesActivadas
-
-createdAt
-
-updatedAt
-
-Objetivo:
-
-Permitir personalizar comportamiento del sistema por institución.
-
-🟢 3.2 Parámetros Iniciales
-
-Configurar soporte para:
-
-Duración del módulo
+Garantizar que todas las queries filtren por institucionId.
 
 Ejemplo:
 
-40 minutos
-45 minutos
-60 minutos
-Extensiones del sistema
+Incorrecto:
 
-Estructura preparada para:
+prisma.persona.findMany()
 
-suplencias
+Correcto:
 
-gestión de reemplazos
+prisma.persona.findMany({
+  where: { institucionId }
+})
 
-reportes
+Se recomienda crear helper:
 
-🔵 4. Seeds Multi-Tenant
+getTenantPrismaClient()
+🔵 2. Configuración por Institución
+🟢 2.5 Configuración institucional
 
-Actualizar seeds para:
+Ya lo anticipaste correctamente:
 
-Crear institución inicial:
+configuracion Json?
 
-Institución Demo
+Ejemplo:
 
-Configurar:
+{
+  "duracionModulo": 40,
+  "extensiones": {
+    "educacion": true
+  }
+}
 
-configuración institucional
+Tareas:
 
-módulos horarios base
+definir estructura inicial
 
-🔵 5. Validaciones Técnicas
+helper para lectura
 
-Validar:
+🟢 2.6 Servicio de Configuración
 
-ninguna entidad puede existir sin institucionId
+Crear servicio:
 
-constraints correctos
+src/application/institucion/getConfiguracionInstitucion.ts
 
-relaciones Prisma correctas
+Responsabilidad:
 
-migración ejecutada correctamente
+obtener configuración
 
-📊 Definition of Done (DoD)
+aplicar defaults
+
+🔵 3. Tests de Aislamiento
+
+Muy importante para SaaS.
+
+Tests a implementar:
+
+Caso 1
+
+Institución A no ve datos de B
+
+Caso 2
+
+Creación respeta tenant
+
+Caso 3
+
+Consulta sin tenant falla
+
+📊 Definition of Done – Sprint 02
 
 El sprint se considera terminado cuando:
 
-Modelo Institucion creado
+✅ El sistema soporta múltiples instituciones
+✅ Cada request opera dentro de un tenant
+✅ Las queries filtran por institucionId
+✅ Existe middleware de tenant
+✅ Configuración institucional disponible
+✅ Tests de aislamiento funcionando
+✅ Documentación del sprint guardada en:
 
-Todas las entidades tienen institucionId
-
-Migración Prisma aplicada correctamente
-
-Middleware de tenant funcionando
-
-Header x-tenant-id procesado correctamente
-
-Seeds iniciales multi-tenant creados
-
-Sistema corre con npm run dev
-
-Tests de entorno pasan con npm run check
-
-Documentación guardada en
-
-/docs/sprints/sprint-02
+docs/sprints/sprint-02
 ⚠️ Riesgos Identificados
-Error en migraciones
 
-Modificar tablas existentes puede romper datos.
+Olvidar filtrar por institucionId
 
-Mitigación:
+Romper el aislamiento multi-tenant
 
-revisar migración antes de aplicar.
+Mezclar lógica de negocio con lógica de tenant
 
-Olvidar filtros de tenant
-
-Puede provocar data leaks entre instituciones.
-
-Mitigación:
-
-centralizar lógica de acceso a datos.
-
-Sobrediseño prematuro
-
-Multi-tenant puede volverse complejo.
-
-Mitigación:
-
-comenzar con aislamiento lógico simple.
+Sobrediseñar el sistema de configuración
 
 ⏱ Estimación
 
@@ -235,77 +203,28 @@ Duración sugerida:
 
 Complejidad:
 
-Media-Alta
+Media
 
-Porque implica cambio estructural del modelo de datos.
+Riesgo técnico:
+
+Medio (multi-tenant siempre tiene riesgo si se implementa mal).
 
 🧠 Resultado Esperado
 
-Al finalizar este sprint:
+Al finalizar el sprint:
 
-El sistema pasará de:
+El sistema será verdaderamente multi-tenant.
 
-Single-tenant
+Es decir:
 
-a
+Institucion A
+   ├ Personas
+   ├ Asignaciones
+   └ Horarios
 
-Multi-tenant
+Institucion B
+   ├ Personas
+   ├ Asignaciones
+   └ Horarios
 
-Esto permitirá que múltiples instituciones usen el mismo sistema con aislamiento total de datos.
-
-🗂 Sprint Planning – Sprint 02
-🎯 Objetivo del Sprint
-
-Transformar el sistema de una arquitectura single-tenant a una arquitectura multi-tenant mediante la introducción del concepto de institución como unidad de aislamiento de datos.
-
-📦 Sprint Goal
-
-"Convertir el sistema en una plataforma multi-institución con aislamiento lógico de datos."
-
-🧩 Alcance del Sprint
-
-Incluye:
-
-Modelo Institucion
-
-Adaptación de entidades existentes
-
-Middleware de tenant
-
-Configuración institucional
-
-Seeds multi-tenant
-
-No incluye:
-
-autenticación
-
-control de permisos
-
-gestión de usuarios
-
-lógica de negocio avanzada
-
-UI multi-institución
-
-🔄 Dependencias
-
-Depende de:
-
-Sprint 01 completado:
-
-Prisma
-
-PostgreSQL
-
-migraciones
-
-API base
-
-📌 Entregables del Sprint
-
-1️⃣ Schema Prisma multi-tenant
-2️⃣ Migración aplicada
-3️⃣ Middleware de tenant funcional
-4️⃣ Seeds institucionales
-5️⃣ Configuración institucional base
+Sin posibilidad de cruce.
