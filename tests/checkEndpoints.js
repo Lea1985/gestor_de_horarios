@@ -1,6 +1,7 @@
 console.log('🔹 Probando endpoints de Next.js...');
 
 import { spawn } from 'child_process';
+import kill from 'tree-kill';
 
 async function esperar(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,19 +19,34 @@ async function testEndpoints() {
 
   for (const url of endpoints) {
     try {
-      const response = await fetch(url);
+
+      const response = await fetch(url, {
+        headers: {
+          "x-institucion-id": "2"
+        }
+      });
+
       const data = await response.json();
-      console.log(`✅ Endpoint ${url} responde JSON correctamente:`, data);
+
+      if (response.ok) {
+        console.log(`✅ Endpoint ${url} responde correctamente:`, data);
+      } else {
+        console.error(`❌ Endpoint ${url} respondió error:`, data);
+      }
+
     } catch (e) {
       console.error(`❌ Error en endpoint ${url}:`, e.message);
     }
   }
 
   try {
-    process.kill(next.pid);
+    await new Promise((resolve) => {
+      kill(next.pid, 'SIGKILL', resolve);
+    });
+
     console.log('🛑 Servidor Next.js detenido');
   } catch (e) {
-    console.log('⚠️ El servidor ya estaba detenido');
+    console.log('⚠️ Error al detener servidor:', e.message);
   }
 
   console.log('🎯 Test de endpoints finalizado');

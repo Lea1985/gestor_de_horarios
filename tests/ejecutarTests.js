@@ -27,6 +27,8 @@ async function main() {
     path.join('tests', 'checkMigraciones.js'),
     path.join('tests', 'checkEndpoints.js'),
     path.join('tests', 'checkEntornoWSL.js'),
+    path.join('tests', 'checkMiddleware.js')
+
   ];
 
   for (const script of scripts) {
