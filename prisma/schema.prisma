@@ -7,6 +7,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// ENUMS
+enum Estado {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum TipoUnidad {
+  AULA
+  LABORATORIO
+  ADMIN
+  OTRA
+}
+
+enum TipoIncidencia {
+  LICENCIA
+  SUSPENSION
+  OTRO
+}
+
+/// ENTIDADES PRINCIPALES
+
 model Institucion {
   id            Int                  @id @default(autoincrement())
   nombre        String
@@ -15,34 +37,55 @@ model Institucion {
   telefono      String?
   email         String?
   cuit          String?              @unique
-  estado        String               @default("ACTIVA")
+  estado        Estado               @default(ACTIVO)
+  activo        Boolean              @default(true)
+  deletedAt     DateTime?            // Soft delete
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  asignaciones  Asignacion[]
-  modulos       ModuloHorario[]
-  personas      Persona[]
   unidades      UnidadOrganizativa[]
+  modulos       ModuloHorario[]
+  agentes       AgenteInstitucion[]
+  asignaciones  Asignacion[]
 
   @@index([estado])
+  @@index([activo])
+  @@index([cuit])
 }
 
-model Persona {
-  id            Int          @id @default(autoincrement())
-  institucionId Int
-  nombre        String
-  apellido      String
-  documento     String
-  email         String?
-  telefono      String?
-  domicilio     String?
-  estado        String       @default("ACTIVO")
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+model Agente {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  documento String?
+  email     String?
+  telefono  String?
+  domicilio String?
+  estado    Estado    @default(ACTIVO)
+  activo    Boolean   @default(true)
+  deletedAt DateTime? // Soft delete
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   asignaciones  Asignacion[]
-  institucion   Institucion  @relation(fields: [institucionId], references: [id])
+  instituciones AgenteInstitucion[]
 
+  @@index([documento])
+  @@index([activo])
+}
+
+model AgenteInstitucion {
+  agenteId      Int
+  institucionId Int
+  documento     String?   // Documento único por institución si aplica
+  estado        Estado    @default(ACTIVO)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  agente       Agente       @relation(fields: [agenteId], references: [id], onDelete: Cascade)
+  institucion  Institucion  @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+
+  @@id([agenteId, institucionId])
   @@unique([institucionId, documento])
   @@index([institucionId])
 }
@@ -52,8 +95,10 @@ model UnidadOrganizativa {
   institucionId Int
   codigoUnidad  Int
   nombre        String
-  tipo          String?
-  estado        String       @default("ACTIVA")
+  tipo          TipoUnidad?
+  estado        Estado       @default(ACTIVO)
+  activo        Boolean      @default(true)
+  deletedAt     DateTime?    // Soft delete
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -62,44 +107,54 @@ model UnidadOrganizativa {
 
   @@unique([institucionId, codigoUnidad])
   @@index([institucionId])
+  @@index([activo])
 }
 
 model Asignacion {
   id                       Int                   @id @default(autoincrement())
   institucionId            Int
-  personaId                Int
+  agenteId                 Int
   unidadId                 Int
-  estado                   String                @default("ACTIVA")
-  identificadorEstructural String?
+  estado                   Estado                @default(ACTIVO)
+  activo                   Boolean               @default(true)
+  deletedAt                DateTime?
+  identificadorEstructural String
   fecha_inicio             DateTime
   fecha_fin                DateTime?
   createdAt                DateTime              @default(now())
   updatedAt                DateTime              @updatedAt
 
   institucion              Institucion           @relation(fields: [institucionId], references: [id])
-  persona                  Persona               @relation(fields: [personaId], references: [id])
+  agente                   Agente                @relation(fields: [agenteId], references: [id])
   unidad                   UnidadOrganizativa    @relation(fields: [unidadId], references: [id])
 
   distribuciones           DistribucionHoraria[]
   incidencias              Incidencia[]
 
   @@unique([institucionId, identificadorEstructural])
-  @@index([institucionId, personaId])
+  @@unique([agenteId, unidadId, institucionId])
+  @@index([institucionId, agenteId])
+  @@index([institucionId, unidadId, fecha_inicio, fecha_fin])
+  @@index([activo])
 }
 
 model ModuloHorario {
-  id             Int                  @id @default(autoincrement())
+  id             Int     @id @default(autoincrement())
   institucionId  Int
-  dia_semana     Int
-  hora_desde     String
-  hora_hasta     String
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  dia_semana     Int     // 1 = lunes ... 7 = domingo
+  hora_desde     String  // HH:MM:SS
+  hora_hasta     String  // HH:MM:SS
+  activo         Boolean @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   distribuciones DistribucionModulo[]
-  institucion    Institucion          @relation(fields: [institucionId], references: [id])
+  institucion    Institucion @relation(fields: [institucionId], references: [id])
 
   @@index([institucionId])
+  @@index([dia_semana, hora_desde, hora_hasta])
+  @@index([activo])
 }
 
 model DistribucionHoraria {
@@ -108,15 +163,19 @@ model DistribucionHoraria {
   version              Int
   fecha_vigencia_desde DateTime
   fecha_vigencia_hasta DateTime?
-  estado               String               @default("ACTIVA")
+  estado               Estado               @default(ACTIVO)
+  activo               Boolean              @default(true)
+  deletedAt            DateTime?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
   asignacion           Asignacion           @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
-
   distribucionModulos  DistribucionModulo[]
 
   @@index([asignacionId])
+  @@index([estado, fecha_vigencia_desde, fecha_vigencia_hasta])
+  @@unique([asignacionId, version])
+  @@index([activo])
 }
 
 model DistribucionModulo {
@@ -129,23 +188,29 @@ model DistribucionModulo {
   moduloHorario         ModuloHorario       @relation(fields: [moduloHorarioId], references: [id])
 
   @@id([distribucionHorariaId, moduloHorarioId])
+  @@index([moduloHorarioId])
 }
 
 model Incidencia {
-  id                Int          @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   asignacionId      Int
   fecha_desde       DateTime
   fecha_hasta       DateTime
-  tipo              String
+  tipo              TipoIncidencia
   incidenciaPadreId Int?
   observacion       String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  activo            Boolean        @default(true)
+  deletedAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  asignacion        Asignacion   @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
-
-  padre             Incidencia?  @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
-  hijos             Incidencia[] @relation("incidenciaPadre")
+  asignacion        Asignacion      @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  padre             Incidencia?     @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
+  hijos             Incidencia[]    @relation("incidenciaPadre")
 
   @@index([asignacionId])
+  @@index([tipo, fecha_desde])
+  @@index([fecha_desde, fecha_hasta])
+  @@index([tipo, asignacionId, fecha_desde])
+  @@index([activo])
 }
