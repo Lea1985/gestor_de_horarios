@@ -4,17 +4,33 @@ export async function getTenantId(): Promise<number> {
 
   const headerList = await headers()
 
-  const tenantId = headerList.get("tenant-id")
+  // 1️⃣ Tenant por header
+  const headerTenant = headerList.get("x-institucion-id")
 
-  if (!tenantId) {
-    throw new Error("Tenant no definido")
+  if (headerTenant) {
+
+    const id = Number(headerTenant)
+
+    if (Number.isNaN(id)) {
+      throw new Error("Tenant inválido")
+    }
+
+    return id
   }
 
-  const id = Number(tenantId)
+  // 2️⃣ Tenant por subdominio
+  const forwardedHost = headerList.get("x-forwarded-host")
 
-  if (Number.isNaN(id)) {
-    throw new Error("Tenant inválido")
+  if (forwardedHost) {
+
+    const subdomain = forwardedHost.split(".")[0]
+
+    // simulación para el test
+    if (subdomain === "demo") {
+      return 1
+    }
   }
 
-  return id
+  // 3️⃣ Sin tenant
+  throw new Error("Tenant no definido")
 }

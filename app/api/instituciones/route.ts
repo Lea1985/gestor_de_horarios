@@ -1,93 +1,68 @@
 import prisma from "@/lib/prisma"
-import { getTenantId } from "@/lib/tenant/getTenantId"
+import { withTenant } from "../../../lib/tenant/withTenant"
 
 export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const testMiddleware = searchParams.get("testMiddleware")
 
-    let institucionId: number | null = null
+  return withTenant(async (tenantId) => {
+
+    const institucion = await prisma.institucion.findUnique({
+      where: { id: tenantId }
+    })
+
+    return Response.json(institucion)
+
+  }, req)
+
+}
+
+export async function PATCH(req: Request) {
+
+  return withTenant(async (tenantId) => {
+
+    let body
+
     try {
-      institucionId = await getTenantId()
+      body = await req.json()
     } catch {
-      institucionId = null
-    }
-
-    // -----------------------------------
-    // Endpoint para probar middleware
-    // -----------------------------------
-    if (testMiddleware === "true") {
       return new Response(
-        JSON.stringify({
-          ok: !!institucionId,
-          tenantId: institucionId,
-          mensaje: institucionId
-            ? "Middleware funcionando correctamente"
-            : "Tenant inválido o faltante"
-        }),
-        {
-          status: institucionId ? 200 : 400,
-          headers: { "Content-Type": "application/json" }
-        }
+        JSON.stringify({ error: "JSON inválido" }),
+        { status: 400 }
       )
     }
 
-    // -----------------------------------
-    // Detectar testEndpoints.js (localhost)
-    // -----------------------------------
-    const host = req.headers.get("host")
-    if (!institucionId && host === "localhost:3000") {
-      return new Response(
-        JSON.stringify([{ id: 2, nombre: "Institución de ejemplo" }]),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" }
-        }
-      )
-    }
+    try {
 
-    // -----------------------------------
-    // Sin tenant real → error
-    // -----------------------------------
-    if (!institucionId) {
-      return new Response(
-        JSON.stringify({ error: "Tenant no definido" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" }
-        }
-      )
-    }
+      const data: any = {}
 
-    // -----------------------------------
-    // API real: obtener agentes de la institución
-    // -----------------------------------
-    const agentes = await prisma.agente.findMany({
-      where: {
-        instituciones: {
-          some: {
-            institucionId
-          }
-        }
-      },
-      include: {
-        instituciones: true // incluye la relación AgenteInstitucion si querés info extra
+      if (body.nombre !== undefined) data.nombre = body.nombre
+      if (body.domicilio !== undefined) data.domicilio = body.domicilio
+      if (body.telefono !== undefined) data.telefono = body.telefono
+      if (body.configuracion !== undefined) data.configuracion = body.configuracion
+
+      if (Object.keys(data).length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No hay datos para actualizar" }),
+          { status: 400 }
+        )
       }
-    })
 
-    return new Response(JSON.stringify(agentes), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    })
-  } catch (error) {
-    console.error("Error en GET /api/agentes:", error)
+      const institucionActualizada = await prisma.institucion.update({
+        where: { id: tenantId },
+        data
+      })
 
-    return new Response(
-      JSON.stringify({ error: "Error interno del servidor" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      }
-    )
-  }
+      return Response.json(institucionActualizada)
+
+    } catch (error) {
+
+      console.error("Error PATCH institucion:", error)
+
+      return new Response(
+        JSON.stringify({ error: "Error al actualizar institución" }),
+        { status: 500 }
+      )
+    }
+
+  }, req)
+
 }

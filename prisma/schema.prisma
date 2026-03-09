@@ -29,6 +29,62 @@ enum TipoIncidencia {
 
 /// ENTIDADES PRINCIPALES
 
+model Usuario {
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
+  passwordHash  String
+  nombre        String?
+  estado        Estado    @default(ACTIVO)
+  activo        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  roles         UsuarioRol[]
+  sesiones  Sesion[]
+
+}
+
+model Rol {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  descripcion String?
+  createdAt DateTime @default(now())
+
+  usuarios  UsuarioRol[]
+}
+
+
+model UsuarioRol {
+  usuarioId      Int
+  rolId          Int
+  institucionId  Int
+
+  usuario        Usuario     @relation(fields: [usuarioId], references: [id])
+  rol            Rol         @relation(fields: [rolId], references: [id])
+  institucion    Institucion @relation(fields: [institucionId], references: [id])
+
+  @@id([usuarioId, rolId, institucionId])
+
+  @@index([usuarioId])
+  @@index([institucionId])
+}
+
+
+model Sesion {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  token     String   @unique
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+
 model Institucion {
   id            Int                  @id @default(autoincrement())
   nombre        String
@@ -47,6 +103,8 @@ model Institucion {
   modulos       ModuloHorario[]
   agentes       AgenteInstitucion[]
   asignaciones  Asignacion[]
+
+  usuariosRoles UsuarioRol[]
 
   @@index([estado])
   @@index([activo])

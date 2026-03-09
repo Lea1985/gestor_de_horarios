@@ -2,9 +2,9 @@
 
 ## Relaciones principales
 
-- **Institucion (1) — (N) Persona**  
-  Toda persona pertenece a una única institución.  
-  El documento identificatorio es único dentro de esa institución.
+- **Institucion (1) — (N) Agente**  
+  Un agente puede pertenecer a mas de una institucion.  
+  El documento identificatorio es único dentro de esa institución pero podria usar (intitucionId +   AgenteId).
 
 - **Institucion (1) — (N) UnidadOrganizativa**  
   Cada unidad operativa pertenece a una institución.  
@@ -15,11 +15,11 @@
   No pueden superponerse dentro del mismo contexto institucional.
 
 - **Persona (1) — (N) Asignacion**  
-  Una persona puede tener múltiples asignaciones activas o históricas.  
+  Un agente puede tener múltiples asignaciones activas o históricas.  
   La superposición horaria efectiva se valida a nivel de distribución.
 
 - **UnidadOrganizativa (1) — (N) Asignacion**  
-  Una unidad puede tener múltiples asignaciones asociadas.
+  Una unidad puede tener múltiples asignaciones asociadas pero solo una activa.
 
 - **Asignacion (1) — (N) DistribucionHoraria**  
   La distribución horaria es versionada por asignación.  

@@ -22,7 +22,7 @@ async function testEndpoints() {
 
       const response = await fetch(url, {
         headers: {
-          "x-institucion-id": "2"
+          "x-institucion-id": "1"
         }
       });
 
