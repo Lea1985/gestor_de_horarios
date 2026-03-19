@@ -2,73 +2,196 @@
 
 ## Relaciones principales
 
-- **Institucion (1) — (N) Agente**  
-  Un agente puede pertenecer a mas de una institucion.  
-  El documento identificatorio es único dentro de esa institución pero podria usar (intitucionId +   AgenteId).
+### Institución y pertenencia de agentes
 
-- **Institucion (1) — (N) UnidadOrganizativa**  
-  Cada unidad operativa pertenece a una institución.  
-  No existen unidades compartidas entre instituciones.
+- **Institucion (1) — (N) AgenteInstitucion**
+- **Agente (1) — (N) AgenteInstitucion**
 
-- **Institucion (1) — (N) ModuloHorario**  
-  Los módulos horarios son configurables y exclusivos por institución.  
-  No pueden superponerse dentro del mismo contexto institucional.
+Un agente puede pertenecer a múltiples instituciones.
 
-- **Persona (1) — (N) Asignacion**  
-  Un agente puede tener múltiples asignaciones activas o históricas.  
-  La superposición horaria efectiva se valida a nivel de distribución.
+La pertenencia institucional se materializa mediante la entidad **AgenteInstitucion**, que permite:
 
-- **UnidadOrganizativa (1) — (N) Asignacion**  
-  Una unidad puede tener múltiples asignaciones asociadas pero solo una activa.
+- separar identidad global de pertenencia institucional
+- registrar identificadores institucionales
+- soportar arquitecturas SaaS multi-tenant
 
-- **Asignacion (1) — (N) DistribucionHoraria**  
-  La distribución horaria es versionada por asignación.  
-  No se sobreescriben versiones anteriores.
+El documento identificatorio puede definirse como **único dentro de cada institución** mediante la restricción:
 
-- **DistribucionHoraria (N) — (N) ModuloHorario**  
-  Se materializa mediante la entidad intermedia **DistribucionModulo**.  
-  Permite:
-  - Versionado estructural.
-  - Validación de duplicación de módulos.
-  - Control de coherencia horaria por versión.
-
-- **Asignacion (1) — (N) Incidencia**  
-  Las incidencias se registran siempre sobre una asignación existente.  
-  Son inmutables y poseen rango completo de fechas.
-
-- **Incidencia (1) — (N) Incidencia**  
-  Relación recursiva mediante `incidencia_padre_id`.  
-  Permite encadenamiento jerárquico (estructura tipo árbol).
+```
+(institucionId, documento)
+```
 
 ---
 
-## Entidades Clave Derivadas
+### Estructura organizativa
 
-- **DistribucionModulo**
-  - Vincula módulos a una versión específica de distribución.
-  - No existe de forma independiente.
-  - Garantiza trazabilidad estructural.
+- **Institucion (1) — (N) UnidadOrganizativa**
+
+Cada unidad organizativa pertenece a una única institución.
+
+No existen unidades organizativas compartidas entre instituciones.
+
+Una unidad organizativa puede representar:
+
+- materia
+- área
+- disciplina
+- servicio
+- actividad operativa
 
 ---
 
-## Notas de alineación estructural
+### Configuración de módulos horarios
 
-1. Se elimina completamente Cargo, Designación, Escuela, Curso y Comisión como entidades estructurales.
+- **Institucion (1) — (N) ModuloHorario**
+
+Los módulos horarios son definidos por cada institución.
+
+Ejemplo:
+
+- lunes 08:00–08:40
+- lunes 08:40–09:20
+- etc.
+
+Los módulos son **reutilizables** en múltiples distribuciones horarias.
+
+La validación de superposición de módulos se realiza **a nivel de aplicación**.
+
+---
+
+### Relación entre agentes y unidades
+
+- **Agente (1) — (N) Asignacion**
+- **UnidadOrganizativa (1) — (N) Asignacion**
+- **Institucion (1) — (N) Asignacion**
+
+La entidad **Asignacion** representa la relación estructural entre:
+
+- un agente
+- una unidad organizativa
+- una institución
+
+Un agente puede tener múltiples asignaciones activas o históricas.
+
+Una unidad organizativa puede tener **múltiples asignaciones activas**.
+
+La coherencia horaria se valida posteriormente a nivel de distribución.
+
+---
+
+### Distribución horaria versionada
+
+- **Asignacion (1) — (N) DistribucionHoraria**
+
+La distribución horaria se versiona por asignación.
+
+Cada modificación genera una nueva versión.
+
+Las versiones anteriores **no se sobrescriben**, permitiendo:
+
+- trazabilidad histórica
+- auditoría estructural
+- reconstrucción del estado del sistema en cualquier momento
+
+---
+
+### Asociación entre módulos y distribuciones
+
+- **DistribucionHoraria (N) — (N) ModuloHorario**
+
+Esta relación se materializa mediante la entidad intermedia:
+
+**DistribucionModulo**
+
+Permite:
+
+- versionado estructural
+- validación de duplicación de módulos
+- control de coherencia horaria por versión
+
+---
+
+### Registro de incidencias
+
+- **Asignacion (1) — (N) Incidencia**
+
+Las incidencias representan alteraciones temporales sobre una asignación.
+
+Ejemplos:
+
+- licencias
+- reemplazos
+- ausencias
+- modificaciones operativas
+
+Las incidencias:
+
+- siempre pertenecen a una asignación
+- poseen rango completo de fechas
+- se preservan como historial
+
+---
+
+### Encadenamiento de incidencias
+
+- **Incidencia (1) — (N) Incidencia**
+
+Relación recursiva mediante:
+
+```
+incidenciaPadreId
+```
+
+Permite construir cadenas jerárquicas de incidencias.
+
+Ejemplo:
+
+```
+Licencia
+   └─ Reemplazo
+        └─ Subreemplazo
+```
+
+Esta estructura permite soportar múltiples niveles de derivación.
+
+---
+
+# Entidades clave derivadas
+
+## DistribucionModulo
+
+Entidad intermedia que vincula:
+
+- una **DistribucionHoraria**
+- uno o más **ModuloHorario**
+
+Características:
+
+- no existe de forma independiente
+- su clave primaria es compuesta
+- garantiza la trazabilidad estructural de cada versión de horario
+
+---
+
+# Notas de alineación estructural
+
+1. Se eliminan completamente **Cargo, Designación, Escuela, Curso y Comisión** como entidades estructurales del núcleo.
 2. **Asignacion** reemplaza cualquier relación normativa previa.
 3. **DistribucionHoraria** permite versionado sin sobrescritura.
 4. **Incidencia** es inmutable y encadenable.
-5. El modelo es sector-agnóstico y SaaS multi-tenant.
-6. No se permite eliminación destructiva de entidades estructurales.
-7. La validación de coherencia horaria ocurre en el nivel de DistribucionHoraria, no en Asignacion.
+5. El modelo es **sector-agnóstico y SaaS multi-tenant**.
+6. No se permite eliminación destructiva de entidades estructurales; se utiliza **soft delete** o desactivación.
+7. La validación de coherencia horaria ocurre en el nivel de **DistribucionHoraria**, no en **Asignacion**.
 
 ---
 
-## Principio estructural del ER
+# Principio estructural del ER
 
 El modelo prioriza:
 
-- Integridad histórica.
-- Versionado explícito.
-- Trazabilidad completa.
-- Aislamiento multi-tenant.
-- Coherencia horaria transversal por persona.
+- integridad histórica
+- versionado explícito
+- trazabilidad completa
+- aislamiento multi-tenant
+- coherencia horaria transversal por agente
+- separación entre identidad global y pertenencia institucional

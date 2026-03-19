@@ -1,311 +1,507 @@
-# 📘 Modelo de Dominio – Sistema de Gestión Horaria Estructural v3.1
+📘 Modelo de Dominio – Sistema de Gestión Horaria Estructural v3.1
 
 Modelo alineado con:
 
-- Reglas de negocio estructurales
-- ER v3.1
-- Product Backlog
-- Principios SaaS multi-tenant
-- Trazabilidad e inmutabilidad
+Schema Prisma
 
----
+Diagrama ER v3.1
 
-## ⚙️ Campos comunes
+Arquitectura SaaS multi-tenant
 
-La mayoría de las entidades del sistema comparten varios atributos de auditoría o control:
+Versionado estructural
 
-- `id` (PK autonumérica)
-- `institucion_id` en entidades operativas para aislamiento multi-tenant
-- `estado` (cuando la entidad puede activarse/inactivarse)
-- `created_at` (marca de creación)
-- `updated_at` (marca de última modificación, con comportamiento automático)
+Trazabilidad histórica
 
-Estos campos se documentan explícitamente en cada modelo debajo.
+⚙️ Campos comunes
 
----
+Varias entidades del sistema comparten atributos de auditoría y control:
 
-# 🏢 0. Institucion (Multi-Tenant)
+id — clave primaria autoincremental
 
-Representa el tenant del sistema.
+estado — estado lógico de la entidad (cuando aplica)
 
-Cada institución es un espacio completamente aislado de datos.
+activo — indicador de habilitación operativa
 
-## Atributos
+deletedAt — eliminación lógica (soft delete)
 
-- id (PK)
-- nombre
-- configuracion (JSON opcional)
-- domicilio (opcional)
-- telefono (opcional)
-- email (opcional)
-- cuit (opcional)
-- estado (Activa / Inactiva)
-- created_at
-- updated_at
+createdAt — fecha de creación
 
-## Relaciones
+updatedAt — fecha de última modificación automática
 
-- 1 Institucion → N Personas
-- 1 Institucion → N UnidadesOrganizativas
-- 1 Institucion → N ModulosHorario
-- 1 Institucion → N Asignaciones
+Estos campos permiten:
 
-🔐 Todas las entidades operativas incluyen `institucion_id`.  
-No existe cruce de datos entre instituciones.
+auditoría
 
----
+desactivación sin pérdida de historial
 
-# 👤 Persona
+preservación de trazabilidad
 
-Representa cualquier recurso humano asignable dentro de una institución.
+🏢 0. Institucion (Tenant del sistema)
 
-⚠️ La persona es contextual al tenant.  
-Si alguien trabaja en dos instituciones distintas, existirá una Persona en cada una.
+Representa el tenant principal del sistema.
 
-## Atributos
+Cada institución constituye un espacio aislado de datos dentro de la arquitectura multi-tenant.
 
-- id (PK)
-- institucion_id (FK)
-- nombre
-- apellido
-- documento
-- email
-- telefono
-- domicilio
-- estado (Activo / Inactivo)
-- created_at
-- updated_at
+Atributos
 
-## Restricciones
+id
 
-- UNIQUE (institucion_id, documento)
+nombre
 
-## Relaciones
+configuracion (JSON opcional)
 
-- 1 Persona → N Asignaciones
+domicilio (opcional)
 
-## Reglas
+telefono (opcional)
 
-- Puede existir sin asignaciones.
-- No puede eliminarse si tiene asignaciones o incidencias asociadas.
-- No puede tener superposición horaria efectiva entre distribuciones activas.
-- La validación horaria ocurre a nivel de DistribucionHoraria.
+email (opcional)
 
----
+cuit (opcional, único)
 
-# 🏢 UnidadOrganizativa
+estado
 
-Representa una unidad operativa interna.
+activo
+
+deletedAt
+
+createdAt
+
+updatedAt
+
+Relaciones
+
+1 Institucion → N UnidadesOrganizativas
+
+1 Institucion → N ModulosHorario
+
+1 Institucion → N Asignaciones
+
+1 Institucion → N AgenteInstitucion
+
+1 Institucion → N UsuarioRol
+
+Todas las entidades operativas dependen de la institución para garantizar el aislamiento multi-tenant.
+
+👤 Agente
+
+Representa una persona física del sistema.
+
+El agente no pertenece directamente a una institución.
+La pertenencia institucional se gestiona mediante AgenteInstitucion.
+
+Esto permite que una misma persona participe en múltiples instituciones.
+
+Atributos
+
+id
+
+nombre
+
+apellido
+
+documento (opcional)
+
+email
+
+telefono
+
+domicilio
+
+estado
+
+activo
+
+deletedAt
+
+createdAt
+
+updatedAt
+
+Relaciones
+
+1 Agente → N Asignaciones
+
+1 Agente → N AgenteInstitucion
+
+Reglas
+
+Puede existir sin asignaciones.
+
+Puede pertenecer a múltiples instituciones.
+
+No se elimina físicamente del sistema.
+
+Puede tener múltiples asignaciones activas o históricas.
+
+🔗 AgenteInstitucion
+
+Representa la relación entre un agente y una institución.
+
+Permite gestionar la pertenencia institucional de una persona.
+
+Atributos
+
+agenteId (FK)
+
+institucionId (FK)
+
+documento (identificador institucional opcional)
+
+estado
+
+createdAt
+
+updatedAt
+
+Restricciones
+
+PK compuesta:
+
+(agenteId, institucionId)
+
+UNIQUE:
+
+(institucionId, documento)
+Reglas
+
+Un agente puede pertenecer a múltiples instituciones.
+
+Un documento es único dentro de una institución.
+
+Permite registrar identificadores institucionales institucionales.
+
+🏢 UnidadOrganizativa
+
+Representa una unidad estructural dentro de una institución.
 
 Ejemplos:
 
-- Área
-- Servicio
-- Proyecto
-- Departamento
+aula
 
-## Atributos
+departamento
 
-- id (PK)
-- institucion_id (FK)
-- nombre
-- tipo (opcional)
-- estado (Activa / Inactiva)
-- created_at
-- updated_at
+laboratorio
 
-## Relaciones
+área administrativa
 
-- 1 UnidadOrganizativa → N Asignaciones
+Atributos
 
-## Reglas
+id
 
-- Puede existir sin asignaciones.
-- No puede eliminarse si posee asignaciones históricas o activas.
+institucionId
 
----
+codigoUnidad
 
-# 🔗 Asignacion
+nombre
 
-Relación estructural entre Persona y UnidadOrganizativa.
+tipo
+
+estado
+
+activo
+
+deletedAt
+
+createdAt
+
+updatedAt
+
+Restricciones
+UNIQUE (institucionId, codigoUnidad)
+Relaciones
+
+1 UnidadOrganizativa → N Asignaciones
+
+Reglas
+
+Puede existir sin asignaciones.
+
+No debe eliminarse físicamente si posee asignaciones asociadas.
+
+🔗 Asignacion
+
+Representa la relación estructural entre:
+
+un agente
+
+una unidad organizativa
+
+una institución
 
 Es la entidad central del modelo.
 
-## Atributos
+Atributos
 
-- id (PK)
-- institucion_id (FK)
-- persona_id (FK)
-- unidad_id (FK)
-- estado (Activa / Inactiva)
-- identificador_estructural (opcional)
-- fecha_inicio
-- fecha_fin (nullable)
-- created_at
-- updated_at
+id
 
-## Restricciones
+institucionId
 
-- UNIQUE (institucion_id, identificador_estructural) cuando no es null
+agenteId
 
-## Reglas
+unidadId
 
-- No se elimina si tiene historial.
-- Se inactiva en lugar de eliminarse.
-- Puede coexistir con otras asignaciones de la misma persona.
-- La coherencia horaria se valida a nivel distribución.
-- Toda DistribucionHoraria e Incidencia depende de una Asignacion existente.
+identificadorEstructural
 
-## Relaciones
+fecha_inicio
 
-- 1 Asignacion → N DistribucionesHorarias
-- 1 Asignacion → N Incidencias
+fecha_fin
 
----
+estado
 
-# 🕒 ModuloHorario
+activo
 
-Bloque horario estructural configurable por institución.
+deletedAt
 
-## Atributos
+createdAt
 
-- id (PK)
-- institucion_id (FK)
-- dia_semana (1–7)
-- hora_desde
-- hora_hasta
-- created_at
-- updated_at
+updatedAt
 
-## Restricciones
+Restricciones
+UNIQUE (institucionId, identificadorEstructural)
+UNIQUE (agenteId, unidadId, institucionId)
+Relaciones
 
-- No pueden superponerse dentro de la misma institución.
-- hora_hasta > hora_desde.
+1 Asignacion → N DistribucionHoraria
 
-## Reglas
+1 Asignacion → N Incidencias
 
-- Son reutilizables por múltiples distribuciones.
-- No dependen de normativa sectorial.
+Reglas
 
----
+Representa un cargo estructural dentro de la institución.
 
-# 📅 DistribucionHoraria (Versionada)
+Un agente puede tener múltiples asignaciones.
 
-Representa una configuración horaria versionada de una asignación.
+Una unidad puede tener múltiples asignaciones, pero solo una activa si la regla institucional lo requiere.
 
-## Atributos
+No se elimina si posee historial.
 
-- id (PK)
-- asignacion_id (FK)
-- version (incremental por asignación)
-- fecha_vigencia_desde
-- fecha_vigencia_hasta (nullable)
-- estado
-- created_at
-- updated_at
+Se inactiva en lugar de eliminarse.
 
-## Reglas
+🕒 ModuloHorario
 
-- No se sobreescriben versiones.
-- Toda modificación genera una nueva versión.
-- Solo puede existir una versión vigente por período.
-- Debe validarse coherencia de vigencias.
-- Participa en la validación de superposición horaria por persona.
-- Las versiones históricas no se modifican.
+Bloque horario estructural definido por una institución.
 
-## Relaciones
+Atributos
 
-- 1 DistribucionHoraria → N DistribucionModulo
+id
 
----
+institucionId
 
-# 🔄 DistribucionModulo
+dia_semana
 
-Relación estructural entre DistribucionHoraria y ModuloHorario.
+hora_desde
 
-Materializa la composición horaria de una versión específica.
+hora_hasta
 
-## Atributos
+activo
 
-- distribucion_horaria_id (FK)
-- modulo_horario_id (FK)
-- created_at
-- updated_at
+deletedAt
 
-## PK compuesta
+createdAt
 
-(distribucion_horaria_id, modulo_horario_id)
+updatedAt
 
-## Reglas
+Relaciones
 
-- No puede existir duplicado.
-- Cada versión puede tener su propio conjunto de módulos.
-- No se modifica una vez cerrada la versión.
+1 ModuloHorario → N DistribucionModulo
 
----
+Reglas
 
-# ⚠️ Incidencia
+Define bloques reutilizables de tiempo.
+
+Pertenece exclusivamente a una institución.
+
+No puede superponerse con otro módulo dentro de la misma institución.
+
+Puede ser utilizado por múltiples distribuciones horarias.
+
+📅 DistribucionHoraria (Versionada)
+
+Representa la configuración horaria de una asignación en un período determinado.
+
+Atributos
+
+id
+
+asignacionId
+
+version
+
+fecha_vigencia_desde
+
+fecha_vigencia_hasta
+
+estado
+
+activo
+
+deletedAt
+
+createdAt
+
+updatedAt
+
+Restricciones
+UNIQUE (asignacionId, version)
+Relaciones
+
+1 DistribucionHoraria → N DistribucionModulo
+
+Reglas
+
+No se sobreescriben versiones.
+
+Cada cambio genera una nueva versión.
+
+Las versiones históricas deben preservarse.
+
+La validación de coherencia horaria se realiza en este nivel.
+
+Debe validarse coherencia de vigencias.
+
+🔄 DistribucionModulo
+
+Entidad intermedia que vincula una DistribucionHoraria con uno o más ModuloHorario.
+
+Atributos
+
+distribucionHorariaId
+
+moduloHorarioId
+
+createdAt
+
+updatedAt
+
+PK compuesta
+(distribucionHorariaId, moduloHorarioId)
+Reglas
+
+No puede existir duplicado.
+
+Define la composición horaria de una versión específica.
+
+Permite trazabilidad estructural de los módulos asignados.
+
+⚠️ Incidencia
 
 Representa una alteración temporal sobre una asignación.
 
-Siempre afecta un rango completo de fechas.
+Ejemplos:
 
-## Atributos
+licencia
 
-- id (PK)
-- asignacion_id (FK)
-- fecha_desde
-- fecha_hasta
-- tipo (configurable por institución)
-- incidencia_padre_id (nullable FK recursivo)
-- observacion
-- created_at
-- updated_at
+reemplazo
 
-## Reglas
+suspensión
 
-- Es inmutable.
-- fecha_hasta ≥ fecha_desde.
-- Permite encadenamiento jerárquico N niveles.
-- Una incidencia puede tener múltiples hijas.
-- Las incidencias hijas no pueden superponerse entre sí.
-- No se elimina.
-- No altera el historial estructural previo.
-- Debe validarse superposición incompatible.
+modificación temporal
 
----
+Atributos
 
-# 🔎 Relaciones Clave (Flujo Estructural)
+id
 
-Persona  
-↓  
-Asignacion  
-↓  
-DistribucionHoraria (versionada)  
-↓  
-DistribucionModulo  
-↓  
+asignacionId
+
+fecha_desde
+
+fecha_hasta
+
+tipo (enum TipoIncidencia)
+
+incidenciaPadreId
+
+observacion
+
+activo
+
+deletedAt
+
+createdAt
+
+updatedAt
+
+Relaciones
+
+1 Incidencia → N Incidencias (hijas)
+
+Relación recursiva mediante:
+
+incidenciaPadreId
+Reglas
+
+Siempre pertenece a una asignación.
+
+Las incidencias son inmutables.
+
+Permiten encadenamiento jerárquico.
+
+Pueden formar estructuras tipo árbol.
+
+Debe validarse superposición incompatible.
+
+Se preservan como historial estructural.
+
+🔎 Flujo Estructural del Dominio
+
+Flujo principal del modelo:
+
+Institucion
+   ↓
+Agente
+   ↓
+Asignacion
+   ↓
+DistribucionHoraria (versionada)
+   ↓
+DistribucionModulo
+   ↓
 ModuloHorario
 
-Asignacion  
-↓  
-Incidencia  
-↓  
-Incidencia (árbol recursivo)
+Flujo de incidencias:
 
-Todo bajo Institucion (multi-tenant real con aislamiento).
+Asignacion
+   ↓
+Incidencia
+   ↓
+Incidencia (estructura recursiva)
+🧠 Principios Arquitectónicos
 
----
+El modelo sigue los siguientes principios:
 
-# 🧠 Principios Arquitectónicos del Modelo v3.1
+Arquitectura multi-tenant con aislamiento por institución
 
-- Núcleo sector-agnóstico.
-- Multi-tenant real con aislamiento por institución.
-- Persona contextual al tenant.
-- Versionado estructural obligatorio.
-- Incidencias inmutables.
-- Eliminación lógica en lugar de eliminación física.
-- Validaciones críticas en capa de aplicación.
-- Trazabilidad completa por diseño.
-- Preparado para SaaS escalable.
-- Sin dependencia normativa en el núcleo.
+Separación entre identidad global (Agente) y pertenencia institucional
+
+Versionado estructural obligatorio
+
+Incidencias con trazabilidad jerárquica
+
+Eliminación lógica mediante soft delete
+
+Validaciones críticas en capa de aplicación
+
+Núcleo sector-agnóstico
+
+Preparado para SaaS escalable
+
+Integridad histórica de las asignaciones
+
+## Reglas de coherencia horaria
+
+### Coherencia por persona
+
+Un agente no puede tener dos módulos horarios superpuestos
+entre todas sus asignaciones activas dentro de una institución.
+
+La validación se realiza al crear o modificar una DistribucionHoraria.
+
+### Coherencia por unidad organizativa
+
+Una unidad organizativa no puede tener dos módulos
+superpuestos en el mismo momento dentro de una institución.
+
+### Coherencia de módulos
+
+Los ModuloHorario definidos por una institución
+no pueden superponerse entre sí.

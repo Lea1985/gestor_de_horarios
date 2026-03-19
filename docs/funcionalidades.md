@@ -90,7 +90,7 @@ El núcleo del sistema:
 
 # 🔵 EPIC 3 – Núcleo de Gestión Horaria (Core V1)
 
-## 🟢 Feature 3.1 – Persona
+## 🟢 Feature 3.1 – Agente
 
 - CRUD Persona
 - Validaciones:

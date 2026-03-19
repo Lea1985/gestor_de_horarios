@@ -1,153 +1,341 @@
-# 📘 Reglas de Negocio – Sistema de Gestión Horaria Estructural
+📘 Reglas de Negocio – Sistema de Gestión Horaria Estructural
+Enfoque Operativo Transversal
 
-## Enfoque Operativo Transversal
+Este documento define las reglas del núcleo estructural del sistema, alineadas con la arquitectura v3 y el modelo de datos implementado.
 
-Este documento define las reglas del núcleo estructural del sistema,
-alineadas con la arquitectura v3 y el Product Backlog.
+El núcleo es transversal, multi-tenant, y desacoplado de normativa sectorial.
 
-El núcleo es transversal, multi-tenant y desacoplado de normativa sectorial.
+La estructura del sistema está basada en los siguientes componentes principales:
 
----
+Instituciones (tenant del sistema)
 
-## 1. Sobre Persona
+Agentes
 
-- Una persona puede tener múltiples asignaciones activas o históricas.
-- Puede desempeñarse en distintas unidades organizativas simultáneamente.
-- Puede existir una persona sin asignaciones.
-- No puede eliminarse una persona que posea asignaciones o incidencias asociadas.
-- El documento identificatorio es único por institución.
-- El sistema debe validar superposición horaria efectiva entre asignaciones activas de una misma persona.
-- Ante superposición, el sistema debe generar advertencia explícita antes de confirmar la operación.
+Unidades Organizativas
 
----
+Asignaciones
 
-## 2. Sobre Unidad Organizativa
+Distribuciones Horarias versionadas
 
-- Representa cualquier unidad operativa dentro de una institución.
-- Puede estar activa o inactiva.
-- Puede existir sin asignaciones activas.
-- No puede eliminarse si posee asignaciones asociadas.
-- No depende de normativa externa para su existencia.
+Módulos Horarios
 
----
+Incidencias
 
-## 3. Sobre Asignación
+El diseño prioriza:
 
-La asignación representa la relación estructural entre una persona y una unidad organizativa.
+trazabilidad histórica
 
-- Puede estar Activa o Inactiva.
-- Puede tener fecha de inicio y fecha de fin.
-- Puede poseer un identificador estructural opcional (único por institución).
-- No se elimina si tiene historial de distribución horaria o incidencias.
-- La modificación estructural relevante debe preservar trazabilidad.
-- Puede coexistir con otras asignaciones de la misma persona, sujeto a validación horaria.
+consistencia estructural
 
----
+neutralidad sectorial
 
-## 4. Sobre Distribución Horaria
+escalabilidad SaaS.
 
-- Pertenece exclusivamente a una asignación.
-- Es versionada por vigencia.
-- No se sobreescriben versiones anteriores.
-- Solo puede existir una versión activa por rango temporal.
-- La duración del módulo es configurable por institución.
-- El sistema debe validar:
-  - No duplicación de módulos.
-  - No superposición horaria efectiva por persona.
-- Las inconsistencias generan advertencias antes de confirmar cambios.
+1. Sobre Agente
 
----
+Un Agente representa una persona que puede desempeñar funciones dentro de una o más instituciones.
 
-## 5. Sobre Módulos Horarios
+El sistema distingue entre:
 
-- Son configurables por institución.
-- Definen bloques de tiempo estructural.
-- No pueden superponerse dentro de la misma institución.
-- Son reutilizables por múltiples asignaciones.
+la identidad global del agente
 
----
+su relación con una institución
 
-## 6. Sobre Incidencias
+Esta relación se gestiona mediante AgenteInstitucion.
 
-Una incidencia representa una alteración temporal sobre una asignación.
+Reglas:
 
-- Siempre se registra sobre una asignación existente.
-- Define un rango de fechas obligatorio.
-- Puede referenciar otra incidencia previa.
-- Permite encadenamiento sin límite estructural.
-- Es inmutable una vez registrada.
-- No se eliminan incidencias históricas.
+Un agente puede pertenecer a múltiples instituciones.
 
-El sistema debe:
+Un agente puede tener múltiples asignaciones activas o históricas.
 
-- Validar superposición incompatible de incidencias activas.
-- Permitir consultar la cadena completa de incidencias.
+Puede desempeñarse en distintas unidades organizativas simultáneamente.
 
----
+Puede existir un agente sin asignaciones.
 
-## 7. Sobre Encadenamiento de Incidencias
+El agente no se elimina físicamente del sistema.
+Se utilizan mecanismos de desactivación o soft delete.
 
-- Una incidencia puede reemplazar o derivar de otra.
-- El modelo soporta N niveles de encadenamiento.
-- La cadena completa debe poder reconstruirse.
-- La trazabilidad no puede perderse por modificaciones posteriores.
-- El encadenamiento no altera la integridad histórica de la asignación original.
+El documento identificatorio es único dentro de una institución.
 
----
+El sistema debe validar superposición horaria efectiva entre asignaciones activas de un mismo agente.
 
-## 8. Sobre Historial y Versionado
+Ante superposición, el sistema debe generar advertencia explícita antes de confirmar la operación.
 
-- No se permite eliminación destructiva de registros estructurales.
-- Las asignaciones se inactivan, no se eliminan.
-- Las distribuciones horarias se versionan.
-- Las incidencias son inmutables.
-- Toda modificación estructural relevante debe ser auditable.
+Restricción estructural:
 
----
+No puede existir más de una asignación del mismo agente en la misma unidad organizativa dentro de una institución.
 
-## 9. Sobre Validaciones Operativas
+2. Sobre Unidad Organizativa
+
+La Unidad Organizativa representa cualquier estructura operativa dentro de una institución.
+
+Ejemplos posibles:
+
+aula
+
+departamento
+
+laboratorio
+
+área administrativa
+
+otra unidad estructural definida por la institución.
+
+Reglas:
+
+Pertenece siempre a una única institución.
+
+Puede estar activa o inactiva.
+
+Puede existir sin asignaciones activas.
+
+No debe eliminarse físicamente si posee asignaciones asociadas.
+
+Su existencia no depende de normativa externa.
+
+La unicidad de la unidad se define por:
+
+institución
+
+código interno de unidad.
+
+3. Sobre Asignación
+
+La Asignación representa la relación estructural entre:
+
+un agente
+
+una unidad organizativa
+
+una institución.
+
+Equivale conceptualmente a un cargo estructural dentro de la organización.
+
+Reglas:
+
+Pertenece siempre a una institución.
+
+Puede estar activa o inactiva.
+
+Posee fecha de inicio obligatoria.
+
+Puede poseer fecha de finalización.
+
+Debe poseer un identificador estructural único dentro de la institución.
+
+Puede coexistir con otras asignaciones del mismo agente, sujeto a validación horaria.
+
+No se elimina si posee historial de:
+
+distribución horaria
+
+incidencias.
+
+La modificación de datos estructurales debe preservar la trazabilidad histórica.
+
+4. Sobre Distribución Horaria
+
+La Distribución Horaria define la estructura de módulos asignados a una asignación en un período determinado.
+
+Reglas:
+
+Pertenece exclusivamente a una asignación.
+
+Es versionada.
+
+Cada versión posee:
+
+fecha de vigencia desde
+
+fecha de vigencia hasta (opcional).
+
+Las versiones anteriores no se sobreescriben.
+
+El historial de versiones debe preservarse.
+
+Restricciones operativas:
+
+El sistema debe validar a nivel de aplicación que no existan versiones con vigencias superpuestas para una misma asignación.
+
+Validaciones obligatorias:
+
+no duplicación de módulos dentro de una misma distribución
+
+validación de superposición horaria efectiva por agente.
+
+Las inconsistencias generan advertencias antes de confirmar cambios.
+
+5. Sobre Módulos Horarios
+
+Los Módulos Horarios representan bloques estructurales de tiempo definidos por la institución.
+
+Reglas:
+
+Son configurables por institución.
+
+Definen:
+
+día de la semana
+
+hora de inicio
+
+hora de finalización.
+
+Pueden ser reutilizados por múltiples distribuciones horarias.
+
+Son componentes estructurales reutilizables del sistema.
+
+Validaciones:
+
+El sistema debe validar a nivel de aplicación que no existan módulos superpuestos dentro de la misma institución.
+
+6. Sobre Incidencias
+
+Una Incidencia representa una alteración temporal sobre una asignación.
+
+Ejemplos posibles:
+
+licencia
+
+suspensión
+
+otra interrupción estructural.
+
+Reglas:
+
+Siempre se registra sobre una asignación existente.
+
+Define obligatoriamente:
+
+fecha desde
+
+fecha hasta.
+
+Puede incluir observaciones.
+
+Puede referenciar otra incidencia previa.
+
+Permite encadenamiento de incidencias.
+
+Las incidencias:
+
+no deben eliminarse
+
+deben preservarse para consulta histórica.
+
+Restricciones operativas:
+
+El sistema debe validar:
+
+superposición incompatible de incidencias activas.
+
+7. Sobre Encadenamiento de Incidencias
+
+El modelo permite encadenamiento jerárquico de incidencias.
+
+Esto permite representar situaciones como:
+
+licencia
+
+extensión de licencia
+
+reemplazo
+
+modificación posterior.
+
+Reglas:
+
+Una incidencia puede referenciar otra incidencia previa.
+
+El sistema soporta N niveles de encadenamiento.
+
+La cadena completa debe poder reconstruirse.
+
+La trazabilidad no debe perderse por modificaciones posteriores.
+
+El encadenamiento no altera la integridad histórica de la asignación original.
+
+8. Sobre Historial y Versionado
+
+El sistema prioriza la preservación de la trazabilidad histórica.
+
+Principios:
+
+No se permite eliminación destructiva de registros estructurales.
+
+Los agentes y unidades organizativas utilizan soft delete.
+
+Las asignaciones pueden inactivarse, pero no eliminarse si poseen historial.
+
+Las distribuciones horarias se versionan.
+
+Las incidencias se preservan como registro histórico permanente.
+
+Toda modificación estructural relevante debe ser auditable.
+
+9. Sobre Validaciones Operativas
 
 El sistema prioriza continuidad operativa con control explícito.
 
 Las siguientes situaciones generan advertencia obligatoria:
 
-- Superposición horaria por persona.
-- Inconsistencias en distribución horaria.
-- Duplicación de módulos.
-- Rango temporal inválido.
-- Conflictos de incidencias activas.
+superposición horaria por agente
 
-La institución puede configurar el nivel de bloqueo según política interna.
+inconsistencias en distribución horaria
 
----
+duplicación de módulos dentro de una distribución
 
-## 10. Sobre Multi-Tenant
+rango temporal inválido
 
-- Toda entidad estructural pertenece a una institución.
-- No puede existir cruce de datos entre instituciones.
-- Las validaciones de unicidad se aplican dentro del contexto institucional.
+conflictos entre incidencias activas.
 
----
+Las validaciones se realizan principalmente a nivel de lógica de aplicación.
 
-## 11. Sobre Extensiones Configurables
+La institución puede configurar el nivel de bloqueo o advertencia según su política interna.
 
-El núcleo no depende de normativa sectorial.
+10. Sobre Arquitectura Multi-Tenant
 
-Extensiones posibles incluyen:
+El sistema está diseñado como una arquitectura multi-tenant.
 
-- Régimen laboral.
-- Catálogo configurable de tipos de incidencia.
-- Identificadores externos oficiales.
-- Reglas sectoriales específicas.
+Principios:
 
-Estas extensiones no modifican el modelo estructural base.
+Cada institución representa un tenant independiente.
 
----
+Toda entidad estructural pertenece a una institución o se relaciona con ella.
 
-## 12. Principios Fundamentales del Sistema
+No puede existir cruce de datos entre instituciones.
 
-- La verdad del sistema es la estructura horaria versionada.
-- La trazabilidad histórica es obligatoria.
-- El núcleo debe operar en cualquier organización estructurada por horarios.
-- Las reglas normativas son configuraciones, no estructuras.
-- El diseño prioriza escalabilidad SaaS y neutralidad sectorial.
+Las validaciones de unicidad se aplican dentro del contexto institucional.
+
+Las relaciones entre agentes e instituciones se gestionan mediante AgenteInstitucion, lo que permite que un agente pertenezca a múltiples instituciones.
+
+11. Sobre Extensiones Configurables
+
+El núcleo del sistema es neutral respecto a normativa sectorial.
+
+Las siguientes extensiones pueden implementarse sin modificar el modelo estructural:
+
+régimen laboral
+
+catálogo ampliado de tipos de incidencia
+
+identificadores oficiales externos
+
+reglas sectoriales específicas.
+
+Estas extensiones deben integrarse como capas adicionales de configuración, sin modificar la estructura base.
+
+12. Principios Fundamentales del Sistema
+
+El diseño del sistema se basa en los siguientes principios:
+
+La verdad del sistema es la estructura horaria versionada.
+
+La trazabilidad histórica es obligatoria.
+
+El núcleo debe poder operar en cualquier organización estructurada por horarios.
+
+Las reglas normativas deben implementarse como configuración, no como estructura rígida.
+
+El diseño prioriza escalabilidad SaaS, modularidad y neutralidad sectorial.

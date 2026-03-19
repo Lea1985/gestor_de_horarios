@@ -1,97 +1,446 @@
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient, Estado, Dias, TipoUnidad, TipoIncidencia } from "@prisma/client"
 import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log("🌱 Iniciando seed...")
 
-  // === INSTITUCIÓN ===
-  const institucion = await prisma.institucion.create({
-    data: {
-      nombre: "Institución Demo",
-      domicilio: "Calle Falsa 123",
-      telefono: "3410000000",
-      email: "demo@institucion.edu"
+  console.log("🌪 Limpiando la base de datos...")
+
+  await prisma.$executeRawUnsafe(`
+  TRUNCATE TABLE
+  "Reemplazo",
+  "ClaseProgramada",
+  "HorarioAsignado",
+  "DistribucionModulo",
+  "DistribucionHoraria",
+  "Incidencia",
+  "Asignacion",
+  "AgenteInstitucion",
+  "Agente",
+  "ModuloHorario",
+  "UnidadOrganizativa",
+  "UsuarioRol",
+  "Sesion",
+  "Usuario",
+  "Rol",
+  "Institucion"
+  RESTART IDENTITY CASCADE;
+  `)
+
+  console.log("✅ Base limpia")
+
+  console.log("🌱 Creando datos de prueba...")
+
+  // =========================
+  // INSTITUCIONES
+  // =========================
+
+  const institucionesData = [
+    { nombre: "Institución Demo", domicilio: "Calle Falsa 123", telefono: "3410000000", email: "demo@institucion.edu" },
+    { nombre: "Escuela de Prueba", domicilio: "Calle Verdadera 456", telefono: "3411111111", email: "prueba@institucion.edu" },
+    { nombre: "Instituto Experimental", domicilio: "Av. Siempreviva 789", telefono: "3412222222", email: "exp@institucion.edu" }
+  ]
+
+  await prisma.institucion.createMany({ data: institucionesData })
+
+  const institucionesFull = await prisma.institucion.findMany()
+
+  // =========================
+  // UNIDADES
+  // =========================
+
+  const unidadesData: any[] = []
+
+  for (const inst of institucionesFull) {
+
+    unidadesData.push({
+      institucionId: inst.id,
+      codigoUnidad: 1,
+      nombre: "Dirección",
+      tipo: TipoUnidad.ADMIN
+    })
+
+    unidadesData.push({
+      institucionId: inst.id,
+      codigoUnidad: 2,
+      nombre: "Aula 1",
+      tipo: TipoUnidad.AULA
+    })
+
+    unidadesData.push({
+      institucionId: inst.id,
+      codigoUnidad: 3,
+      nombre: "Aula 2",
+      tipo: TipoUnidad.AULA
+    })
+  }
+
+  await prisma.unidadOrganizativa.createMany({ data: unidadesData })
+
+  const unidadesFull = await prisma.unidadOrganizativa.findMany()
+
+  // =========================
+  // MODULOS HORARIOS
+  // =========================
+
+  const diasArray: Dias[] = [
+    Dias.LUNES,
+    Dias.MARTES,
+    Dias.MIERCOLES
+  ]
+
+  const modulosData: any[] = []
+
+  for (const inst of institucionesFull) {
+
+    for (const dia of diasArray) {
+
+      for (let i = 8; i <= 10; i++) {
+
+        modulosData.push({
+          institucionId: inst.id,
+          dia_semana: dia,
+          hora_desde: i,
+          hora_hasta: i + 1
+        })
+
+      }
+
     }
-  })
-  console.log("✔ Institución creada:", institucion.id)
 
-  // === UNIDADES ===
-  const unidad1 = await prisma.unidadOrganizativa.create({
-    data: { institucionId: institucion.id, codigoUnidad: 1, nombre: "Dirección", tipo: "ADMIN" }
-  })
-  const unidad2 = await prisma.unidadOrganizativa.create({
-    data: { institucionId: institucion.id, codigoUnidad: 2, nombre: "Aula 1", tipo: "AULA" }
-  })
-  console.log("✔ Unidades creadas")
+  }
 
-  // === MÓDULOS HORARIOS ===
-  await prisma.moduloHorario.createMany({
+  await prisma.moduloHorario.createMany({ data: modulosData })
+
+  const modulosFull = await prisma.moduloHorario.findMany()
+
+  // =========================
+  // AGENTES
+  // =========================
+
+  const agentesData: any[] = []
+
+  for (let i = 1; i <= 6; i++) {
+
+    agentesData.push({
+      nombre: `Agente${i}`,
+      apellido: `Apellido${i}`,
+      documento: `${10000000 + i}`,
+      email: `agente${i}@demo.com`
+    })
+
+  }
+
+  await prisma.agente.createMany({ data: agentesData })
+
+  const agentesFull = await prisma.agente.findMany()
+
+  // =========================
+  // AGENTE INSTITUCION
+  // =========================
+
+  const agenteInstData: any[] = []
+
+  for (const inst of institucionesFull) {
+
+    for (let i = 0; i < 3; i++) {
+
+      const ag = agentesFull[i]
+
+      agenteInstData.push({
+        agenteId: ag.id,
+        institucionId: inst.id,
+        documento: ag.documento
+      })
+
+    }
+
+  }
+
+  await prisma.agenteInstitucion.createMany({ data: agenteInstData })
+
+  // =========================
+  // ASIGNACIONES
+  // =========================
+
+  const asignacionesData: any[] = []
+
+  for (const agInst of agenteInstData) {
+
+    const unidad = unidadesFull.find(
+      u =>
+        u.institucionId === agInst.institucionId &&
+        u.tipo === TipoUnidad.AULA
+    )
+
+    if (!unidad) continue
+
+    asignacionesData.push({
+      institucionId: agInst.institucionId,
+      agenteId: agInst.agenteId,
+      unidadId: unidad.id,
+      identificadorEstructural: `ASIG-${agInst.agenteId}-${unidad.id}`,
+      fecha_inicio: new Date()
+    })
+
+  }
+
+  await prisma.asignacion.createMany({ data: asignacionesData })
+
+  const asignacionesFull = await prisma.asignacion.findMany()
+
+  // =========================
+  // DISTRIBUCIONES HORARIAS
+  // =========================
+
+  const distribucionesData: any[] = []
+
+  for (const asign of asignacionesFull) {
+
+    for (let v = 1; v <= 3; v++) {
+
+      distribucionesData.push({
+        institucionId: asign.institucionId,
+        asignacionId: asign.id,
+        version: v,
+        fecha_vigencia_desde: new Date()
+      })
+
+    }
+
+  }
+
+  await prisma.distribucionHoraria.createMany({ data: distribucionesData })
+
+  const distribucionesFull = await prisma.distribucionHoraria.findMany()
+
+  // =========================
+  // DISTRIBUCION MODULOS
+  // =========================
+
+  const distribModuloData: any[] = []
+
+  for (const dist of distribucionesFull) {
+
+    const modulos = modulosFull.filter(
+      m => m.institucionId === dist.institucionId
+    )
+
+    for (const m of modulos) {
+
+      distribModuloData.push({
+        distribucionHorariaId: dist.id,
+        moduloHorarioId: m.id
+      })
+
+    }
+
+  }
+
+  await prisma.distribucionModulo.createMany({
+    data: distribModuloData
+  })
+
+  // =========================
+  // HORARIOS ASIGNADOS
+  // =========================
+
+  const horariosData: any[] = []
+
+  for (const dist of distribucionesFull) {
+
+    const asign = asignacionesFull.find(
+      a => a.id === dist.asignacionId
+    )
+
+    const modulos = distribModuloData.filter(
+      dm => dm.distribucionHorariaId === dist.id
+    )
+
+    for (const m of modulos) {
+
+      horariosData.push({
+        institucionId: dist.institucionId,
+        agenteId: asign?.agenteId!,
+        asignacionId: dist.asignacionId,
+        distribucionHorariaId: dist.id,
+        moduloHorarioId: m.moduloHorarioId
+      })
+
+    }
+
+  }
+
+  await prisma.horarioAsignado.createMany({
+    data: horariosData
+  })
+
+  const horariosFull = await prisma.horarioAsignado.findMany()
+
+  // =========================
+  // CLASES PROGRAMADAS
+  // =========================
+
+  const clasesData: any[] = []
+
+  const hoy = new Date()
+
+  for (const h of horariosFull) {
+
+    const asign = asignacionesFull.find(
+      a => a.id === h.asignacionId
+    )
+
+    clasesData.push({
+      institucionId: h.institucionId,
+      asignacionId: h.asignacionId,
+      moduloId: h.moduloHorarioId,
+      unidadId: asign?.unidadId!,
+      fecha: hoy
+    })
+
+  }
+
+  await prisma.claseProgramada.createMany({
+    data: clasesData
+  })
+
+  const clasesFull = await prisma.claseProgramada.findMany()
+
+  // =========================
+  // REEMPLAZOS DEMO
+  // =========================
+
+  if (clasesFull.length > 1) {
+
+    await prisma.reemplazo.create({
+      data: {
+        claseId: clasesFull[0].id,
+        asignacionTitularId: asignacionesFull[0].id,
+        asignacionSuplenteId: asignacionesFull[1].id,
+        observacion: "Reemplazo demo"
+      }
+    })
+
+  }
+
+  // =========================
+  // INCIDENCIAS
+  // =========================
+
+  for (const asign of asignacionesFull) {
+
+    for (let i = 1; i <= 3; i++) {
+
+      await prisma.incidencia.create({
+        data: {
+          asignacionId: asign.id,
+          fecha_desde: new Date(),
+          fecha_hasta: new Date(Date.now() + 1000 * 60 * 60 * i),
+          tipo: i % 2 === 0 ? TipoIncidencia.OTRO : TipoIncidencia.LICENCIA,
+          observacion: `Incidencia demo ${i}`
+        }
+      })
+
+    }
+
+  }
+
+  // =========================
+  // ROLES
+  // =========================
+
+  await prisma.rol.createMany({
     data: [
-      { institucionId: institucion.id, dia_semana: 1, hora_desde: "08:00:00", hora_hasta: "08:40:00" },
-      { institucionId: institucion.id, dia_semana: 1, hora_desde: "08:40:00", hora_hasta: "09:20:00" },
-      { institucionId: institucion.id, dia_semana: 1, hora_desde: "09:20:00", hora_hasta: "10:00:00" }
+      { nombre: "Admin", descripcion: "Administrador del sistema" },
+      { nombre: "Docente", descripcion: "Profesor" },
+      { nombre: "Invitado", descripcion: "Acceso limitado" }
     ]
   })
-  console.log("✔ Módulos horarios creados")
 
-  // === AGENTE ===
-  const agente = await prisma.agente.create({
-    data: { nombre: "Juan", apellido: "Pérez", documento: "12345678", email: "juan@demo.com" }
-  })
-  console.log("✔ Agente creado")
+  const rolesFull = await prisma.rol.findMany()
 
-  await prisma.agenteInstitucion.create({
-    data: { agenteId: agente.id, institucionId: institucion.id, documento: "12345678" }
-  })
-  console.log("✔ Relación agente-institución creada")
+  // =========================
+  // USUARIOS
+  // =========================
 
-  await prisma.asignacion.create({
-    data: { institucionId: institucion.id, agenteId: agente.id, unidadId: unidad1.id, identificadorEstructural: "DIR-001", fecha_inicio: new Date() }
-  })
-  console.log("✔ Asignación creada")
-
-  // === ROLES ===
-  const rolAdmin = await prisma.rol.create({ data: { nombre: "Admin", descripcion: "Administrador del sistema" } })
-  const rolDocente = await prisma.rol.create({ data: { nombre: "Docente", descripcion: "Profesor" } })
-  console.log("✔ Roles creados")
-
-  // === USUARIOS ===
   const passwordHash = await bcrypt.hash("123456", 10)
 
-  const usuario1 = await prisma.usuario.create({
-    data: { nombre: "Leandro Alegre", email: "leandro@demo.com", passwordHash }
-  })
-  const usuario2 = await prisma.usuario.create({
-    data: { nombre: "Juan Pérez", email: "juan@demo.com", passwordHash }
-  })
-  console.log("✔ Usuarios creados")
+  const usuariosData = agentesFull.map(a => ({
+    nombre: `${a.nombre} ${a.apellido}`,
+    email: a.email!,
+    passwordHash
+  }))
 
-  // === ASIGNAR ROLES A USUARIOS ===
-  await prisma.usuarioRol.create({
-    data: { usuarioId: usuario1.id, rolId: rolAdmin.id, institucionId: institucion.id }
+  usuariosData.push({
+    nombre: "Leandro Alegre",
+    email: "leandro@demo.com",
+    passwordHash
   })
-  await prisma.usuarioRol.create({
-    data: { usuarioId: usuario2.id, rolId: rolDocente.id, institucionId: institucion.id }
-  })
-  console.log("✔ Roles asignados a usuarios")
 
-  // === SESIONES INICIALES ===
+  await prisma.usuario.createMany({
+    data: usuariosData
+  })
+
+  const usuariosFull = await prisma.usuario.findMany()
+
+  // =========================
+  // USUARIO ROL
+  // =========================
+
+  const usuarioRolData: any[] = []
+
+  for (const u of usuariosFull) {
+
+    const rol =
+      u.email === "leandro@demo.com"
+        ? rolesFull.find(r => r.nombre === "Admin")!
+        : rolesFull.find(r => r.nombre === "Docente")!
+
+    const inst = institucionesFull[0]
+
+    usuarioRolData.push({
+      usuarioId: u.id,
+      rolId: rol.id,
+      institucionId: inst.id
+    })
+
+  }
+
+  await prisma.usuarioRol.createMany({
+    data: usuarioRolData
+  })
+
+  // =========================
+  // SESIONES
+  // =========================
+
   const now = new Date()
-  const expires = new Date(now.getTime() + 1000 * 60 * 60 * 24) // 24 hs
+
+  const expires = new Date(
+    now.getTime() + 1000 * 60 * 60 * 24
+  )
+
+  const sesionesData = usuariosFull.map(u => ({
+    usuarioId: u.id,
+    token: `demo-token-${u.id}`,
+    createdAt: now,
+    expiresAt: expires
+  }))
 
   await prisma.sesion.createMany({
-    data: [
-      { usuarioId: usuario1.id, token: "demo-token-leandro", createdAt: now, expiresAt: expires },
-      { usuarioId: usuario2.id, token: "demo-token-juan", createdAt: now, expiresAt: expires }
-    ]
+    data: sesionesData
   })
-  console.log("✔ Sesiones creadas")
 
-  console.log("🌱 Seed completo y funcional")
+  console.log("🌱 Seed completo generado correctamente ✅")
 }
 
 main()
-  .catch((e) => { console.error(e); process.exit(1) })
-  .finally(async () => { await prisma.$disconnect() })
+  .catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
