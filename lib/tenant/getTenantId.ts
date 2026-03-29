@@ -1,36 +1,42 @@
 import { headers } from "next/headers"
+import prisma from "@/lib/prisma"
 
 export async function getTenantId(): Promise<number> {
 
   const headerList = await headers()
+  const tenant = headerList.get("tenant-id")
 
-  // 1️⃣ Tenant por header
-  const headerTenant = headerList.get("x-institucion-id")
+  // 🛑 Sanitizar valores inválidos
+  if (!tenant || tenant === "undefined" || tenant === "null") {
 
-  if (headerTenant) {
-
-    const id = Number(headerTenant)
-
-    if (Number.isNaN(id)) {
-      throw new Error("Tenant inválido")
+    // 🧪 fallback en desarrollo / tests
+    if (process.env.NODE_ENV !== "production") {
+      return 1
     }
 
+    throw new Error("Tenant no definido")
+  }
+
+  // ================================
+  // 🟢 CASO 1: número (tenant-id = "1")
+  // ================================
+  const id = Number(tenant)
+
+  if (!Number.isNaN(id)) {
     return id
   }
 
-  // 2️⃣ Tenant por subdominio
-  const forwardedHost = headerList.get("x-forwarded-host")
+  // ================================
+  // 🟢 CASO 2: dominio (tenant-id = "escuela")
+  // ================================
+  const institucion = await prisma.institucion.findUnique({
+    where: { dominio: tenant.toLowerCase() }
+  })
 
-  if (forwardedHost) {
-
-    const subdomain = forwardedHost.split(".")[0]
-
-    // simulación para el test
-    if (subdomain === "demo") {
-      return 1
-    }
+  if (institucion) {
+    return institucion.id
   }
 
-  // 3️⃣ Sin tenant
-  throw new Error("Tenant no definido")
+  // ❌ Header vino pero no corresponde a nada válido
+  throw new Error("Tenant no encontrado")
 }

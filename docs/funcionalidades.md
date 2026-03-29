@@ -138,133 +138,321 @@ Representa materia, disciplina, actividad o servicio.
 - Garantizar trazabilidad inmutable
 
 ---
+# 🔵 EPIC 4.5 – Codigarios (Base normativa)
 
-# 🔵 EPIC 5 – Consultas Estratégicas Base
+## 🟢 Feature 4.5.1 – Gestión de Codigarios
 
-- Horario por persona
-- Horario por unidad organizativa
-- Asignaciones activas
-- Incidencias activas
-- Cadena completa de incidencias
-- Detección de conflictos estructurales
+- CRUD de codigarios por institución
+- Ejemplos:
+  - ARTICULOS_DOCENTES
+  - TIPOS_LICENCIA
 
----
-
-# 🔵 EPIC 6 – Historial y Auditoría
-
-- Historial de estado de asignación
-- Historial de distribución horaria
-- Registro de cambios estructurales
-- Auditoría básica de eventos críticos
+- Validaciones:
+  - Nombre único por institución
+  - Soft delete
 
 ---
 
-# 🔵 EPIC 7 – Extensión: Régimen Laboral Configurable
+## 🟢 Feature 4.5.2 – Gestión de Items
 
-(No forma parte del núcleo V1, pero se deja preparado)
+- CRUD de ítems de codigario:
+  - código (ej: ART_114)
+  - nombre
+  - descripción
 
-## 🟢 Feature 7.1 – Modelo de Régimen
+- Validaciones:
+  - Código único dentro del codigario
+  - Ítem activo
 
-- Definir entidad RégimenLaboral
-- Asociar régimen a asignación
-- Catálogo configurable de tipos de incidencia
+---
 
-## 🟢 Feature 7.2 – Identificadores Estructurales Opcionales
+## 🟢 Feature 4.5.3 – Integración con Incidencias
 
-- Permitir identificador estructural (ej. código interno / SARH)
-- Validación de unicidad por institución
-- Inmutabilidad una vez creado
+- Incidencia debe referenciar `codigarioItemId`
+
+- Validaciones:
+  - Ítem activo
+  - Pertenece a la institución
+  - Coherencia con tipo de incidencia (opcional futuro)
+
+---
+
+# 🔵 EPIC 5 – Generación de Clases (Motor Operativo)
+
+## 🟢 Feature 5.1 – Generación de Clases Programadas
+
+- Generar clases a partir de:
+  - Distribución horaria
+  - Módulos horarios
+  - Rango de fechas
+
+- Asociar:
+  - institucionId
+  - asignacionId
+  - moduloId
+  - unidadId
+
+- Estado inicial: `PROGRAMADA`
+
+- Validaciones:
+  - No duplicar clase para misma asignación + módulo + fecha
+  - Respetar vigencia de distribución horaria
+
+---
+
+## 🟢 Feature 5.2 – Regeneración / Recalculo
+
+- Permitir regenerar clases:
+  - Por rango de fechas
+  - Por asignación
+
+- Estrategias:
+  - Soft delete + regeneración
+  - Versionado (opcional futuro)
+
+---
+
+## 🟢 Feature 5.2.3 – Protección de Datos Operativos
+
+- No eliminar clases que:
+  - tengan reemplazos
+  - tengan incidencias
+
+- Alternativa:
+  - Marcar como inactivas en lugar de eliminar
+
+---
+
+## 🟢 Feature 5.3 – Impacto de Incidencias en Clases
+
+- Detectar incidencias activas en rango
+- Marcar clases como:
+  - `SUSPENDIDA`
+
+- Asociar `incidenciaId` a clase
+
+- Validaciones:
+  - No modificar clases fuera del rango
+  - No sobrescribir clases ya reemplazadas
+
+---
+
+## 🟢 Feature 5.4 – Motor de Resolución de Estado de Clase
+
+### 🟢 Feature 5.4.1 – Resolución automática
+
+Dada una clase:
+
+Orden de prioridad:
+
+1. Reemplazo → `REEMPLAZADA`
+2. Incidencia → `SUSPENDIDA`
+3. Default → `PROGRAMADA`
+
+---
+
+### 🟢 Feature 5.4.2 – Recalculo consistente
+
+- Recalcular estado cuando:
+  - se crea incidencia
+  - se elimina incidencia
+  - se crea reemplazo
+  - se elimina reemplazo
+
+---
+
+# 🔵 EPIC 6 – Reemplazos (Ejecución Real)
+
+## 🟢 Feature 6.1 – Registro de Reemplazo
+
+- Crear reemplazo sobre `ClaseProgramada`
+
+- Definir:
+  - asignacionTitularId
+  - asignacionSuplenteId
+
+- Validaciones:
+  - No permitir más de un reemplazo por clase
+  - Suplente activo
+  - Suplente distinto del titular
+
+---
+
+## 🟢 Feature 6.2 – Impacto en Clase
+
+- Cambiar estado de clase a `REEMPLAZADA`
+- Mantener relación con:
+  - titular
+  - suplente
+
+- Persistir trazabilidad completa
+
+---
+
+## 🟢 Feature 6.3 – Reglas de Consistencia
+
+- No permitir reemplazo si:
+  - clase está suspendida (según decisión de negocio)
+
+- Validar disponibilidad del suplente:
+  - (v1 simple)
+  - (v2 con chequeo de solapamientos)
+
+---
+
+## 🟢 Feature 6.4 – Validaciones Temporales
+
+### 🟢 Feature 6.4.1
+
+- Validar que el suplente:
+  - esté activo en esa fecha
+  - tenga asignación vigente
+
+---
+
+### 🟢 Feature 6.4.2 (opcional v2)
+
+- Validar que no tenga otra clase en el mismo módulo horario
+
+---
+
+# 🔵 EPIC 7 – Consultas Estratégicas
+
+## 🟢 Feature 7.1 – Horario Real
+
+- Obtener horario por:
+  - agente
+  - unidad
+  - institución
+
+- Considerar:
+  - clases programadas
+  - incidencias
+  - reemplazos
+
+---
+
+## 🟢 Feature 7.2 – Estado de Clases
+
+- Listar clases:
+  - PROGRAMADA
+  - DICTADA (futuro)
+  - SUSPENDIDA
+  - REEMPLAZADA
+
+---
+
+## 🟢 Feature 7.3 – Disponibilidad Docente
+
+- Detectar disponibilidad en base a:
+  - horarios asignados
+  - clases existentes
+  - reemplazos
+
+---
+
+## 🟢 Feature 7.4 – Trazabilidad Completa
+
+- Dada una clase:
+  - Ver asignación original
+  - Ver incidencia (si aplica)
+  - Ver reemplazo (si aplica)
 
 ---
 
 # 🔵 EPIC 8 – Seguridad
 
-- Autenticación JWT
-- Roles:
-  - Admin
-  - Operativo
-  - Directivo
-  - Consulta
-- Middleware de autorización
-- Protección de rutas frontend
+## 🟢 Feature 8.1 – Autenticación
+
+- Login con JWT
+- Manejo de sesiones
 
 ---
 
-# 🔵 EPIC 9 – Interfaz Base (UI mínima funcional)
+## 🟢 Feature 8.2 – Roles
 
-- Layout principal
-- Sidebar de navegación
+- Admin
+- Operativo
+- Directivo
+- Consulta
+
+---
+
+## 🟢 Feature 8.3 – Autorización
+
+- Middleware por rol
+- Restricción por entidad (multi-tenant)
+
+---
+
+# 🔵 EPIC 9 – Interfaz Base (UI funcional)
+
+## 🟢 Feature 9.1 – Layout
+
+- Sidebar
 - Header
-- Rutas protegidas
-- Pantallas CRUD básicas para núcleo
+- Navegación protegida
 
-Objetivo: validar flujo completo del sistema.
+---
+
+## 🟢 Feature 9.2 – Pantallas Operativas
+
+- Clases programadas (vista calendario/lista)
+- Incidencias
+- Reemplazos
+- Asignaciones
 
 ---
 
 # 🔵 EPIC 10 – Testing
 
-- Tests unitarios de dominio
-- Tests de aplicación
-- Tests de integración (API)
-- Tests de validaciones horarias
+## 🟢 Feature 10.1 – Tests de Dominio
+
+- Validaciones:
+  - superposición
+  - reemplazos
+  - incidencias
 
 ---
 
-# 🔵 EPIC 11 – Observabilidad y Mantenibilidad
+## 🟢 Feature 10.2 – Tests de Integración
+
+- Endpoints:
+  - clases
+  - reemplazos
+  - incidencias
+
+---
+
+# 🔵 EPIC 11 – Observabilidad
+
+## 🟢 Feature 11.1 – Logs
 
 - Logs estructurados
-- Manejo centralizado de errores
-- Health check endpoint
-- Versionado de API
+- Errores centralizados
+
+---
+
+## 🟢 Feature 11.2 – Health Check
+
+- Endpoint `/health`
 
 ---
 
 # 🔵 EPIC 12 – Documentación
 
-- Documentación API
-- README profesional
-- Guía de despliegue
-- Guía de migraciones
-- Manual técnico de arquitectura
+## 🟢 Feature 12.1 – Documentación Técnica
 
----
-
-# 📊 Roadmap Sugerido
-
-## Sprint 0
-
-EPIC 0 – Consolidación del núcleo
-
-## Sprint 1
-
-EPIC 1 + EPIC 2
-
-## Sprint 2
-
-EPIC 3
-
-## Sprint 3
-
-EPIC 4 + EPIC 5
-
-## Sprint 4
-
-EPIC 6 + EPIC 8
-
-## Sprint 5
-
-EPIC 9 + EPIC 10
-
-## Sprint 6
-
-EPIC 7 + EPIC 11 + EPIC 12
+- API
+- README
+- Deploy
+- Arquitectura
 
 ---
 
 # 🧠 Definición de V1 (MVP Real)
 
-El V1 incluye:
+## Incluye:
 
 - Multi-tenant
 - Gestión de personas
@@ -272,11 +460,16 @@ El V1 incluye:
 - Asignaciones
 - Distribución horaria versionada
 - Registro de incidencias
-- Encadenamiento de reemplazos
+- Codigarios integrados
+- Generación de clases
+- Reemplazos operativos
+- Motor de resolución de estado
 - Consultas estructurales básicas
 - Trazabilidad histórica
 
-No incluye:
+---
+
+## No incluye:
 
 - Motor legal complejo
 - Liquidación

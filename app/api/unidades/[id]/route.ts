@@ -6,12 +6,10 @@ export async function GET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-
   const params = await context.params
   const idNum = Number(params.id)
 
   return withTenant(async (tenantId) => {
-
     if (isNaN(idNum)) {
       return new Response(JSON.stringify({ error: "ID inválido" }), { status: 400 })
     }
@@ -39,12 +37,10 @@ export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-
   const params = await context.params
   const idNum = Number(params.id)
 
   return withTenant(async (tenantId) => {
-
     if (isNaN(idNum)) {
       return new Response(JSON.stringify({ error: "ID inválido" }), { status: 400 })
     }
@@ -56,40 +52,52 @@ export async function PATCH(
       return new Response(JSON.stringify({ error: "JSON inválido" }), { status: 400 })
     }
 
-    const actualizada = await prisma.unidadOrganizativa.updateMany({
+    // 🔍 Verificar existencia
+    const existente = await prisma.unidadOrganizativa.findFirst({
       where: {
         id: idNum,
         institucionId: tenantId,
         deletedAt: null
-      },
-      data: body
+      }
     })
 
-    if (actualizada.count === 0) {
+    if (!existente) {
       return new Response(JSON.stringify({ error: "Unidad no encontrada" }), { status: 404 })
     }
 
-    const unidad = await prisma.unidadOrganizativa.findFirst({
-      where: { id: idNum, institucionId: tenantId }
-    })
+    try {
+      const unidad = await prisma.unidadOrganizativa.update({
+        where: { id: idNum },
+        data: body
+      })
 
-    return Response.json(unidad)
+      return Response.json(unidad)
+
+    } catch (error: any) {
+
+      if (error.code === "P2002") {
+        return new Response(
+          JSON.stringify({ error: "Código de unidad duplicado" }),
+          { status: 409 }
+        )
+      }
+
+      throw error
+    }
 
   }, req)
 }
 
 
-// ===== DELETE =====
+// ===== DELETE (soft delete) =====
 export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-
   const params = await context.params
   const idNum = Number(params.id)
 
   return withTenant(async (tenantId) => {
-
     if (isNaN(idNum)) {
       return new Response(
         JSON.stringify({ error: "ID inválido" }),
@@ -104,7 +112,7 @@ export async function DELETE(
       }
     })
 
-    // 🔁 No existe → idempotente
+    // 🔁 Idempotente: no existe
     if (!existente) {
       return Response.json({
         ok: true,
@@ -112,7 +120,7 @@ export async function DELETE(
       })
     }
 
-    // 🔁 Ya estaba borrado → idempotente
+    // 🔁 Idempotente: ya eliminado
     if (existente.deletedAt) {
       return Response.json({
         ok: true,
@@ -120,13 +128,9 @@ export async function DELETE(
       })
     }
 
-    // 🧹 Soft delete real
-    const result = await prisma.unidadOrganizativa.updateMany({
-      where: {
-        id: idNum,
-        institucionId: tenantId,
-        deletedAt: null
-      },
+    // 🧹 Soft delete
+    const result = await prisma.unidadOrganizativa.update({
+      where: { id: idNum },
       data: {
         deletedAt: new Date(),
         activo: false
@@ -135,7 +139,7 @@ export async function DELETE(
 
     return Response.json({
       ok: true,
-      deleted: result.count > 0
+      deleted: !!result
     })
 
   }, req)

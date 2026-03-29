@@ -1,68 +1,22 @@
-import prisma from "@/lib/prisma"
-import { withTenant } from "../../../lib/tenant/withTenant"
+// /api/instituciones/route.ts
+import prisma from "@/lib/prisma";
 
-export async function GET(req: Request) {
-
-  return withTenant(async (tenantId) => {
-
-    const institucion = await prisma.institucion.findUnique({
-      where: { id: tenantId }
-    })
-
-    return Response.json(institucion)
-
-  }, req)
-
+export async function GET() {
+  const instituciones = await prisma.institucion.findMany();
+  return Response.json(instituciones);
 }
 
-export async function PATCH(req: Request) {
+export async function POST(req: Request) {
+  const body = await req.json();
+  const { nombre, domicilio, telefono, email } = body;
 
-  return withTenant(async (tenantId) => {
+  if (!nombre || nombre.trim() === "") {
+    return Response.json({ error: "Nombre es obligatorio" }, { status: 400 });
+  }
 
-    let body
+  const nueva = await prisma.institucion.create({
+    data: { nombre: nombre.trim(), domicilio, telefono, email },
+  });
 
-    try {
-      body = await req.json()
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "JSON inválido" }),
-        { status: 400 }
-      )
-    }
-
-    try {
-
-      const data: any = {}
-
-      if (body.nombre !== undefined) data.nombre = body.nombre
-      if (body.domicilio !== undefined) data.domicilio = body.domicilio
-      if (body.telefono !== undefined) data.telefono = body.telefono
-      if (body.configuracion !== undefined) data.configuracion = body.configuracion
-
-      if (Object.keys(data).length === 0) {
-        return new Response(
-          JSON.stringify({ error: "No hay datos para actualizar" }),
-          { status: 400 }
-        )
-      }
-
-      const institucionActualizada = await prisma.institucion.update({
-        where: { id: tenantId },
-        data
-      })
-
-      return Response.json(institucionActualizada)
-
-    } catch (error) {
-
-      console.error("Error PATCH institucion:", error)
-
-      return new Response(
-        JSON.stringify({ error: "Error al actualizar institución" }),
-        { status: 500 }
-      )
-    }
-
-  }, req)
-
+  return Response.json(nueva, { status: 201 });
 }

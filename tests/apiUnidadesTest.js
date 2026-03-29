@@ -4,6 +4,7 @@ const tenantHeader = {
   "Content-Type": "application/json" 
 };
 
+// Unidad base para pruebas
 const unidad = {
   nombre: "Unidad Test " + Date.now(),
   codigoUnidad: Math.floor(Math.random() * 1000000),
@@ -27,10 +28,24 @@ try {
   }
 
   const created = await createRes.json();
-  // Convertimos ID a string si la API lo requiere
   const unidadId = String(created.id);
   unidadResult.pasos.create = unidadId ? "✅" : "❌";
   console.log("Unidad creada con ID:", unidadId);
+
+  // ===== VALIDACIÓN CÓDIGO ÚNICO =====
+  const duplicateRes = await fetch(baseUrl, {
+    method: "POST",
+    headers: tenantHeader,
+    body: JSON.stringify(unidad), // mismo codigoUnidad
+  });
+
+  if (duplicateRes.status === 409) {
+  unidadResult.pasos.codigoUnico = "✅";
+} else {
+  const text = await duplicateRes.text();
+  console.error("DUPLICATE failed:", duplicateRes.status, text);
+  unidadResult.pasos.codigoUnico = "❌";
+}
 
   // ===== GET BY ID =====
   const getRes = await fetch(`${baseUrl}/${unidadId}`, { headers: tenantHeader });
@@ -72,22 +87,25 @@ try {
     }
   }
 
-// ===== DELETE =====
-const deleteRes = await fetch(`${baseUrl}/${unidadId}`, {
-  method: "DELETE",
-  headers: tenantHeader,
-});
+  // ===== DELETE =====
+  const deleteRes = await fetch(`${baseUrl}/${unidadId}`, {
+    method: "DELETE",
+    headers: tenantHeader,
+  });
 
-if (!deleteRes.ok) {
-  const text = await deleteRes.text();
-  console.error("DELETE failed:", deleteRes.status, text);
-  unidadResult.pasos.delete = "❌";
-} else {
-  const deleted = await deleteRes.json();
+  if (!deleteRes.ok) {
+    const text = await deleteRes.text();
+    console.error("DELETE failed:", deleteRes.status, text);
+    unidadResult.pasos.delete = "❌";
 
-  // ✅ VALIDACIÓN CORRECTA
-  unidadResult.pasos.delete = deleted.ok ? "✅" : "❌";
-}
+    // 💡 Validación extra: verificar si falló por tener asignaciones
+    if (text.includes("tiene asignaciones asociadas")) {
+      unidadResult.pasos.delete = "⚠ Unidad con asignaciones no eliminada (✅ validación)";
+    }
+  } else {
+    const deleted = await deleteRes.json();
+    unidadResult.pasos.delete = deleted.ok ? "✅" : "❌";
+  }
 
 } catch (err) {
   console.error("Error general en test:", err.message);

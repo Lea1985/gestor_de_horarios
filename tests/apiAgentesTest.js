@@ -1,7 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { spawn } from "child_process";
-import waitOn from "wait-on"; // npm i wait-on
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -15,26 +13,9 @@ const testAgents = [
   { nombre: "QA3", apellido: "Tester3", documento: "90000007", email: "qa7@escuela.edu" },
 ];
 
-// Verifica si la app Next.js corre y la levanta si no
-async function ensureAppRunning() {
-  try {
-    const res = await fetch("http://localhost:3000/api/instituciones");
-    if (res.ok) {
-      console.log("✅ App ya corriendo.");
-      return null; // no necesitamos iniciar
-    }
-  } catch {}
-  console.log("⚠️ App no corriendo. Levantando Next.js...");
-  const server = spawn("npm", ["run", "dev"], { stdio: "inherit" });
-  await waitOn({ resources: ["http://localhost:3000"], timeout: 10000 });
-  console.log("✅ App lista para tests.");
-  return server;
-}
-
 async function runAdvancedTests() {
   console.log("=== INICIANDO TEST SUITE AVANZADO DE AGENTES ===");
   const results = [];
-  const serverProcess = await ensureAppRunning();
 
   for (const agent of testAgents) {
     const agentResult = { agente: agent.nombre, pasos: {} };
@@ -112,12 +93,6 @@ async function runAdvancedTests() {
     }
   });
   console.log("✅ Registros de prueba eliminados con Prisma.");
-
-  // Cerrar servidor si lo levantamos nosotros
-  if (serverProcess) {
-    serverProcess.kill();
-    console.log("✅ Servidor Next.js detenido.");
-  }
 
   console.log("=== TEST SUITE COMPLETADO ===");
 }

@@ -18,12 +18,8 @@ async function main() {
   let nuevaInstitucion;
 
   if (!existente) {
-    // 3️⃣ Crear la institución de prueba
     nuevaInstitucion = await prisma.institucion.create({
-      data: {
-        nombre: nombrePrueba,
-        estado: 'ACTIVO',
-      },
+      data: { nombre: nombrePrueba, estado: 'ACTIVO' },
     });
     console.log('✅ Nueva institución creada:', nuevaInstitucion);
   } else {
@@ -31,15 +27,42 @@ async function main() {
     nuevaInstitucion = existente;
   }
 
-  // 4️⃣ Borrar la institución de prueba al final
-  const borrada = await prisma.institucion.deleteMany({
+  const institucionId = nuevaInstitucion.id;
+
+  // 3️⃣ Cleanup en orden correcto por FK
+  // distribucionModulo → distribucionHoraria → asignacion → unidad → agente → institucion
+
+  const distribuciones = await prisma.distribucionHoraria.findMany({
+    where: { asignacion: { unidad: { institucionId } } },
+    select: { id: true },
+  });
+  const distribucionIds = distribuciones.map(d => d.id);
+
+  await prisma.distribucionModulo.deleteMany({
+    where: { distribucionHorariaId: { in: distribucionIds } },
+  });
+
+  await prisma.distribucionHoraria.deleteMany({
+    where: { id: { in: distribucionIds } },
+  });
+
+  await prisma.asignacion.deleteMany({
+    where: { unidad: { institucionId } },
+  });
+
+  await prisma.unidadOrganizativa.deleteMany({
+    where: { institucionId },
+  });
+
+  await prisma.agenteInstitucion.deleteMany({
+    where: { institucionId },
+  });
+
+  await prisma.institucion.deleteMany({
     where: { nombre: nombrePrueba },
   });
-  console.log(
-    '🗑 Institución de prueba eliminada:',
-    borrada.count,
-    'registro(s) borrado(s)'
-  );
+
+  console.log('🗑 Institución de prueba y dependencias eliminadas');
 }
 
 main()

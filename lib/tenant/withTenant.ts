@@ -8,23 +8,20 @@ export async function withTenant(
 
     const tenantId = await getTenantId()
 
-    if (!tenantId) {
-      return Response.json(
-        { error: "Tenant no definido" },
-        { status: 400 }
-      )
-    }
-
-    return handler(tenantId, req)
+    return await handler(tenantId, req)
 
   } catch (error) {
 
     console.error("Error resolviendo tenant:", error)
 
-    return Response.json(
-      { error: "Error resolviendo tenant" },
-      { status: 500 }
-    )
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Error resolviendo tenant"
 
+    return Response.json(
+      { error: message },
+      { status: 400 }
+    )
   }
 }
