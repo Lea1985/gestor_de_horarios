@@ -1,18 +1,17 @@
 // app/api/reemplazos/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+
+import { withContext } from "@/lib/auth/withContext"
+import { Prisma } from "@prisma/client"
 import prisma from "@/lib/prisma"
 
-// ================================
-// 🔹 POST /api/reemplazos
-// ================================
 export async function POST(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     let body: {
-      claseId: number
-      asignacionTitularId: number
+      claseId:              number
+      asignacionTitularId:  number
       asignacionSuplenteId: number
-      observacion?: string
+      observacion?:         string
     }
 
     try {
@@ -37,42 +36,40 @@ export async function POST(req: Request) {
       )
     }
 
-    // Verificar que la clase existe y pertenece al tenant
+    // Validar clase pertenece al tenant
     const clase = await prisma.claseProgramada.findFirst({
-      where: { id: claseId, institucionId: tenantId }
+      where:  { id: claseId, institucionId: tenantId },
+      select: { id: true },
     })
 
     if (!clase) {
       return Response.json({ error: "Clase no encontrada" }, { status: 404 })
     }
 
-    // Verificar que la asignación titular pertenece al tenant
-    const titular = await prisma.asignacion.findFirst({
-      where: { id: asignacionTitularId, institucionId: tenantId }
-    })
+    // Validar asignaciones pertenecen al tenant
+    const [titular, suplente] = await Promise.all([
+      prisma.asignacion.findFirst({
+        where:  { id: asignacionTitularId, institucionId: tenantId },
+        select: { id: true },
+      }),
+      prisma.asignacion.findFirst({
+        where:  { id: asignacionSuplenteId, institucionId: tenantId },
+        select: { id: true },
+      }),
+    ])
 
     if (!titular) {
-      return Response.json(
-        { error: "Asignación titular no encontrada" },
-        { status: 404 }
-      )
+      return Response.json({ error: "Asignación titular no encontrada" }, { status: 404 })
     }
 
-    // Verificar que la asignación suplente pertenece al tenant
-    const suplente = await prisma.asignacion.findFirst({
-      where: { id: asignacionSuplenteId, institucionId: tenantId }
-    })
-
     if (!suplente) {
-      return Response.json(
-        { error: "Asignación suplente no encontrada" },
-        { status: 404 }
-      )
+      return Response.json({ error: "Asignación suplente no encontrada" }, { status: 404 })
     }
 
     // Verificar que no exista ya un reemplazo activo para esta clase
     const reemplazoExistente = await prisma.reemplazo.findFirst({
-      where: { claseId, activo: true }
+      where:  { claseId, activo: true },
+      select: { id: true },
     })
 
     if (reemplazoExistente) {
@@ -90,26 +87,21 @@ export async function POST(req: Request) {
           asignacionTitularId,
           asignacionSuplenteId,
           observacion,
-          activo: true
-        }
+          activo: true,
+        },
       }),
       prisma.claseProgramada.update({
         where: { id: claseId },
-        data: { estado: "REEMPLAZADA" }
-      })
+        data:  { estado: "REEMPLAZADA" },
+      }),
     ])
 
-    return Response.json(reemplazo)
-
-  }, req)
+    return Response.json(reemplazo, { status: 201 })
+  })
 }
 
-// ================================
-// 🔹 GET /api/reemplazos
-// Filtros: claseId, asignacionTitularId, asignacionSuplenteId, fecha_desde, fecha_hasta
-// ================================
 export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     const { searchParams } = new URL(req.url)
 
@@ -126,9 +118,9 @@ export async function GET(req: Request) {
       )
     }
 
-    const where: any = {
+    const where: Prisma.ReemplazoWhereInput = {
       activo: true,
-      clase: { institucionId: tenantId }
+      clase:  { institucionId: tenantId },
     }
 
     if (claseId)              where.claseId              = parseInt(claseId)
@@ -137,11 +129,12 @@ export async function GET(req: Request) {
 
     if (fecha_desde || fecha_hasta) {
       where.clase = {
-        ...where.clase,
-        fecha: {}
+        institucionId: tenantId,
+        fecha:         {
+          ...(fecha_desde ? { gte: new Date(fecha_desde) } : {}),
+          ...(fecha_hasta ? { lte: new Date(fecha_hasta) } : {}),
+        },
       }
-      if (fecha_desde) where.clase.fecha.gte = new Date(fecha_desde)
-      if (fecha_hasta) where.clase.fecha.lte = new Date(fecha_hasta)
     }
 
     const reemplazos = await prisma.reemplazo.findMany({
@@ -153,15 +146,14 @@ export async function GET(req: Request) {
             fecha:  true,
             estado: true,
             modulo: { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
-            unidad: { select: { nombre: true } }
-          }
+            unidad: { select: { nombre: true } },
+          },
         },
         asignacionTitular:  { select: { identificadorEstructural: true, agenteId: true } },
-        asignacionSuplente: { select: { identificadorEstructural: true, agenteId: true } }
-      }
+        asignacionSuplente: { select: { identificadorEstructural: true, agenteId: true } },
+      },
     })
 
     return Response.json(reemplazos)
-
-  }, req)
+  })
 }

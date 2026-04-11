@@ -1,9 +1,10 @@
 // app/api/reportes/reemplazos/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+
+import { withContext } from "@/lib/auth/withContext"
 import prisma from "@/lib/prisma"
 
 export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     const { searchParams } = new URL(req.url)
     const fecha_desde = searchParams.get("fecha_desde")
@@ -23,9 +24,9 @@ export async function GET(req: Request) {
           institucionId: tenantId,
           fecha: {
             gte: new Date(fecha_desde),
-            lte: new Date(fecha_hasta)
-          }
-        }
+            lte: new Date(fecha_hasta),
+          },
+        },
       },
       orderBy: { createdAt: "asc" },
       include: {
@@ -34,26 +35,27 @@ export async function GET(req: Request) {
             fecha:  true,
             estado: true,
             modulo: { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
-            unidad: { select: { nombre: true } }
-          }
+            unidad: { select: { nombre: true } },
+          },
         },
         asignacionTitular: {
           select: {
             identificadorEstructural: true,
-            agente: { select: { nombre: true, apellido: true, documento: true } }
-          }
+            agente: { select: { nombre: true, apellido: true, documento: true } },
+          },
         },
         asignacionSuplente: {
           select: {
             identificadorEstructural: true,
-            agente: { select: { nombre: true, apellido: true, documento: true } }
-          }
-        }
-      }
+            agente: { select: { nombre: true, apellido: true, documento: true } },
+          },
+        },
+      },
     })
 
     // Agrupar por suplente para el resumen
-    const porSuplente: Record<number, { agente: any, cantidad: number }> = {}
+    const porSuplente: Record<number, { agente: unknown; cantidad: number }> = {}
+
     for (const r of reemplazos) {
       const id = r.asignacionSuplenteId
       if (!porSuplente[id]) {
@@ -63,11 +65,10 @@ export async function GET(req: Request) {
     }
 
     return Response.json({
-      periodo:   { desde: fecha_desde, hasta: fecha_hasta },
-      total:     reemplazos.length,
+      periodo:     { desde: fecha_desde, hasta: fecha_hasta },
+      total:       reemplazos.length,
       porSuplente: Object.values(porSuplente).sort((a, b) => b.cantidad - a.cantidad),
-      reemplazos
+      reemplazos,
     })
-
-  }, req)
+  })
 }

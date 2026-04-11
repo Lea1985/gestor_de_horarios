@@ -1,10 +1,15 @@
 // app/api/horario/institucion/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+// Devuelve la grilla semanal completa de la institución agrupada por unidad.
+
+import { withContext } from "@/lib/auth/withContext"
 import prisma from "@/lib/prisma"
+
+const DIAS = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","DOMINGO"] as const
+const DIA_INDEX = ["DOMINGO","LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
 
 function rangoDeSemana(semana: string): { lunes: Date; domingo: Date } {
   const fecha = new Date(semana)
-  const dia = fecha.getDay() === 0 ? 7 : fecha.getDay()
+  const dia   = fecha.getDay() === 0 ? 7 : fecha.getDay()
   const lunes = new Date(fecha)
   lunes.setDate(fecha.getDate() - dia + 1)
   lunes.setHours(0, 0, 0, 0)
@@ -15,7 +20,7 @@ function rangoDeSemana(semana: string): { lunes: Date; domingo: Date } {
 }
 
 export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     const { searchParams } = new URL(req.url)
     const semana = searchParams.get("semana")
@@ -29,53 +34,58 @@ export async function GET(req: Request) {
     const clases = await prisma.claseProgramada.findMany({
       where: {
         institucionId: tenantId,
-        fecha: { gte: lunes, lte: domingo }
+        fecha:         { gte: lunes, lte: domingo },
       },
       orderBy: [{ fecha: "asc" }, { modulo: { hora_desde: "asc" } }],
       include: {
-        modulo:    true,
-        unidad:    { select: { nombre: true, tipo: true } },
+        modulo:   true,
+        unidad:   { select: { nombre: true, tipo: true } },
+        comision: { select: { nombre: true, id: true } },
         asignacion: {
           select: {
             identificadorEstructural: true,
-            agente: { select: { nombre: true, apellido: true } }
-          }
+            agente: { select: { nombre: true, apellido: true } },
+          },
         },
         reemplazos: {
           where: { activo: true },
           select: {
             id: true,
             asignacionSuplente: {
-              select: { agente: { select: { nombre: true, apellido: true } } }
-            }
-          }
-        }
-      }
+              select: { agente: { select: { nombre: true, apellido: true } } },
+            },
+          },
+        },
+      },
     })
 
     // Agrupar por unidad → día → clases
-    const dias = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","DOMINGO"]
-
-    const porUnidad: Record<string, any> = {}
+    const porUnidad: Record<string, {
+      unidad: (typeof clases)[0]["unidad"]
+      grilla: Record<string, typeof clases>
+    }> = {}
 
     for (const clase of clases) {
       const key = String(clase.unidadId)
+
       if (!porUnidad[key]) {
         porUnidad[key] = {
           unidad: clase.unidad,
-          grilla: dias.reduce((acc, d) => { acc[d] = []; return acc }, {} as Record<string, any[]>)
+          grilla: DIAS.reduce((acc, d) => {
+            acc[d] = []
+            return acc
+          }, {} as Record<string, typeof clases>),
         }
       }
-      const d = new Date(clase.fecha).getDay()
-      const nombre = ["DOMINGO","LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"][d]
-      porUnidad[key].grilla[nombre].push(clase)
+
+      const nombreDia = DIA_INDEX[new Date(clase.fecha).getDay()]
+      porUnidad[key].grilla[nombreDia].push(clase)
     }
 
     return Response.json({
       semana:   { lunes: lunes.toISOString(), domingo: domingo.toISOString() },
       total:    clases.length,
-      unidades: Object.values(porUnidad)
+      unidades: Object.values(porUnidad),
     })
-
-  }, req)
+  })
 }

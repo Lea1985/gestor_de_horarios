@@ -1,46 +1,45 @@
 // app/api/reemplazos/[id]/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+
+import { withContext } from "@/lib/auth/withContext"
 import prisma from "@/lib/prisma"
 
-// ================================
-// 🔹 GET /api/reemplazos/[id]
-// ================================
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withTenant(async (tenantId) => {
+  const { id: idParam } = await params
+  const id = parseInt(idParam)
 
-    const { id: idParam } = await params
-    const id = parseInt(idParam)
-    if (isNaN(id)) {
-      return Response.json({ error: "ID inválido" }, { status: 400 })
-    }
+  if (isNaN(id)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     const reemplazo = await prisma.reemplazo.findFirst({
       where: {
         id,
         activo: true,
-        clase: { institucionId: tenantId }
+        clase:  { institucionId: tenantId },
       },
       include: {
         clase: {
           include: {
             modulo: true,
-            unidad: true
-          }
+            unidad: true,
+          },
         },
         asignacionTitular: {
           include: {
-            agente: { select: { nombre: true, apellido: true, documento: true } }
-          }
+            agente: { select: { nombre: true, apellido: true, documento: true } },
+          },
         },
         asignacionSuplente: {
           include: {
-            agente: { select: { nombre: true, apellido: true, documento: true } }
-          }
-        }
-      }
+            agente: { select: { nombre: true, apellido: true, documento: true } },
+          },
+        },
+      },
     })
 
     if (!reemplazo) {
@@ -48,32 +47,29 @@ export async function GET(
     }
 
     return Response.json(reemplazo)
-
-  }, req)
+  })
 }
 
-// ================================
-// 🔹 DELETE /api/reemplazos/[id]
-// Soft delete — revierte la clase a PROGRAMADA
-// ================================
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withTenant(async (tenantId) => {
+  const { id: idParam } = await params
+  const id = parseInt(idParam)
 
-    const { id: idParam } = await params
-    const id = parseInt(idParam)
-    if (isNaN(id)) {
-      return Response.json({ error: "ID inválido" }, { status: 400 })
-    }
+  if (isNaN(id)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     const reemplazo = await prisma.reemplazo.findFirst({
       where: {
         id,
         activo: true,
-        clase: { institucionId: tenantId }
-      }
+        clase:  { institucionId: tenantId },
+      },
+      select: { id: true, claseId: true },
     })
 
     if (!reemplazo) {
@@ -84,15 +80,14 @@ export async function DELETE(
     await prisma.$transaction([
       prisma.reemplazo.update({
         where: { id },
-        data: { activo: false, deletedAt: new Date() }
+        data:  { activo: false, deletedAt: new Date() },
       }),
       prisma.claseProgramada.update({
         where: { id: reemplazo.claseId },
-        data: { estado: "PROGRAMADA" }
-      })
+        data:  { estado: "PROGRAMADA" },
+      }),
     ])
 
     return Response.json({ ok: true, deleted: true })
-
-  }, req)
+  })
 }

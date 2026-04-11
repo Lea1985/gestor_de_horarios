@@ -1,396 +1,495 @@
-    generator client {
-      provider = "prisma-client-js"
-    }
-
-    datasource db {
-      provider = "postgresql"
-      url      = env("DATABASE_URL")
-    }
-
-    /// ENUMS
-    enum Estado {
-      ACTIVO
-      INACTIVO
-      SUSPENDIDO
-    }
-
-    enum TipoUnidad {
-      AULA
-      LABORATORIO
-      ADMIN
-      OTRA
-    }
-
-
-    enum Dias {
-      LUNES
-      MARTES
-      MIERCOLES
-      JUEVES
-      VIERNES
-      SABADO
-      DOMINGO
-    }
-
-    enum EstadoClase {
-      PROGRAMADA
-      DICTADA
-      SUSPENDIDA
-      REEMPLAZADA
-    }
-
-    /// ENTIDADES PRINCIPALES
-
-    model Usuario {
-      id           Int      @id @default(autoincrement())
-      email        String   @unique
-      passwordHash String
-      nombre       String?
-      estado       Estado   @default(ACTIVO)
-      activo       Boolean  @default(true)
-      createdAt    DateTime @default(now())
-      updatedAt    DateTime @updatedAt
-
-      roles    UsuarioRol[]
-      sesiones Sesion[]
-    }
-
-    model Rol {
-      id          Int      @id @default(autoincrement())
-      nombre      String
-      descripcion String?
-      createdAt   DateTime @default(now())
-
-      usuarios UsuarioRol[]
-    }
-
-    model UsuarioRol {
-      usuarioId     Int
-      rolId         Int
-      institucionId Int
-
-      usuario     Usuario     @relation(fields: [usuarioId], references: [id])
-      rol         Rol         @relation(fields: [rolId], references: [id])
-      institucion Institucion @relation(fields: [institucionId], references: [id])
-
-      @@id([usuarioId, rolId, institucionId])
-      @@index([usuarioId])
-      @@index([institucionId])
-    }
-
-    model Sesion {
-      id        Int      @id @default(autoincrement())
-      usuarioId Int
-      token     String   @unique
-      ip        String?
-      userAgent String?
-      createdAt DateTime @default(now())
-      expiresAt DateTime
-
-      usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-      @@index([expiresAt])
-    }
-
-    model Institucion {
-      id            Int       @id @default(autoincrement())
-      nombre        String
-      dominio       String?   @unique
-      configuracion Json?
-      domicilio     String?
-      telefono      String?
-      email         String?
-      cuit          String?   @unique
-      estado        Estado    @default(ACTIVO)
-      activo        Boolean   @default(true)
-      deletedAt     DateTime? // Soft delete
-      createdAt     DateTime  @default(now())
-      updatedAt     DateTime  @updatedAt
-
-      unidades      UnidadOrganizativa[]
-      modulos       ModuloHorario[]
-      agentes       AgenteInstitucion[]
-      asignaciones  Asignacion[]
-      usuariosRoles UsuarioRol[]
-      codigarios Codigario[]
-
-
-      distribucionesHorarias DistribucionHoraria[] @relation("DistribucionHoraria_Institucion")
-      horariosAsignados      HorarioAsignado[]     @relation("HorarioAsignado_Institucion")
-      ClaseProgramada        ClaseProgramada[]
-      CalendarioEscolar      CalendarioEscolar[]
-
-      @@index([estado])
-      @@index([activo])
-      @@index([cuit])
-      @@index([deletedAt])
-    }
-
-    model Agente {
-      id        Int       @id @default(autoincrement())
-      nombre    String
-      apellido  String
-      documento String
-      email     String?
-      telefono  String?
-      domicilio String?
-      estado    Estado    @default(ACTIVO)
-      activo    Boolean   @default(true)
-      deletedAt DateTime? // Soft delete
-      createdAt DateTime  @default(now())
-      updatedAt DateTime  @updatedAt
-
-      asignaciones      Asignacion[]
-      instituciones     AgenteInstitucion[]
-      horariosAsignados HorarioAsignado[]   @relation("HorarioAsignado_Agente")
-
-      @@index([documento])
-      @@index([activo])
-      @@index([deletedAt])
-      
-    }
-
-    model AgenteInstitucion {
-      agenteId      Int
-      institucionId Int
-      documento     String
-      estado        Estado   @default(ACTIVO)
-      createdAt     DateTime @default(now())
-      updatedAt     DateTime @updatedAt
-
-      agente      Agente      @relation(fields: [agenteId], references: [id], onDelete: Cascade)
-      institucion Institucion @relation(fields: [institucionId], references: [id], onDelete: Cascade)
-
-      @@id([agenteId, institucionId])
-      @@unique([institucionId, documento])
-      @@index([institucionId])
-    }
-
-    model UnidadOrganizativa {
-      id            Int         @id @default(autoincrement())
-      institucionId Int
-      codigoUnidad  Int
-      nombre        String
-      tipo          TipoUnidad?
-      estado        Estado      @default(ACTIVO)
-      activo        Boolean     @default(true)
-      deletedAt     DateTime? // Soft delete
-      createdAt     DateTime    @default(now())
-      updatedAt     DateTime    @updatedAt
-
-      asignaciones    Asignacion[]
-      institucion     Institucion       @relation(fields: [institucionId], references: [id])
-      ClaseProgramada ClaseProgramada[]
-
-      @@unique([institucionId, codigoUnidad])
-      @@index([institucionId])
-      @@index([activo])
-      @@index([deletedAt])
-    }
-
-    model Asignacion {
-      id                       Int       @id @default(autoincrement())
-      institucionId            Int
-      agenteId                 Int
-      unidadId                 Int
-      estado                   Estado    @default(ACTIVO)
-      activo                   Boolean   @default(true)
-      deletedAt                DateTime?
-      identificadorEstructural String
-      fecha_inicio             DateTime
-      fecha_fin                DateTime?
-      createdAt                DateTime  @default(now())
-      updatedAt                DateTime  @updatedAt
-
-      institucion Institucion        @relation(fields: [institucionId], references: [id])
-      agente      Agente             @relation(fields: [agenteId], references: [id])
-      unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
-
-      distribuciones    DistribucionHoraria[]
-      incidencias       Incidencia[]
-      horariosAsignados HorarioAsignado[]     @relation("HorarioAsignado_Asignacion")
-
-      reemplazosTitular  Reemplazo[]       @relation("TitularReemplazo")
-      reemplazosSuplente Reemplazo[]       @relation("SuplenteReemplazo")
-      ClaseProgramada    ClaseProgramada[]
-
-      @@unique([institucionId, identificadorEstructural])
-      @@unique([agenteId, unidadId, institucionId])
-      @@index([institucionId, agenteId])
-      @@index([institucionId, unidadId, fecha_inicio, fecha_fin])
-      @@index([activo])
-      @@index([deletedAt])
-    }
-
-    model ModuloHorario {
-      id            Int       @id @default(autoincrement())
-      institucionId Int
-      dia_semana    Dias
-      hora_desde    Int
-      hora_hasta    Int
-      activo        Boolean   @default(true)
-      deletedAt     DateTime?
-      createdAt     DateTime  @default(now())
-      updatedAt     DateTime  @updatedAt
-
-      distribuciones    DistribucionModulo[]
-      institucion       Institucion          @relation(fields: [institucionId], references: [id])
-      horariosAsignados HorarioAsignado[]    @relation("HorarioAsignado_ModuloHorario")
-      ClaseProgramada   ClaseProgramada[]
-
-      @@unique([institucionId, dia_semana, hora_desde, hora_hasta])
-      @@index([institucionId])
-      @@index([dia_semana, hora_desde, hora_hasta])
-      @@index([activo])
-      @@index([institucionId, dia_semana])
-    }
-
-    model DistribucionHoraria {
-      id                   Int       @id @default(autoincrement())
-      institucionId        Int
-      asignacionId         Int
-      version              Int
-      fecha_vigencia_desde DateTime
-      fecha_vigencia_hasta DateTime?
-      estado               Estado    @default(ACTIVO)
-      activo               Boolean   @default(true)
-      deletedAt            DateTime?
-      createdAt            DateTime  @default(now())
-      updatedAt            DateTime  @updatedAt
-
-      asignacion          Asignacion           @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
-      distribucionModulos DistribucionModulo[]
-      institucion         Institucion          @relation(fields: [institucionId], references: [id], name: "DistribucionHoraria_Institucion")
-
-      horariosAsignados HorarioAsignado[] @relation("DistribucionHoraria_HorarioAsignado")
-
-      @@unique([asignacionId, version])
-      @@index([asignacionId])
-      @@index([institucionId])
-      @@index([estado, fecha_vigencia_desde, fecha_vigencia_hasta])
-      @@index([activo])
-      @@index([deletedAt])
-    }
-
-    model DistribucionModulo {
-      distribucionHorariaId Int
-      moduloHorarioId       Int
-      createdAt             DateTime @default(now())
-      updatedAt             DateTime @updatedAt
-
-      distribucionHoraria DistribucionHoraria @relation(fields: [distribucionHorariaId], references: [id], onDelete: Cascade)
-      moduloHorario       ModuloHorario       @relation(fields: [moduloHorarioId], references: [id])
-
-      @@id([distribucionHorariaId, moduloHorarioId])
-      @@index([moduloHorarioId])
-    }
-
-    model Incidencia {
-      id                Int            @id @default(autoincrement())
-      asignacionId      Int
-      fecha_desde       DateTime
-      fecha_hasta       DateTime
-
-      // 🔥 NUEVO: reemplaza al ENUM
-      codigarioItemId   Int
-      codigarioItem     CodigarioItem? @relation(fields: [codigarioItemId], references: [id])
-
-      // 🔗 Relaciones jerárquicas
-      incidenciaPadreId Int?
-      padre             Incidencia?    @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
-      hijos             Incidencia[]   @relation("incidenciaPadre")
-
-      // 📝 Datos adicionales
-      observacion       String?
-
-      // 🧹 Soft delete
-      activo            Boolean        @default(true)
-      deletedAt         DateTime?
-
-      // ⏱️ Auditoría
-      createdAt         DateTime       @default(now())
-      updatedAt         DateTime       @updatedAt
-
-      // 🔗 Relaciones externas
-      asignacion        Asignacion     @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
-      ClaseProgramada   ClaseProgramada[]
-
-      // ⚡ Índices optimizados (sin ENUM)
-      @@index([asignacionId])
-      @@index([codigarioItemId, fecha_desde])
-      @@index([fecha_desde, fecha_hasta])
-      @@index([asignacionId, fecha_desde])
-      @@index([activo])
-      @@index([deletedAt])
-    }
-
-    model HorarioAsignado {
-      id                    Int      @id @default(autoincrement())
-      institucionId         Int
-      agenteId              Int
-      asignacionId          Int
-      distribucionHorariaId Int
-      moduloHorarioId       Int
-      createdAt             DateTime @default(now())
-
-      institucion         Institucion         @relation(fields: [institucionId], references: [id], name: "HorarioAsignado_Institucion")
-      agente              Agente              @relation(fields: [agenteId], references: [id], name: "HorarioAsignado_Agente")
-      distribucionHoraria DistribucionHoraria @relation(fields: [distribucionHorariaId], references: [id], name: "DistribucionHoraria_HorarioAsignado")
-      moduloHorario       ModuloHorario       @relation(fields: [moduloHorarioId], references: [id], name: "HorarioAsignado_ModuloHorario")
-      asignacion          Asignacion          @relation(fields: [asignacionId], references: [id], onDelete: Cascade, name: "HorarioAsignado_Asignacion")
-
-      @@unique([distribucionHorariaId, moduloHorarioId])
-      @@index([institucionId, agenteId])
-      @@index([institucionId, moduloHorarioId])
-      @@index([institucionId, asignacionId])
-      @@index([institucionId, distribucionHorariaId])
-      @@index([institucionId, agenteId, moduloHorarioId])
-    }
-
-    model ClaseProgramada {
-      id Int @id @default(autoincrement())
-
-      institucionId Int
-      asignacionId  Int
-      moduloId      Int
-      unidadId      Int
-
-      fecha  DateTime
-      estado EstadoClase @default(PROGRAMADA)
-
-      incidenciaId Int?
-
-      createdAt DateTime @default(now())
-      updatedAt DateTime @updatedAt
-
-      institucion Institucion        @relation(fields: [institucionId], references: [id])
-      asignacion  Asignacion         @relation(fields: [asignacionId], references: [id])
-      modulo      ModuloHorario      @relation(fields: [moduloId], references: [id])
-      unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
-      incidencia  Incidencia?        @relation(fields: [incidenciaId], references: [id])
-
-      reemplazos Reemplazo[]
-
-      @@index([fecha])
-      @@index([institucionId, fecha])
-      @@index([asignacionId])
-      @@index([moduloId])
-    }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// ENUMS
+
+enum Estado {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum TipoUnidad {
+  AULA
+  LABORATORIO
+  ADMIN
+  OTRA
+}
+
+enum Dias {
+  LUNES
+  MARTES
+  MIERCOLES
+  JUEVES
+  VIERNES
+  SABADO
+  DOMINGO
+}
+
+enum EstadoClase {
+  PROGRAMADA
+  DICTADA
+  SUSPENDIDA
+  REEMPLAZADA
+}
+
+/// ENTIDADES PRINCIPALES
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  nombre       String?
+  esSuperAdmin Boolean  @default(false)  // 👈 agregás esta línea
+  estado       Estado   @default(ACTIVO)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles    UsuarioRol[]
+  sesiones Sesion[]
+}
+
+model Rol {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  createdAt   DateTime @default(now())
+
+  usuarios UsuarioRol[]
+}
+
+model UsuarioRol {
+  usuarioId     Int
+  rolId         Int
+  institucionId Int
+
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id])
+  rol         Rol         @relation(fields: [rolId], references: [id])
+  institucion Institucion @relation(fields: [institucionId], references: [id])
+
+  @@id([usuarioId, rolId, institucionId])
+  @@index([usuarioId])
+  @@index([institucionId])
+}
+
+model Sesion {
+  id            Int      @id @default(autoincrement())
+  usuarioId     Int
+  institucionId Int      // Tenant activo en esta sesión
+  token         String   @unique
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  institucion Institucion @relation(fields: [institucionId], references: [id])
+
+  @@index([expiresAt])
+  @@index([usuarioId, institucionId])
+}
+
+model Institucion {
+  id            Int       @id @default(autoincrement())
+  nombre        String
+  dominio       String?   @unique
+  configuracion Json?
+  domicilio     String?
+  telefono      String?
+  email         String?
+  cuit          String?   @unique
+  estado        Estado    @default(ACTIVO)
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  unidades      UnidadOrganizativa[]
+  modulos       ModuloHorario[]
+  agentes       AgenteInstitucion[]
+  asignaciones  Asignacion[]
+  usuariosRoles UsuarioRol[]
+  codigarios    Codigario[]
+  materias      Materia[]
+  sesiones      Sesion[]
+
+  // Nuevos
+  turnos     Turno[]
+  cursos     Curso[]
+  comisiones Comision[]
+
+  distribucionesHorarias DistribucionHoraria[] @relation("DistribucionHoraria_Institucion")
+  horariosAsignados      HorarioAsignado[]     @relation("HorarioAsignado_Institucion")
+  ClaseProgramada        ClaseProgramada[]
+  CalendarioEscolar      CalendarioEscolar[]
+
+  @@index([estado])
+  @@index([activo])
+  @@index([cuit])
+  @@index([deletedAt])
+}
+
+model Agente {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  documento String
+  email     String?
+  telefono  String?
+  domicilio String?
+  estado    Estado    @default(ACTIVO)
+  activo    Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  asignaciones      Asignacion[]
+  instituciones     AgenteInstitucion[]
+  horariosAsignados HorarioAsignado[]   @relation("HorarioAsignado_Agente")
+
+  @@index([documento])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+model AgenteInstitucion {
+  agenteId      Int
+  institucionId Int
+  documento     String
+  estado        Estado   @default(ACTIVO)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  agente      Agente      @relation(fields: [agenteId], references: [id], onDelete: Cascade)
+  institucion Institucion @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+
+  @@id([agenteId, institucionId])
+  @@unique([institucionId, documento])
+  @@index([institucionId])
+}
+
+model UnidadOrganizativa {
+  id            Int         @id @default(autoincrement())
+  institucionId Int
+  codigoUnidad  Int
+  nombre        String
+  tipo          TipoUnidad?
+  estado        Estado      @default(ACTIVO)
+  activo        Boolean     @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  asignaciones    Asignacion[]
+  institucion     Institucion       @relation(fields: [institucionId], references: [id])
+  ClaseProgramada ClaseProgramada[]
+
+  // Una comisión puede estar fija en esta unidad (opcional para contextos no escolares)
+  comisiones Comision[]
+
+  @@unique([institucionId, codigoUnidad])
+  @@index([institucionId])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+/// TURNO
+/// Genérico: "Mañana", "Tarde", "Noche" en escuelas/sanatorios/fábricas.
+/// horaInicio y horaFin como minutos desde medianoche (0-1439) para consistencia con ModuloHorario.
+
+model Turno {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  nombre        String
+  horaInicio    Int
+  horaFin       Int
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion Institucion @relation(fields: [institucionId], references: [id])
+
+  // Relaciones opcionales
+  modulos    ModuloHorario[]
+  asignaciones Asignacion[]
+
+  // Relación obligatoria con Comision
+  comisiones Comision[]
+
+  @@unique([institucionId, nombre])
+  @@index([institucionId])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+/// CURSO
+/// Genérico: "1° año", "Sector UTI", "Línea A de producción".
+
+model Curso {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  nombre        String
+  descripcion   String?
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion Institucion @relation(fields: [institucionId], references: [id])
+  comisiones  Comision[]
+  asignaciones Asignacion[]
+
+  @@unique([institucionId, nombre])
+  @@index([institucionId])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+/// COMISION
+/// Genérico: "1°A", "Guardia Mañana UTI", "Turno Noche Línea A".
+/// unidadId es opcional: en escuelas la comisión está fija en un aula;
+/// en otros contextos puede no tener unidad física asignada.
+
+model Comision {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  cursoId       Int
+  turnoId       Int
+  unidadId      Int?      // Opcional: fija en un aula en escuelas, null en otros contextos
+  nombre        String
+  descripcion   String?
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion Institucion         @relation(fields: [institucionId], references: [id])
+  curso       Curso               @relation(fields: [cursoId], references: [id])
+  turno       Turno               @relation(fields: [turnoId], references: [id])
+  unidad      UnidadOrganizativa? @relation(fields: [unidadId], references: [id])
+
+  asignaciones    Asignacion[]
+  ClaseProgramada ClaseProgramada[]
+
+  @@unique([cursoId, nombre])
+  @@index([institucionId])
+  @@index([cursoId])
+  @@index([turnoId])
+  @@index([unidadId])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+model Asignacion {
+  id                       Int       @id @default(autoincrement())
+  institucionId            Int
+  agenteId                 Int
+  unidadId                 Int
+  identificadorEstructural String
+  fecha_inicio             DateTime
+  fecha_fin                DateTime?
+  estado                   Estado    @default(ACTIVO)
+  activo                   Boolean   @default(true)
+  deletedAt                DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  // Nuevos campos opcionales (contexto escolar y otros)
+  materiaId   Int?
+  cursoId     Int?
+  comisionId  Int?
+  turnoId     Int?
+
+  institucion Institucion        @relation(fields: [institucionId], references: [id])
+  agente      Agente             @relation(fields: [agenteId], references: [id])
+  unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
+  materia     Materia?           @relation(fields: [materiaId], references: [id])
+  curso       Curso?             @relation(fields: [cursoId], references: [id])
+  comision    Comision?          @relation(fields: [comisionId], references: [id])
+  turno       Turno?             @relation(fields: [turnoId], references: [id])
+
+  distribuciones    DistribucionHoraria[]
+  incidencias       Incidencia[]
+  horariosAsignados HorarioAsignado[]     @relation("HorarioAsignado_Asignacion")
+
+  reemplazosTitular  Reemplazo[]     @relation("TitularReemplazo")
+  reemplazosSuplente Reemplazo[]     @relation("SuplenteReemplazo")
+  ClaseProgramada    ClaseProgramada[]
+
+  // Se eliminó @@unique([agenteId, unidadId, institucionId]) para permitir
+  // múltiples cargos del mismo agente en la misma unidad (ej: profesor + director).
+  // El identificadorEstructural único por institución es la clave de negocio.
+  @@unique([institucionId, identificadorEstructural])
+  @@index([institucionId, agenteId])
+  @@index([institucionId, unidadId, fecha_inicio, fecha_fin])
+  @@index([agenteId, comisionId])
+  @@index([agenteId, turnoId])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+model ModuloHorario {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  dia_semana    Dias
+  hora_desde    Int
+  hora_hasta    Int
+  turnoId       Int?      // Opcional: permite agrupar módulos por turno
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion       Institucion          @relation(fields: [institucionId], references: [id])
+  turno             Turno?               @relation(fields: [turnoId], references: [id])
+  distribuciones    DistribucionModulo[]
+  horariosAsignados HorarioAsignado[]    @relation("HorarioAsignado_ModuloHorario")
+  ClaseProgramada   ClaseProgramada[]
+
+  @@unique([institucionId, dia_semana, hora_desde, hora_hasta])
+  @@index([institucionId])
+  @@index([dia_semana, hora_desde, hora_hasta])
+  @@index([turnoId])
+  @@index([activo])
+  @@index([institucionId, dia_semana])
+}
+
+model DistribucionHoraria {
+  id                   Int       @id @default(autoincrement())
+  institucionId        Int
+  asignacionId         Int
+  version              Int
+  fecha_vigencia_desde DateTime
+  fecha_vigencia_hasta DateTime?
+  estado               Estado    @default(ACTIVO)
+  activo               Boolean   @default(true)
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  asignacion          Asignacion           @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  distribucionModulos DistribucionModulo[]
+  institucion         Institucion          @relation(fields: [institucionId], references: [id], name: "DistribucionHoraria_Institucion")
+  horariosAsignados   HorarioAsignado[]    @relation("DistribucionHoraria_HorarioAsignado")
+
+  @@unique([asignacionId, version])
+  @@index([asignacionId])
+  @@index([institucionId])
+  @@index([estado, fecha_vigencia_desde, fecha_vigencia_hasta])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+model DistribucionModulo {
+  distribucionHorariaId Int
+  moduloHorarioId       Int
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  distribucionHoraria DistribucionHoraria @relation(fields: [distribucionHorariaId], references: [id], onDelete: Cascade)
+  moduloHorario       ModuloHorario       @relation(fields: [moduloHorarioId], references: [id])
+
+  @@id([distribucionHorariaId, moduloHorarioId])
+  @@index([moduloHorarioId])
+}
+
+model Incidencia {
+  id              Int       @id @default(autoincrement())
+  asignacionId    Int
+  fecha_desde     DateTime
+  fecha_hasta     DateTime
+  codigarioItemId Int
+  observacion     String?
+  activo          Boolean   @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  incidenciaPadreId Int?
+  padre             Incidencia?  @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
+  hijos             Incidencia[] @relation("incidenciaPadre")
+
+  asignacion      Asignacion      @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  codigarioItem   CodigarioItem   @relation(fields: [codigarioItemId], references: [id])
+  ClaseProgramada ClaseProgramada[]
+
+  @@index([asignacionId])
+  @@index([codigarioItemId, fecha_desde])
+  @@index([fecha_desde, fecha_hasta])
+  @@index([asignacionId, fecha_desde])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+model HorarioAsignado {
+  id                    Int      @id @default(autoincrement())
+  institucionId         Int
+  agenteId              Int
+  asignacionId          Int
+  distribucionHorariaId Int
+  moduloHorarioId       Int
+  createdAt             DateTime @default(now())
+
+  institucion         Institucion         @relation(fields: [institucionId], references: [id], name: "HorarioAsignado_Institucion")
+  agente              Agente              @relation(fields: [agenteId], references: [id], name: "HorarioAsignado_Agente")
+  distribucionHoraria DistribucionHoraria @relation(fields: [distribucionHorariaId], references: [id], name: "DistribucionHoraria_HorarioAsignado")
+  moduloHorario       ModuloHorario       @relation(fields: [moduloHorarioId], references: [id], name: "HorarioAsignado_ModuloHorario")
+  asignacion          Asignacion          @relation(fields: [asignacionId], references: [id], onDelete: Cascade, name: "HorarioAsignado_Asignacion")
+
+  @@unique([distribucionHorariaId, moduloHorarioId])
+  @@index([institucionId, agenteId])
+  @@index([institucionId, moduloHorarioId])
+  @@index([institucionId, asignacionId])
+  @@index([institucionId, distribucionHorariaId])
+  @@index([institucionId, agenteId, moduloHorarioId])
+}
+
+model ClaseProgramada {
+  id            Int         @id @default(autoincrement())
+  institucionId Int
+  asignacionId  Int
+  moduloId      Int
+  unidadId      Int
+  comisionId    Int?        // Opcional: directo para queries frecuentes ("clases de 1°A hoy")
+  fecha         DateTime
+  estado        EstadoClase @default(PROGRAMADA)
+  incidenciaId  Int?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  institucion Institucion        @relation(fields: [institucionId], references: [id])
+  asignacion  Asignacion         @relation(fields: [asignacionId], references: [id])
+  modulo      ModuloHorario      @relation(fields: [moduloId], references: [id])
+  unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
+  comision    Comision?          @relation(fields: [comisionId], references: [id])
+  incidencia  Incidencia?        @relation(fields: [incidenciaId], references: [id])
+
+  reemplazos Reemplazo[]
+
+  @@index([fecha])
+  @@index([institucionId, fecha])
+  @@index([asignacionId])
+  @@index([moduloId])
+  @@index([comisionId, fecha])
+}
 
 model Reemplazo {
-  id Int @id @default(autoincrement())
-
-  claseId Int
-
+  id                   Int       @id @default(autoincrement())
+  claseId              Int
   asignacionTitularId  Int
   asignacionSuplenteId Int
-
-  observacion String?
-
-  activo    Boolean   @default(true)  // 👈
-  deletedAt DateTime?                 // 👈
-
-  createdAt DateTime @default(now())
+  observacion          String?
+  activo               Boolean   @default(true)
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
 
   clase              ClaseProgramada @relation(fields: [claseId], references: [id])
   asignacionTitular  Asignacion      @relation("TitularReemplazo", fields: [asignacionTitularId], references: [id])
@@ -399,41 +498,35 @@ model Reemplazo {
   @@index([claseId])
   @@index([asignacionTitularId])
   @@index([asignacionSuplenteId])
-  @@index([activo])       // 👈
-  @@index([deletedAt])    // 👈
+  @@index([activo])
+  @@index([deletedAt])
 }
 
-    model CalendarioEscolar {
-      id Int @id @default(autoincrement())
+model CalendarioEscolar {
+  id            Int      @id @default(autoincrement())
+  institucionId Int
+  fecha         DateTime
+  descripcion   String
+  esFeriado     Boolean  @default(false)
+  suspendeClases Boolean @default(false)
+  createdAt     DateTime @default(now())
 
-      institucionId Int
+  institucion Institucion @relation(fields: [institucionId], references: [id])
 
-      fecha       DateTime
-      descripcion String
-
-      esFeriado      Boolean @default(false)
-      suspendeClases Boolean @default(false)
-
-      createdAt DateTime @default(now())
-
-      institucion Institucion @relation(fields: [institucionId], references: [id])
-
-      @@index([institucionId, fecha])
-    }
-
+  @@index([institucionId, fecha])
+}
 
 model Codigario {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   institucionId Int
   nombre        String
   descripcion   String?
-
   activo        Boolean   @default(true)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  institucion Institucion @relation(fields: [institucionId], references: [id])
+  institucion Institucion     @relation(fields: [institucionId], references: [id])
   items       CodigarioItem[]
 
   @@unique([institucionId, nombre])
@@ -443,22 +536,43 @@ model Codigario {
 }
 
 model CodigarioItem {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   codigarioId Int
   codigo      String
   nombre      String
   descripcion String?
-
   activo      Boolean   @default(true)
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  codigario Codigario @relation(fields: [codigarioId], references: [id])
+  codigario   Codigario    @relation(fields: [codigarioId], references: [id])
   incidencias Incidencia[]
 
   @@unique([codigarioId, codigo])
   @@index([codigarioId])
   @@index([activo])
+  @@index([deletedAt])
+}
+
+/// MATERIA
+/// Opcional en Asignacion. Relevante para contexto escolar.
+/// La FK vive en Asignacion (materiaId Int?).
+
+model Materia {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  nombre        String
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion  Institucion  @relation(fields: [institucionId], references: [id])
+  asignaciones Asignacion[]
+
+  @@unique([institucionId, nombre])
+  @@index([institucionId])
+  @@index([institucionId, activo])
   @@index([deletedAt])
 }

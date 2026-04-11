@@ -1,45 +1,53 @@
 // app/api/clases/[id]/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+
+import { withContext } from "@/lib/auth/withContext"
+import { EstadoClase } from "@prisma/client"
 import prisma from "@/lib/prisma"
+
+const ESTADOS_VALIDOS = Object.values(EstadoClase)
+
+// ─── GET /api/clases/[id] ─────────────────────────────────────────────────────
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withTenant(async (tenantId) => {
+  const { id: idParam } = await params
+  const id = parseInt(idParam)
 
-    const { id: idParam } = await params
-    const id = parseInt(idParam)
-    if (isNaN(id)) {
-      return Response.json({ error: "ID inválido" }, { status: 400 })
-    }
+  if (isNaN(id)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     const clase = await prisma.claseProgramada.findFirst({
       where: { id, institucionId: tenantId },
       include: {
-        modulo:     true,
-        unidad:     true,
+        modulo:   true,
+        unidad:   true,
+        comision: true, // nuevo campo del schema
         asignacion: {
           include: {
             agente: {
-              select: { nombre: true, apellido: true, documento: true }
-            }
-          }
+              select: { nombre: true, apellido: true, documento: true },
+            },
+          },
         },
         incidencia: {
           include: {
             codigarioItem: {
-              select: { codigo: true, nombre: true }
-            }
-          }
+              select: { codigo: true, nombre: true },
+            },
+          },
         },
         reemplazos: {
           include: {
             asignacionTitular:  { select: { identificadorEstructural: true } },
-            asignacionSuplente: { select: { identificadorEstructural: true } }
-          }
-        }
-      }
+            asignacionSuplente: { select: { identificadorEstructural: true } },
+          },
+        },
+      },
     })
 
     if (!clase) {
@@ -47,24 +55,26 @@ export async function GET(
     }
 
     return Response.json(clase)
-
-  }, req)
+  })
 }
+
+// ─── PATCH /api/clases/[id] ───────────────────────────────────────────────────
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withTenant(async (tenantId) => {
+  const { id: idParam } = await params
+  const id = parseInt(idParam)
 
-    const { id: idParam } = await params
-    const id = parseInt(idParam)
-    if (isNaN(id)) {
-      return Response.json({ error: "ID inválido" }, { status: 400 })
-    }
+  if (isNaN(id)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     let body: {
-      estado?: string
+      estado?:       string
       incidenciaId?: number | null
     }
 
@@ -83,16 +93,17 @@ export async function PATCH(
       )
     }
 
-    const estadosValidos = ["PROGRAMADA", "DICTADA", "SUSPENDIDA", "REEMPLAZADA"]
-    if (estado && !estadosValidos.includes(estado)) {
+    // Usar el enum de Prisma para validar — no un array hardcodeado
+    if (estado && !ESTADOS_VALIDOS.includes(estado as EstadoClase)) {
       return Response.json(
-        { error: `Estado inválido. Válidos: ${estadosValidos.join(", ")}` },
+        { error: `Estado inválido. Válidos: ${ESTADOS_VALIDOS.join(", ")}` },
         { status: 400 }
       )
     }
 
     const existente = await prisma.claseProgramada.findFirst({
-      where: { id, institucionId: tenantId }
+      where:  { id, institucionId: tenantId },
+      select: { id: true, asignacionId: true },
     })
 
     if (!existente) {
@@ -101,8 +112,14 @@ export async function PATCH(
 
     if (incidenciaId) {
       const incidencia = await prisma.incidencia.findFirst({
-        where: { id: incidenciaId, asignacionId: existente.asignacionId }
+        where: {
+          id:          incidenciaId,
+          asignacionId: existente.asignacionId,
+          deletedAt:   null,
+        },
+        select: { id: true },
       })
+
       if (!incidencia) {
         return Response.json(
           { error: "Incidencia no encontrada o no pertenece a la asignación de esta clase" },
@@ -111,16 +128,15 @@ export async function PATCH(
       }
     }
 
-    const data: any = {}
-    if (estado       !== undefined) data.estado      = estado
+    const data: Partial<{ estado: EstadoClase; incidenciaId: number | null }> = {}
+    if (estado       !== undefined) data.estado       = estado as EstadoClase
     if (incidenciaId !== undefined) data.incidenciaId = incidenciaId
 
     const actualizada = await prisma.claseProgramada.update({
       where: { id },
-      data
+      data,
     })
 
     return Response.json(actualizada)
-
-  }, req)
+  })
 }

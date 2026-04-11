@@ -1,146 +1,134 @@
-import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+// app/api/unidades/[id]/route.ts
 
-// ===== GET unidad por ID =====
+import prisma from "@/lib/prisma"
+import { withContext } from "@/lib/auth/withContext"
+import { Prisma } from "@prisma/client"
+
 export async function GET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const params = await context.params
-  const idNum = Number(params.id)
+  const { id } = await context.params
+  const idNum = Number(id)
 
-  return withTenant(async (tenantId) => {
-    if (isNaN(idNum)) {
-      return new Response(JSON.stringify({ error: "ID inválido" }), { status: 400 })
-    }
+  if (isNaN(idNum)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     const unidad = await prisma.unidadOrganizativa.findFirst({
       where: {
-        id: idNum,
+        id:            idNum,
         institucionId: tenantId,
-        deletedAt: null
-      }
+        deletedAt:     null,
+      },
     })
 
     if (!unidad) {
-      return new Response(JSON.stringify({ error: "Unidad no encontrada" }), { status: 404 })
+      return Response.json({ error: "Unidad no encontrada" }, { status: 404 })
     }
 
     return Response.json(unidad)
-
-  }, req)
+  })
 }
 
-
-// ===== PATCH =====
 export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const params = await context.params
-  const idNum = Number(params.id)
+  const { id } = await context.params
+  const idNum = Number(id)
 
-  return withTenant(async (tenantId) => {
-    if (isNaN(idNum)) {
-      return new Response(JSON.stringify({ error: "ID inválido" }), { status: 400 })
-    }
+  if (isNaN(idNum)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     let body
     try {
       body = await req.json()
     } catch {
-      return new Response(JSON.stringify({ error: "JSON inválido" }), { status: 400 })
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
 
-    // 🔍 Verificar existencia
     const existente = await prisma.unidadOrganizativa.findFirst({
       where: {
-        id: idNum,
+        id:            idNum,
         institucionId: tenantId,
-        deletedAt: null
-      }
+        deletedAt:     null,
+      },
+      select: { id: true },
     })
 
     if (!existente) {
-      return new Response(JSON.stringify({ error: "Unidad no encontrada" }), { status: 404 })
+      return Response.json({ error: "Unidad no encontrada" }, { status: 404 })
+    }
+
+    // Whitelist explícita — nunca permitir cambiar institucionId
+    const data: Prisma.UnidadOrganizativaUpdateInput = {}
+    if (body.codigoUnidad !== undefined) data.codigoUnidad = body.codigoUnidad
+    if (body.nombre       !== undefined) data.nombre       = body.nombre
+    if (body.tipo         !== undefined) data.tipo         = body.tipo
+    if (body.estado       !== undefined) data.estado       = body.estado
+
+    if (Object.keys(data).length === 0) {
+      return Response.json({ error: "No hay campos para actualizar" }, { status: 400 })
     }
 
     try {
       const unidad = await prisma.unidadOrganizativa.update({
         where: { id: idNum },
-        data: body
+        data,
       })
 
       return Response.json(unidad)
 
-    } catch (error: any) {
-
-      if (error.code === "P2002") {
-        return new Response(
-          JSON.stringify({ error: "Código de unidad duplicado" }),
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return Response.json(
+          { error: "Ya existe una unidad con ese código en esta institución" },
           { status: 409 }
         )
       }
 
-      throw error
+      console.error("Error actualizando unidad:", error)
+      return Response.json({ error: "Error actualizando unidad" }, { status: 500 })
     }
-
-  }, req)
+  })
 }
 
-
-// ===== DELETE (soft delete) =====
 export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const params = await context.params
-  const idNum = Number(params.id)
+  const { id } = await context.params
+  const idNum = Number(id)
 
-  return withTenant(async (tenantId) => {
-    if (isNaN(idNum)) {
-      return new Response(
-        JSON.stringify({ error: "ID inválido" }),
-        { status: 400 }
-      )
-    }
+  if (isNaN(idNum)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     const existente = await prisma.unidadOrganizativa.findFirst({
-      where: {
-        id: idNum,
-        institucionId: tenantId
-      }
+      where:  { id: idNum, institucionId: tenantId },
+      select: { id: true, deletedAt: true },
     })
 
-    // 🔁 Idempotente: no existe
-    if (!existente) {
-      return Response.json({
-        ok: true,
-        deleted: false
-      })
+    if (!existente || existente.deletedAt) {
+      return Response.json({ ok: true, deleted: false })
     }
 
-    // 🔁 Idempotente: ya eliminado
-    if (existente.deletedAt) {
-      return Response.json({
-        ok: true,
-        deleted: false
-      })
-    }
-
-    // 🧹 Soft delete
-    const result = await prisma.unidadOrganizativa.update({
+    await prisma.unidadOrganizativa.update({
       where: { id: idNum },
-      data: {
-        deletedAt: new Date(),
-        activo: false
-      }
+      data:  { deletedAt: new Date(), activo: false },
     })
 
-    return Response.json({
-      ok: true,
-      deleted: !!result
-    })
-
-  }, req)
+    return Response.json({ ok: true, deleted: true })
+  })
 }

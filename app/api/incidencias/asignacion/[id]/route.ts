@@ -1,34 +1,51 @@
+// app/api/incidencias/asignacion/[id]/route.ts
+// Devuelve todas las incidencias activas de una asignación específica.
+// Valida que la asignación pertenece al tenant antes de devolver datos.
+
 import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+import { withContext } from "@/lib/auth/withContext"
 
-export async function GET(req: Request, context: any) {
-  return withTenant(async (tenantId) => {
+export async function GET(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params
+  const asignacionId = Number(id)
 
-    const params = await context.params; // 🔥 CLAVE
-    const asignacionId = Number(params.id);
+  if (!asignacionId || isNaN(asignacionId)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
 
-    if (!asignacionId || isNaN(asignacionId)) {
-      return new Response(
-        JSON.stringify({ error: "ID inválido" }),
-        { status: 400 }
-      );
+  return withContext(req, async ({ tenantId }) => {
+
+    // Verificar que la asignación pertenece al tenant
+    const asignacion = await prisma.asignacion.findFirst({
+      where: {
+        id:            asignacionId,
+        institucionId: tenantId,
+        deletedAt:     null,
+      },
+      select: { id: true },
+    })
+
+    if (!asignacion) {
+      return Response.json({ error: "Asignación no encontrada" }, { status: 404 })
     }
 
-    const items = await prisma.incidencia.findMany({
+    const incidencias = await prisma.incidencia.findMany({
       where: {
         asignacionId,
-        activo: true,
+        activo:    true,
         deletedAt: null,
-        asignacion: {
-          institucionId: tenantId
-        }
       },
-      orderBy: {
-        fecha_desde: "desc"
-      }
-    });
+      include: {
+        codigarioItem: true,
+        padre:         true,
+        hijos:         true,
+      },
+      orderBy: { fecha_desde: "desc" },
+    })
 
-    return Response.json(items);
-
-  }, req);
+    return Response.json(incidencias)
+  })
 }

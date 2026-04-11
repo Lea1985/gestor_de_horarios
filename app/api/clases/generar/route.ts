@@ -1,10 +1,11 @@
 // app/api/clases/generar/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+// Genera ClaseProgramada para cada módulo de una distribución horaria
+// en el rango de fechas indicado. Es idempotente: omite clases ya existentes.
+
+import { withContext } from "@/lib/auth/withContext"
 import prisma from "@/lib/prisma"
 
-// ================================
-// 🔹 Días de la semana → número JS (0=domingo)
-// ================================
+// Días de la semana → número JS (0 = domingo)
 const DIA_MAP: Record<string, number> = {
   DOMINGO:   0,
   LUNES:     1,
@@ -12,27 +13,18 @@ const DIA_MAP: Record<string, number> = {
   MIERCOLES: 3,
   JUEVES:    4,
   VIERNES:   5,
-  SABADO:    6
+  SABADO:    6,
 }
 
-// ================================
-// 🔹 Generar todas las fechas de un día de semana en un rango
-// ================================
-function generarFechas(
-  diaSemana: string,
-  desde: Date,
-  hasta: Date
-): Date[] {
+function generarFechas(diaSemana: string, desde: Date, hasta: Date): Date[] {
   const fechas: Date[] = []
   const diaTarget = DIA_MAP[diaSemana]
   const cursor = new Date(desde)
 
-  // Avanzar hasta el primer día que coincida
   while (cursor.getDay() !== diaTarget) {
     cursor.setDate(cursor.getDate() + 1)
   }
 
-  // Generar todas las ocurrencias hasta fecha_hasta
   while (cursor <= hasta) {
     fechas.push(new Date(cursor))
     cursor.setDate(cursor.getDate() + 7)
@@ -41,13 +33,9 @@ function generarFechas(
   return fechas
 }
 
-// ================================
-// 🔹 POST /api/clases/generar
-// ================================
 export async function POST(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
-    // ── Body ──────────────────────────────────────────────
     let body: {
       distribucionHorariaId: number
       fecha_desde: string
@@ -83,31 +71,32 @@ export async function POST(req: Request) {
       )
     }
 
-    // ── Cargar distribución con sus módulos ───────────────
+    // Cargar distribución con sus módulos y asignación completa
     const distribucion = await prisma.distribucionHoraria.findFirst({
       where: {
-        id: distribucionHorariaId,
+        id:            distribucionHorariaId,
         institucionId: tenantId,
-        activo: true
+        activo:        true,
       },
       include: {
         distribucionModulos: {
-          include: {
-            moduloHorario: true
-          }
+          include: { moduloHorario: true },
         },
-        asignacion: true
-      }
+        asignacion: {
+          select: {
+            id:         true,
+            unidadId:   true,
+            comisionId: true, // incluido del nuevo schema
+          },
+        },
+      },
     })
 
     if (!distribucion) {
-      return Response.json(
-        { error: "Distribución no encontrada" },
-        { status: 404 }
-      )
+      return Response.json({ error: "Distribución no encontrada" }, { status: 404 })
     }
 
-    // ── Validar que el rango esté dentro de la vigencia ───
+    // Validar vigencia
     if (desde < distribucion.fecha_vigencia_desde) {
       return Response.json(
         { error: "fecha_desde es anterior a la vigencia de la distribución" },
@@ -115,18 +104,15 @@ export async function POST(req: Request) {
       )
     }
 
-    if (
-      distribucion.fecha_vigencia_hasta &&
-      hasta > distribucion.fecha_vigencia_hasta
-    ) {
+    if (distribucion.fecha_vigencia_hasta && hasta > distribucion.fecha_vigencia_hasta) {
       return Response.json(
         { error: "fecha_hasta supera la vigencia de la distribución" },
         { status: 400 }
       )
     }
 
-    // ── Generar clases (idempotente) ──────────────────────
-    let creadas = 0
+    // Generar clases (idempotente)
+    let creadas  = 0
     let omitidas = 0
 
     for (const dm of distribucion.distribucionModulos) {
@@ -134,15 +120,15 @@ export async function POST(req: Request) {
       const fechas = generarFechas(modulo.dia_semana, desde, hasta)
 
       for (const fecha of fechas) {
-        // Verificar si ya existe (idempotencia)
         const existente = await prisma.claseProgramada.findFirst({
           where: {
             institucionId: tenantId,
             asignacionId:  distribucion.asignacionId,
             moduloId:      modulo.id,
             unidadId:      distribucion.asignacion.unidadId,
-            fecha
-          }
+            fecha,
+          },
+          select: { id: true },
         })
 
         if (existente) {
@@ -156,9 +142,12 @@ export async function POST(req: Request) {
             asignacionId:  distribucion.asignacionId,
             moduloId:      modulo.id,
             unidadId:      distribucion.asignacion.unidadId,
+            // Propagar comisionId si la asignación la tiene — permite
+            // queries directas por comisión en ClaseProgramada
+            comisionId:    distribucion.asignacion.comisionId ?? null,
             fecha,
-            estado:        "PROGRAMADA"
-          }
+            estado:        "PROGRAMADA",
+          },
         })
 
         creadas++
@@ -166,12 +155,11 @@ export async function POST(req: Request) {
     }
 
     return Response.json({
-      ok: true,
+      ok:                   true,
       distribucionHorariaId,
-      rango: { desde: fecha_desde, hasta: fecha_hasta },
+      rango:                { desde: fecha_desde, hasta: fecha_hasta },
       creadas,
-      omitidas
+      omitidas,
     })
-
-  }, req)
+  })
 }

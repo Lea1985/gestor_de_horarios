@@ -1,78 +1,89 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+// middleware.ts (proxy)
+// Una sola query por request en el flujo normal (sesión por token).
+// La resolución de tenant se delega a resolveTenant — lógica híbrida
+// header + subdominio compartida con el login.
 
-export function proxy(request: NextRequest) {
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import prisma from "@/lib/prisma"
+import { resolveTenant, TenantResolveError } from "@/lib/tenant/resolveTenant"
 
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // ================================
-  // 🟢 BYPASS CONTROLADO
-  // Solo para crear instituciones (no requiere tenant)
-  // ================================
+  // Rutas públicas — sin autenticación ni tenant
   if (
-    pathname.startsWith('/api/instituciones') &&
-    request.method === 'POST'
+    pathname.startsWith("/api/instituciones") ||
+    pathname.startsWith("/api/auth")
   ) {
     return NextResponse.next()
   }
 
-  // ================================
-  // 🧠 OBTENER TENANT DESDE HEADERS
-  // ================================
-  let tenantId =
-    request.headers.get('x-tenant-id') ||
-    request.headers.get('x-institucion-id')
+  // ── Resolver tenant ────────────────────────────────────────────────────────
+  let tenantId: number
 
-  // ================================
-  // 🌐 FALLBACK: SUBDOMINIO
-  // ================================
-  if (!tenantId) {
-    const host =
-      request.headers.get('x-forwarded-host') ||
-      request.headers.get('host') ||
-      ''
+  try {
+    const tenant = await resolveTenant(request as unknown as Request)
 
-    const hostname = host.split(':')[0]
-    const subdomain = hostname.split('.')[0]
-
-    if (
-      hostname !== 'localhost' &&
-      hostname !== '127.0.0.1' &&
-      subdomain
-    ) {
-      tenantId = subdomain
+    if (!tenant.activo || tenant.estado !== "ACTIVO") {
+      return NextResponse.json(
+        { error: "Institución inactiva o suspendida" },
+        { status: 403 }
+      )
     }
+
+    tenantId = tenant.id
+
+  } catch (error) {
+    if (error instanceof TenantResolveError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      )
+    }
+    return NextResponse.json({ error: "Error interno" }, { status: 500 })
   }
 
-  // ================================
-  // 🔴 BLOQUEO DURO (clave de seguridad)
-  // ================================
-  if (!tenantId) {
+  // ── Validar token ──────────────────────────────────────────────────────────
+  const token = request.headers.get("authorization")?.replace("Bearer ", "")
+
+  if (!token) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 })
+  }
+
+  // ── Una sola query: sesión + validación de tenant ──────────────────────────
+  const sesion = await prisma.sesion.findUnique({
+    where:  { token },
+    select: {
+      usuarioId:     true,
+      institucionId: true,
+      expiresAt:     true,
+    },
+  })
+
+  if (!sesion || sesion.expiresAt < new Date()) {
     return NextResponse.json(
-      { error: 'Tenant no definido' },
-      { status: 400 }
+      { error: "Sesión inválida o expirada" },
+      { status: 401 }
     )
   }
 
-  // ================================
-  // 🧠 NORMALIZAR HEADER
-  // ================================
-  const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('tenant-id', tenantId)
+  // El tenant de la sesión debe coincidir con el tenant del request
+  if (sesion.institucionId !== tenantId) {
+    return NextResponse.json(
+      { error: "No autorizado para este tenant" },
+      { status: 403 }
+    )
+  }
 
-  // ================================
-  // 🚀 CONTINUAR REQUEST
-  // ================================
-  return NextResponse.next({
-    request: {
-      headers: requestHeaders
-    }
-  })
+  // ── Inyectar contexto en headers ───────────────────────────────────────────
+  const headers = new Headers(request.headers)
+  headers.set("x-user-id",   String(sesion.usuarioId))
+  headers.set("x-tenant-id", String(tenantId))
+
+  return NextResponse.next({ request: { headers } })
 }
 
-// ================================
-// 🎯 APLICAR SOLO A /api
-// ================================
 export const config = {
-  matcher: ['/api/:path*']
+  matcher: ["/api/:path*"],
 }

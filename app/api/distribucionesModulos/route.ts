@@ -1,124 +1,166 @@
 import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+import { withContext } from "@/lib/auth/withContext"
+import { Prisma, Dias } from "@prisma/client"
 
+async function haySolapamiento(
+  tenantId: number,
+  dia_semana: Dias,
+  hora_desde: number,
+  hora_hasta: number,
+  excludeId?: number
+): Promise<boolean> {
+  const where: Prisma.ModuloHorarioWhereInput = {
+    institucionId: tenantId,
+    dia_semana,
+    deletedAt: null,
+    AND: [
+      {
+        hora_desde: { lt: hora_hasta },
+      },
+      {
+        hora_hasta: { gt: hora_desde },
+      },
+    ],
+    ...(excludeId != null ? { id: { not: excludeId } } : {}),
+  }
 
-// ===== POST =====
+  const existing = await prisma.moduloHorario.findFirst({ where })
+  return !!existing
+}
+
+// -------------------------
+// GET
+// -------------------------
+export async function GET(req: Request) {
+  return withContext(req, async ({ tenantId }) => {
+    const modulos = await prisma.moduloHorario.findMany({
+      where: {
+        institucionId: tenantId,
+        deletedAt: null,
+      },
+      orderBy: [
+        { dia_semana: "asc" },
+        { hora_desde: "asc" },
+      ],
+    })
+
+    return Response.json(modulos)
+  })
+}
+
+// -------------------------
+// POST
+// -------------------------
 export async function POST(req: Request) {
-  return withTenant(async (tenantId) => {
-
-    let body
+  return withContext(req, async ({ tenantId }) => {
+    let body: any
 
     try {
       body = await req.json()
     } catch {
-      return new Response(
-        JSON.stringify({ error: "JSON inválido" }),
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const { dia_semana, hora_desde, hora_hasta, turnoId } = body
+
+    // -------------------------
+    // VALIDACIONES BÁSICAS
+    // -------------------------
+    if (!dia_semana || hora_desde == null || hora_hasta == null) {
+      return Response.json(
+        { error: "dia_semana, hora_desde y hora_hasta son obligatorios" },
         { status: 400 }
       )
     }
 
-    const {
-      distribucionHorariaId,
-      moduloHorarioId
-    } = body
-
-    // 🔴 Validación básica
-    if (!distribucionHorariaId || !moduloHorarioId) {
-      return new Response(
-        JSON.stringify({ error: "Faltan datos obligatorios" }),
+    if (hora_desde >= hora_hasta) {
+      return Response.json(
+        { error: "hora_desde debe ser menor que hora_hasta" },
         { status: 400 }
       )
     }
 
-    // 🔒 Validar distribución (multi-tenant + activa)
-    const distribucion = await prisma.distribucionHoraria.findFirst({
-      where: {
-        id: distribucionHorariaId,
-        institucionId: tenantId,
-        deletedAt: null,
-        activo: true
-      }
-    })
-
-    if (!distribucion) {
-      return new Response(
-        JSON.stringify({ error: "Distribución no encontrada" }),
-        { status: 404 }
-      )
-    }
-
-    // 🔍 (Opcional pero recomendable) validar que el módulo exista
-    const modulo = await prisma.moduloHorario.findUnique({
-      where: {
-        id: moduloHorarioId
-      }
-    })
-
-    if (!modulo) {
-      return new Response(
-        JSON.stringify({ error: "Módulo horario no encontrado" }),
-        { status: 404 }
-      )
-    }
-
-    try {
-
-      const nueva = await prisma.distribucionModulo.create({
-        data: {
-          distribucionHorariaId,
-          moduloHorarioId
-        }
+    // -------------------------
+    // VALIDAR TURNO (IMPORTANTE)
+    // -------------------------
+    if (turnoId != null) {
+      const turno = await prisma.turno.findFirst({
+        where: {
+          id: Number(turnoId),
+          institucionId: tenantId,
+        },
       })
 
-      return Response.json(nueva)
+      if (!turno) {
+        return Response.json(
+          { error: "Turno inválido" },
+          { status: 400 }
+        )
+      }
+    }
 
-    } catch (error: any) {
+    // -------------------------
+    // SOLAPAMIENTO
+    // -------------------------
+    const solapa = await haySolapamiento(
+      tenantId,
+      dia_semana,
+      hora_desde,
+      hora_hasta
+    )
 
-      // 🔁 ya existe (PK compuesta)
-      if (error.code === "P2002") {
-        return new Response(
-          JSON.stringify({ error: "El módulo ya está asignado a la distribución" }),
+    if (solapa) {
+      return Response.json(
+        { error: "Horario solapado con otro módulo existente" },
+        { status: 409 }
+      )
+    }
+
+    // -------------------------
+    // CREATE
+    // -------------------------
+    try {
+      const nuevo = await prisma.moduloHorario.create({
+        data: {
+          institucionId: tenantId,
+          dia_semana,
+          hora_desde,
+          hora_hasta,
+          turnoId: turnoId != null ? Number(turnoId) : null,
+          activo: true,
+        },
+      })
+
+      return Response.json(nuevo, { status: 201 })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const existente = await prisma.moduloHorario.findFirst({
+          where: {
+            institucionId: tenantId,
+            dia_semana,
+            hora_desde,
+            hora_hasta,
+          },
+        })
+
+        return Response.json(
+          {
+            error: "Ya existe un módulo con esos datos",
+            modulo: existente,
+          },
           { status: 409 }
         )
       }
 
-      throw error
+      console.error("Error creando módulo:", error)
+
+      return Response.json(
+        { error: "Error creando módulo" },
+        { status: 500 }
+      )
     }
-
-  }, req)
-}
-
-
-// ===== GET =====
-export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
-
-    const items = await prisma.distribucionModulo.findMany({
-      where: {
-        distribucionHoraria: {
-          institucionId: tenantId,
-          deletedAt: null,
-          activo: true
-        }
-      },
-      include: {
-        moduloHorario: true,
-        distribucionHoraria: {
-          select: {
-            id: true,
-            asignacionId: true,
-            version: true,
-            fecha_vigencia_desde: true,
-            fecha_vigencia_hasta: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    })
-
-    return Response.json(items)
-
-  }, req)
+  })
 }

@@ -1,18 +1,20 @@
 // app/api/reportes/agente/[id]/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+
+import { withContext } from "@/lib/auth/withContext"
 import prisma from "@/lib/prisma"
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return withTenant(async (tenantId) => {
+  const { id: idParam } = await params
+  const agenteId = parseInt(idParam)
 
-    const { id: idParam } = await params
-    const agenteId = parseInt(idParam)
-    if (isNaN(agenteId)) {
-      return Response.json({ error: "ID inválido" }, { status: 400 })
-    }
+  if (isNaN(agenteId)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
+
+  return withContext(req, async ({ tenantId }) => {
 
     const { searchParams } = new URL(req.url)
     const fecha_desde = searchParams.get("fecha_desde")
@@ -25,12 +27,11 @@ export async function GET(
       )
     }
 
-    // Verificar que el agente pertenece al tenant
     const agente = await prisma.agenteInstitucion.findFirst({
       where: { agenteId, institucionId: tenantId },
       include: {
-        agente: { select: { nombre: true, apellido: true, documento: true, email: true } }
-      }
+        agente: { select: { nombre: true, apellido: true, documento: true, email: true } },
+      },
     })
 
     if (!agente) {
@@ -39,18 +40,20 @@ export async function GET(
 
     const rango = {
       gte: new Date(fecha_desde),
-      lte: new Date(fecha_hasta)
+      lte: new Date(fecha_hasta),
     }
 
-    // Asignaciones activas del agente en la institución
     const asignaciones = await prisma.asignacion.findMany({
-      where: { agenteId, institucionId: tenantId, activo: true },
-      select: { id: true, identificadorEstructural: true, unidad: { select: { nombre: true } } }
+      where:  { agenteId, institucionId: tenantId, activo: true },
+      select: {
+        id:                      true,
+        identificadorEstructural: true,
+        unidad:                  { select: { nombre: true } },
+      },
     })
 
     const asignacionIds = asignaciones.map(a => a.id)
 
-    // Clases por estado
     const [programadas, dictadas, suspendidas, reemplazadas] = await Promise.all([
       prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "PROGRAMADA"  } }),
       prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "DICTADA"     } }),
@@ -58,46 +61,36 @@ export async function GET(
       prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "REEMPLAZADA" } }),
     ])
 
-    // Incidencias en el período
     const incidencias = await prisma.incidencia.findMany({
       where: {
         asignacionId: { in: asignacionIds },
-        fecha_desde: { lte: new Date(fecha_hasta) },
+        fecha_desde:  { lte: new Date(fecha_hasta) },
         fecha_hasta:  { gte: new Date(fecha_desde) },
-        activo: true
+        activo:       true,
       },
       select: {
         id:          true,
         fecha_desde: true,
         fecha_hasta: true,
         observacion: true,
-        codigarioItem: { select: { codigo: true, nombre: true } }
-      }
+        codigarioItem: { select: { codigo: true, nombre: true } },
+      },
     })
 
-    // Reemplazos como titular
-    const reemplazosComoTitular = await prisma.reemplazo.count({
-      where: {
-        activo: true,
-        asignacionTitularId: { in: asignacionIds },
-        clase: { fecha: rango }
-      }
-    })
-
-    // Reemplazos como suplente
-    const reemplazosComoSuplente = await prisma.reemplazo.count({
-      where: {
-        activo: true,
-        asignacionSuplenteId: { in: asignacionIds },
-        clase: { fecha: rango }
-      }
-    })
+    const [reemplazosComoTitular, reemplazosComoSuplente] = await Promise.all([
+      prisma.reemplazo.count({
+        where: { activo: true, asignacionTitularId:  { in: asignacionIds }, clase: { fecha: rango } },
+      }),
+      prisma.reemplazo.count({
+        where: { activo: true, asignacionSuplenteId: { in: asignacionIds }, clase: { fecha: rango } },
+      }),
+    ])
 
     const total = programadas + dictadas + suspendidas + reemplazadas
 
     return Response.json({
-      agente:     agente.agente,
-      periodo:    { desde: fecha_desde, hasta: fecha_hasta },
+      agente:      agente.agente,
+      periodo:     { desde: fecha_desde, hasta: fecha_hasta },
       asignaciones,
       resumen: {
         total,
@@ -108,10 +101,9 @@ export async function GET(
         porcentajeDictadas:    total > 0 ? Math.round((dictadas    / total) * 100) : 0,
         porcentajeSuspendidas: total > 0 ? Math.round((suspendidas / total) * 100) : 0,
         reemplazosComoTitular,
-        reemplazosComoSuplente
+        reemplazosComoSuplente,
       },
-      incidencias
+      incidencias,
     })
-
-  }, req)
+  })
 }

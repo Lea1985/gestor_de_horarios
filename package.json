@@ -5,28 +5,29 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "check": "node tests/ejecutarTests.js",
     "check:watch": "nodemon --watch app --watch src --watch prisma --ext js,ts,json --exec \"node tests/ejecutarTests.js\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
-    "seed": "node --loader ts-node/esm prisma/seed.ts"
+    "seed": "node --loader ts-node/esm prisma/seed.ts",
+    "test": "vitest run tests/"
   },
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "next": "16.1.6",
-    "prisma": "^5.22.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tree-kill": "^1.2.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -34,9 +35,11 @@
     "eslint-config-next": "16.1.6",
     "nodemon": "^3.1.14",
     "prettier": "^3.8.1",
+    "prisma": "^5.22.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5",
+    "vitest": "^4.1.4",
     "wait-on": "^9.0.4"
   }
 }

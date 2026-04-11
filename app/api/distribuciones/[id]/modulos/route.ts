@@ -1,108 +1,107 @@
 import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+import { withContext } from "@/lib/auth/withContext"
 
-// ===== POST (reemplazo total de módulos) =====
 export async function POST(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const params = await context.params
-  const distribucionId = Number(params.id)
+  const { id } = await context.params
+  const distribucionId = Number(id)
 
-  return withTenant(async (tenantId) => {
+  if (isNaN(distribucionId)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
 
-    if (isNaN(distribucionId)) {
-      return new Response(
-        JSON.stringify({ error: "ID inválido" }),
-        { status: 400 }
-      )
-    }
-
+  return withContext(req, async ({ tenantId }) => {
+console.log(`POST /api/distribuciones/${distribucionId} - tenantId: ${tenantId}`, await req.clone().text()) // log para debugging
     let body
-
     try {
       body = await req.json()
     } catch {
-      return new Response(
-        JSON.stringify({ error: "JSON inválido" }),
-        { status: 400 }
-      )
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
 
     const { modulos } = body
 
     if (!Array.isArray(modulos)) {
-      return new Response(
-        JSON.stringify({ error: "Se espera un array de módulos" }),
+      return Response.json(
+        { error: "Se espera un array de IDs de módulos" },
         { status: 400 }
       )
     }
 
-    // 🧹 limpiar duplicados
-    const modulosUnicos = [...new Set(modulos.map(Number))]
+    // limpiar duplicados y asegurar números
+    const modulosUnicos = [...new Set(modulos.map((m: any) => Number(m)))]
 
     if (modulosUnicos.some(isNaN)) {
-      return new Response(
-        JSON.stringify({ error: "IDs de módulos inválidos" }),
+      return Response.json(
+        { error: "Todos los IDs de módulos deben ser numéricos" },
         { status: 400 }
       )
     }
 
-    // 🔒 validar distribución (multi-tenant + estado)
+    // ✅ SOLO validar existencia + tenant (NO activo)
     const distribucion = await prisma.distribucionHoraria.findFirst({
       where: {
-        id: distribucionId,
+        id:            distribucionId,
         institucionId: tenantId,
-        deletedAt: null,
-        activo: true
-      }
+        deletedAt:     null,
+      },
+      select: { id: true },
     })
 
     if (!distribucion) {
-      return new Response(
-        JSON.stringify({ error: "Distribución no válida" }),
+      return Response.json(
+        { error: "Distribución no encontrada" },
         { status: 404 }
       )
     }
 
-    // 🚀 TRANSACCIÓN (clave)
-    const result = await prisma.$transaction(async (tx) => {
-
-      // 1. borrar existentes
-      await tx.distribucionModulo.deleteMany({
+    // ✅ validar módulos SOLO por tenant
+    if (modulosUnicos.length > 0) {
+      const modulosValidos = await prisma.moduloHorario.findMany({
         where: {
-          distribucionHorariaId: distribucionId
-        }
+          id:            { in: modulosUnicos },
+          institucionId: tenantId,
+          deletedAt:     null,
+        },
+        select: { id: true },
       })
 
-      // 2. insertar nuevos (si hay)
-      if (modulosUnicos.length > 0) {
+      if (modulosValidos.length !== modulosUnicos.length) {
+        return Response.json(
+          { error: "Uno o más módulos no pertenecen a esta institución" },
+          { status: 400 }
+        )
+      }
+    }
 
+    // 🔥 transacción limpia (replace total)
+    const result = await prisma.$transaction(async (tx) => {
+
+      await tx.distribucionModulo.deleteMany({
+        where: { distribucionHorariaId: distribucionId },
+      })
+
+      if (modulosUnicos.length > 0) {
         await tx.distribucionModulo.createMany({
           data: modulosUnicos.map((moduloHorarioId: number) => ({
             distribucionHorariaId: distribucionId,
-            moduloHorarioId
+            moduloHorarioId,
           })),
-          skipDuplicates: true
         })
       }
 
-      // 3. devolver estado actualizado
       return tx.distribucionModulo.findMany({
-        where: {
-          distribucionHorariaId: distribucionId
-        },
-        include: {
-          moduloHorario: true
-        }
+        where: { distribucionHorariaId: distribucionId },
+        include: { moduloHorario: true },
       })
     })
 
     return Response.json({
-      ok: true,
+      ok:    true,
       total: result.length,
-      data: result
+      data:  result,
     })
-
-  }, req)
+  })
 }

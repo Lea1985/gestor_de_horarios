@@ -1,96 +1,187 @@
-import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+// app/api/agentes/[id]/route.ts
 
-// Obtener agente por id
+import prisma from "@/lib/prisma"
+import { withContext } from "@/lib/auth/withContext"
+import { Prisma } from "@prisma/client"
+
+const agenteSelect = {
+  id:        true,
+  nombre:    true,
+  apellido:  true,
+  documento: true,
+  email:     true,
+  telefono:  true,
+  domicilio: true,
+  estado:    true,
+  createdAt: true,
+  updatedAt: true,
+}
+
+// ─── GET /api/agentes/[id] ────────────────────────────────────────────────────
+
 export async function GET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params
+  const agenteId = Number(id)
 
-  const params = await context.params
-  const agenteId = Number(params.id)
+  if (isNaN(agenteId)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
 
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
-    const agente = await prisma.agenteInstitucion.findFirst({
+    const registro = await prisma.agenteInstitucion.findFirst({
       where: {
-        agenteId: agenteId,
+        agenteId,
         institucionId: tenantId,
+        agente: { activo: true, deletedAt: null },
       },
       include: {
-        agente: true,
+        agente: { select: agenteSelect },
       },
     })
 
-    if (!agente) {
-      return new Response(
-        JSON.stringify({ error: "Agente no encontrado" }),
-        { status: 404 }
-      )
+    if (!registro) {
+      return Response.json({ error: "Agente no encontrado" }, { status: 404 })
     }
 
-    return Response.json(agente)
-
-  }, req)
+    return Response.json(registro)
+  })
 }
 
+// ─── PATCH /api/agentes/[id] ──────────────────────────────────────────────────
 
-// Actualizar agente
 export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params
+  const agenteId = Number(id)
 
-  const params = await context.params
-  const agenteId = Number(params.id)
+  if (isNaN(agenteId)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
 
-  return withTenant(async () => {
+  return withContext(req, async ({ tenantId }) => {
 
-    const body = await req.json()
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
+    }
 
-    const data: any = {}
-
-    if (body.nombre !== undefined) data.nombre = body.nombre
-    if (body.apellido !== undefined) data.apellido = body.apellido
-    if (body.documento !== undefined) data.documento = body.documento
-    if (body.email !== undefined) data.email = body.email
-    if (body.telefono !== undefined) data.telefono = body.telefono
-    if (body.domicilio !== undefined) data.domicilio = body.domicilio
-
-    const agenteActualizado = await prisma.agente.update({
-      where: { id: agenteId },
-      data,
+    // Verificar pertenencia al tenant antes de operar
+    const registro = await prisma.agenteInstitucion.findFirst({
+      where: {
+        agenteId,
+        institucionId: tenantId,
+        agente: { activo: true, deletedAt: null },
+      },
     })
 
-    return Response.json(agenteActualizado)
+    if (!registro) {
+      return Response.json({ error: "Agente no encontrado" }, { status: 404 })
+    }
 
-  }, req)
+    // Whitelist explícita — nunca tocar activo, deletedAt, estado desde acá
+    const dataAgente: Prisma.AgenteUpdateInput = {}
+    if (body.nombre    !== undefined) dataAgente.nombre    = body.nombre
+    if (body.apellido  !== undefined) dataAgente.apellido  = body.apellido
+    if (body.email     !== undefined) dataAgente.email     = body.email
+    if (body.telefono  !== undefined) dataAgente.telefono  = body.telefono
+    if (body.domicilio !== undefined) dataAgente.domicilio = body.domicilio
+
+    if (Object.keys(dataAgente).length === 0 && body.documento === undefined) {
+      return Response.json({ error: "No hay campos para actualizar" }, { status: 400 })
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const agente = await tx.agente.update({
+          where: { id: agenteId },
+          data:  dataAgente,
+          select: agenteSelect,
+        })
+
+        if (body.documento !== undefined) {
+          await tx.agenteInstitucion.update({
+            where: {
+              agenteId_institucionId: { agenteId, institucionId: tenantId },
+            },
+            data: { documento: body.documento },
+          })
+          await tx.agente.update({
+            where: { id: agenteId },
+            data:  { documento: body.documento },
+          })
+        }
+
+        return agente
+      })
+
+      return Response.json(result)
+
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return Response.json(
+          { error: "El documento ya está en uso en esta institución" },
+          { status: 409 }
+        )
+      }
+
+      console.error("Error actualizando agente:", error)
+      return Response.json({ error: "Error actualizando agente" }, { status: 500 })
+    }
+  })
 }
 
+// ─── DELETE /api/agentes/[id] ─────────────────────────────────────────────────
 
-// Eliminar agente (baja lógica)
 export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params
+  const agenteId = Number(id)
 
-  const params = await context.params
-  const agenteId = Number(params.id)
+  if (isNaN(agenteId)) {
+    return Response.json({ error: "ID inválido" }, { status: 400 })
+  }
 
-  return withTenant(async () => {
+  return withContext(req, async ({ tenantId }) => {
 
-    const agenteEliminado = await prisma.agente.update({
-      where: { id: agenteId },
-      data: {
-        activo: false,
-        deletedAt: new Date(),
+    const registro = await prisma.agenteInstitucion.findFirst({
+      where: {
+        agenteId,
+        institucionId: tenantId,
+        agente: { activo: true, deletedAt: null },
       },
     })
 
-    return Response.json({
-      ok: true,
-      agenteEliminado,
-    })
+    if (!registro) {
+      return Response.json({ error: "Agente no encontrado" }, { status: 404 })
+    }
 
-  }, req)
+    try {
+      await prisma.agente.update({
+        where: { id: agenteId },
+        data: {
+          activo:    false,
+          deletedAt: new Date(),
+        },
+      })
+
+      return Response.json({ ok: true })
+
+    } catch (error) {
+      console.error("Error eliminando agente:", error)
+      return Response.json({ error: "Error eliminando agente" }, { status: 500 })
+    }
+  })
 }

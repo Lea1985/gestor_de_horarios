@@ -1,174 +1,175 @@
+// app/api/incidencias/validar-superposicion/route.ts
+
 import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+import { withContext } from "@/lib/auth/withContext"
 
-// ===== POST =====
 export async function POST(req: Request) {
-return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
-
-let body
-
-try {
-  body = await req.json()
-} catch {
-  return new Response(
-    JSON.stringify({ error: "JSON inválido" }),
-    { status: 400 }
-  )
-}
-
-const {
-  asignacionId,
-  fecha_desde,
-  fecha_hasta,
-  codigarioItemId,
-  incidenciaPadreId,
-  observacion
-} = body
-
-// 🔴 Validación básica
-if (!asignacionId || !fecha_desde || !fecha_hasta || !codigarioItemId) {
-  return new Response(
-    JSON.stringify({ error: "Faltan datos obligatorios" }),
-    { status: 400 }
-  )
-}
-
-const fechaDesde = new Date(fecha_desde)
-const fechaHasta = new Date(fecha_hasta)
-
-if (fechaDesde > fechaHasta) {
-  return new Response(
-    JSON.stringify({ error: "fecha_desde no puede ser mayor a fecha_hasta" }),
-    { status: 400 }
-  )
-}
-
-// 🔒 Validar asignación (multi-tenant + activa)
-const asignacion = await prisma.asignacion.findFirst({
-  where: {
-    id: asignacionId,
-    institucionId: tenantId,
-    activo: true,
-    deletedAt: null
-  }
-})
-
-if (!asignacion) {
-  return new Response(
-    JSON.stringify({ error: "Asignación no encontrada o inactiva" }),
-    { status: 404 }
-  )
-}
-
-// 🔒 Validar codigarioItem
-const item = await prisma.codigarioItem.findUnique({
-  where: { id: codigarioItemId }
-})
-
-if (!item) {
-  return new Response(
-    JSON.stringify({ error: "codigarioItemId inválido" }),
-    { status: 400 }
-  )
-}
-
-// 🔗 Validar incidencia padre (si viene)
-if (incidenciaPadreId) {
-  const padre = await prisma.incidencia.findFirst({
-    where: {
-      id: incidenciaPadreId,
-      asignacionId,
-      deletedAt: null
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
+
+    const {
+      asignacionId,
+      fecha_desde,
+      fecha_hasta,
+      codigarioItemId,
+      incidenciaPadreId,
+      observacion,
+    } = body
+
+    if (!asignacionId || !fecha_desde || !fecha_hasta || !codigarioItemId) {
+      return Response.json(
+        { error: "asignacionId, fecha_desde, fecha_hasta y codigarioItemId son requeridos" },
+        { status: 400 }
+      )
+    }
+
+    const fechaDesde = new Date(fecha_desde)
+    const fechaHasta = new Date(fecha_hasta)
+
+    if (fechaDesde > fechaHasta) {
+      return Response.json(
+        { error: "fecha_desde no puede ser mayor a fecha_hasta" },
+        { status: 400 }
+      )
+    }
+
+    // ── Validar asignación pertenece al tenant y está activa ─────────────────
+    const asignacion = await prisma.asignacion.findFirst({
+      where: {
+        id:            asignacionId,
+        institucionId: tenantId,
+        activo:        true,
+        deletedAt:     null,
+      },
+      select: { id: true },
+    })
+
+    if (!asignacion) {
+      return Response.json(
+        { error: "Asignación no encontrada o inactiva" },
+        { status: 404 }
+      )
+    }
+
+    // ── Validar codigarioItem pertenece al tenant ────────────────────────────
+    // Antes faltaba esta validación — un cliente podía usar un itemId
+    // de otra institución.
+    const item = await prisma.codigarioItem.findFirst({
+      where: {
+        id:     codigarioItemId,
+        activo: true,
+        codigario: {
+          institucionId: tenantId,
+        },
+      },
+      select: { id: true },
+    })
+
+    if (!item) {
+      return Response.json(
+        { error: "Código de incidencia no válido para esta institución" },
+        { status: 400 }
+      )
+    }
+
+    // ── Validar incidencia padre (si viene) ──────────────────────────────────
+    if (incidenciaPadreId) {
+      const padre = await prisma.incidencia.findFirst({
+        where: {
+          id:          incidenciaPadreId,
+          asignacionId,
+          deletedAt:   null,
+        },
+        select: { id: true },
+      })
+
+      if (!padre) {
+        return Response.json(
+          { error: "Incidencia padre no válida" },
+          { status: 400 }
+        )
+      }
+    }
+
+    // ── Validar superposición ────────────────────────────────────────────────
+    const conflicto = await prisma.incidencia.findFirst({
+      where: {
+        asignacionId,
+        codigarioItemId,
+        activo:    true,
+        deletedAt: null,
+        AND: [
+          { fecha_desde: { lte: fechaHasta } },
+          { fecha_hasta: { gte: fechaDesde } },
+        ],
+      },
+      select: { id: true, fecha_desde: true, fecha_hasta: true },
+    })
+
+    if (conflicto) {
+      return Response.json(
+        {
+          error:     "Ya existe una incidencia de ese tipo en el rango de fechas indicado",
+          conflicto: {
+            id:          conflicto.id,
+            fecha_desde: conflicto.fecha_desde,
+            fecha_hasta: conflicto.fecha_hasta,
+          },
+        },
+        { status: 409 }
+      )
+    }
+
+    // ── Crear incidencia ─────────────────────────────────────────────────────
+    const nueva = await prisma.incidencia.create({
+      data: {
+        asignacionId,
+        fecha_desde:       fechaDesde,
+        fecha_hasta:       fechaHasta,
+        codigarioItemId,
+        incidenciaPadreId: incidenciaPadreId ?? null,
+        observacion,
+      },
+      include: {
+        codigarioItem: true,
+        padre:         true,
+      },
+    })
+
+    return Response.json(nueva, { status: 201 })
   })
-
-  if (!padre) {
-    return new Response(
-      JSON.stringify({ error: "Incidencia padre inválida" }),
-      { status: 400 }
-    )
-  }
 }
 
-// 🔥 VALIDACIÓN DE SUPERPOSICIÓN (por tipo también)
-const conflicto = await prisma.incidencia.findFirst({
-  where: {
-    asignacionId,
-    codigarioItemId,
-    activo: true,
-    deletedAt: null,
-    AND: [
-      { fecha_desde: { lte: fechaHasta } },
-      { fecha_hasta: { gte: fechaDesde } }
-    ]
-  }
-})
-
-if (conflicto) {
-  return new Response(
-    JSON.stringify({ error: "Ya existe una incidencia en ese rango de fechas para ese tipo" }),
-    { status: 409 }
-  )
-}
-
-// 🚀 Crear incidencia
-const nueva = await prisma.incidencia.create({
-  data: {
-    asignacionId,
-    fecha_desde: fechaDesde,
-    fecha_hasta: fechaHasta,
-    codigarioItemId,
-    incidenciaPadreId: incidenciaPadreId || null,
-    observacion
-  },
-  include: {
-    codigarioItem: true
-  }
-})
-
-return Response.json(nueva)
-
-
-}, req)
-}
-
-// ===== GET =====
 export async function GET(req: Request) {
-return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
+    const { searchParams } = new URL(req.url)
+    const asignacionId = searchParams.get("asignacionId")
 
-const { searchParams } = new URL(req.url)
+    const incidencias = await prisma.incidencia.findMany({
+      where: {
+        activo:    true,
+        deletedAt: null,
+        asignacion: {
+          institucionId: tenantId,
+          // Si viene filtro por asignación, lo aplicamos directamente
+          ...(asignacionId ? { id: Number(asignacionId) } : {}),
+        },
+      },
+      include: {
+        padre:        true,
+        hijos:        true,
+        codigarioItem: true,
+      },
+      orderBy: { fecha_desde: "desc" },
+    })
 
-const asignacionId = searchParams.get("asignacionId")
-
-const where: any = {
-  activo: true,
-  deletedAt: null,
-  asignacion: {
-    institucionId: tenantId
-  }
-}
-
-// filtro opcional
-if (asignacionId) {
-  where.asignacionId = Number(asignacionId)
-}
-
-const items = await prisma.incidencia.findMany({
-  where,
-  include: {
-    padre: true,
-    hijos: true,
-    codigarioItem: true
-  },
-  orderBy: {
-    fecha_desde: "desc"
-  }
-})
-
-return Response.json(items)
-
-
-}, req)
+    return Response.json(incidencias)
+  })
 }

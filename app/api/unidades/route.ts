@@ -1,58 +1,39 @@
+// app/api/unidades/route.ts
+
 import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+import { withContext } from "@/lib/auth/withContext"
+import { Prisma } from "@prisma/client"
 
-// ================================
-// 🔹 GET
-// ================================
 export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
-    try {
-      const unidades = await prisma.unidadOrganizativa.findMany({
-        where: {
-          institucionId: tenantId,
-          deletedAt: null
-        }
-      })
+  return withContext(req, async ({ tenantId }) => {
 
-      return Response.json(unidades, { status: 200 })
+    const unidades = await prisma.unidadOrganizativa.findMany({
+      where: {
+        institucionId: tenantId,
+        deletedAt:     null,
+      },
+      orderBy: { codigoUnidad: "asc" },
+    })
 
-    } catch (error) {
-      return Response.json(
-        {
-          error: "Error al obtener unidades",
-          code: "INTERNAL_ERROR"
-        },
-        { status: 500 }
-      )
-    }
-  }, req)
+    return Response.json(unidades)
+  })
 }
 
-
-// ================================
-// 🔹 POST
-// ================================
 export async function POST(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     let body
-
-    // 🔹 Parseo JSON
     try {
       body = await req.json()
     } catch {
-      return Response.json(
-        { error: "JSON inválido", code: "INVALID_JSON" },
-        { status: 400 }
-      )
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
 
     const { codigoUnidad, nombre, tipo } = body
 
-    // 🔹 Validación
     if (codigoUnidad == null || !nombre) {
       return Response.json(
-        { error: "Faltan datos obligatorios", code: "VALIDATION_ERROR" },
+        { error: "codigoUnidad y nombre son obligatorios" },
         { status: 400 }
       )
     }
@@ -63,36 +44,25 @@ export async function POST(req: Request) {
           institucionId: tenantId,
           codigoUnidad,
           nombre,
-          tipo
-        }
+          tipo: tipo ?? null,
+        },
       })
 
-      return Response.json(nueva, { status: 200 })
+      return Response.json(nueva, { status: 201 })
 
-    } catch (error: any) {
-
-      // 🔴 DUPLICADO
-      if (error.code === "P2002") {
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
         return Response.json(
-          {
-            error: "Ya existe una unidad con ese código",
-            code: "UNIQUE_CONSTRAINT"
-          },
+          { error: "Ya existe una unidad con ese código en esta institución" },
           { status: 409 }
         )
       }
 
-      // 🔴 ERROR GENERAL
-      console.error("ERROR POST UNIDADES:", error)
-
-      return Response.json(
-        {
-          error: "Error interno del servidor",
-          code: "INTERNAL_ERROR"
-        },
-        { status: 500 }
-      )
+      console.error("Error creando unidad:", error)
+      return Response.json({ error: "Error creando unidad" }, { status: 500 })
     }
-
-  }, req)
+  })
 }

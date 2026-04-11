@@ -1,74 +1,61 @@
-import prisma from "@/lib/prisma"
-import { withTenant } from "@/lib/tenant/withTenant"
+// app/api/codigarios/route.ts
 
-// ================================
-// GET ALL
-// ================================
+import prisma from "@/lib/prisma"
+import { withContext } from "@/lib/auth/withContext"
+import { Prisma } from "@prisma/client"
 
 export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     const codigarios = await prisma.codigario.findMany({
       where: {
         institucionId: tenantId,
-        deletedAt: null
+        deletedAt:     null,
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
     })
 
     return Response.json(codigarios)
-
-  }, req)
+  })
 }
 
-
-// ================================
-// CREATE
-// ================================
-
 export async function POST(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
-    const body = await req.json()
-
-    // ✅ validación básica
-    if (!body.nombre) {
-      return new Response(
-        JSON.stringify({ error: "Nombre obligatorio" }),
-        { status: 400 }
-      )
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
 
-    // 🔥 NORMALIZACIÓN CLAVE (SOLUCIONA TU TEST)
-    const nombreNormalizado = body.nombre.trim().toUpperCase()
+    if (!body.nombre) {
+      return Response.json({ error: "nombre es obligatorio" }, { status: 400 })
+    }
+
+    const nombre = body.nombre.trim().toUpperCase()
 
     try {
-
       const nuevo = await prisma.codigario.create({
         data: {
-          nombre: nombreNormalizado,
-          descripcion: body.descripcion,
-          institucionId: tenantId
-        }
+          nombre,
+          descripcion:   body.descripcion,
+          institucionId: tenantId,
+        },
       })
 
-      return Response.json(nuevo)
+      return Response.json(nuevo, { status: 201 })
 
-    } catch (e: any) {
-
-      // 🔥 manejo de duplicados (ahora sí va a funcionar)
-      if (e.code === "P2002") {
-        return new Response(
-          JSON.stringify({ error: "Codigario duplicado" }),
-          { status: 409 }
-        )
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return Response.json({ error: "Ya existe un codigario con ese nombre" }, { status: 409 })
       }
 
-      return new Response(
-        JSON.stringify({ error: "Error al crear codigario" }),
-        { status: 500 }
-      )
+      console.error("Error creando codigario:", error)
+      return Response.json({ error: "Error creando codigario" }, { status: 500 })
     }
-
-  }, req)
+  })
 }

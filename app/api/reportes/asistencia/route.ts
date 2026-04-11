@@ -1,9 +1,10 @@
 // app/api/reportes/asistencia/route.ts
-import { withTenant } from "@/lib/tenant/withTenant"
+
+import { withContext } from "@/lib/auth/withContext"
 import prisma from "@/lib/prisma"
 
 export async function GET(req: Request) {
-  return withTenant(async (tenantId) => {
+  return withContext(req, async ({ tenantId }) => {
 
     const { searchParams } = new URL(req.url)
     const asignacionId = searchParams.get("asignacionId")
@@ -22,8 +23,8 @@ export async function GET(req: Request) {
       asignacionId:  parseInt(asignacionId),
       fecha: {
         gte: new Date(fecha_desde),
-        lte: new Date(fecha_hasta)
-      }
+        lte: new Date(fecha_hasta),
+      },
     }
 
     const [programadas, dictadas, suspendidas, reemplazadas] = await Promise.all([
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
     const total = programadas + dictadas + suspendidas + reemplazadas
 
     const clases = await prisma.claseProgramada.findMany({
-      where: donde,
+      where:   donde,
       orderBy: { fecha: "asc" },
       select: {
         id:     true,
@@ -46,14 +47,14 @@ export async function GET(req: Request) {
         unidad: { select: { nombre: true } },
         incidencia: {
           select: {
-            id:           true,
-            fecha_desde:  true,
-            fecha_hasta:  true,
-            observacion:  true,
-            codigarioItem: { select: { codigo: true, nombre: true } }
-          }
-        }
-      }
+            id:            true,
+            fecha_desde:   true,
+            fecha_hasta:   true,
+            observacion:   true,
+            codigarioItem: { select: { codigo: true, nombre: true } },
+          },
+        },
+      },
     })
 
     return Response.json({
@@ -65,11 +66,10 @@ export async function GET(req: Request) {
         dictadas,
         suspendidas,
         reemplazadas,
-        porcentajeDictadas:   total > 0 ? Math.round((dictadas   / total) * 100) : 0,
+        porcentajeDictadas:    total > 0 ? Math.round((dictadas    / total) * 100) : 0,
         porcentajeSuspendidas: total > 0 ? Math.round((suspendidas / total) * 100) : 0,
       },
-      clases
+      clases,
     })
-
-  }, req)
+  })
 }
