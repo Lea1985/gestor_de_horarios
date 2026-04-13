@@ -1,0 +1,11 @@
+import { moduloRepository } from "@/lib/repositories/moduloRepository"
+
+export class ModuloNoEncontradoError extends Error {
+  constructor() { super("Módulo no encontrado") }
+}
+
+export async function obtenerModulo(id: number, tenantId: number) {
+  const modulo = await moduloRepository.obtenerPorId(id, tenantId)
+  if (!modulo) throw new ModuloNoEncontradoError()
+  return modulo
+}
