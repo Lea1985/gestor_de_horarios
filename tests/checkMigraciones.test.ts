@@ -1,3 +1,4 @@
+//tests/checkMigraciones.test.ts
 import { describe, it, expect } from "vitest"
 import { execSync } from "child_process"
 

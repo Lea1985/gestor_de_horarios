@@ -1,3 +1,5 @@
+
+// app/api/asignaciones/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerAsignacion, AsignacionNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/asignaciones/obtenerAsignacion"

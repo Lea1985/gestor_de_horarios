@@ -1,3 +1,4 @@
+// lib/usecases/horario/obtenerHorarioInstitucion.ts
 import { horarioRepository, DIAS, DIA_INDEX, rangoDeSemana } from "@/lib/repositories/horarioRepository"
 
 export class SemanaObligatoriaError extends Error {
@@ -22,7 +23,7 @@ export async function obtenerHorarioInstitucion(tenantId: number, semana: string
         grilla: DIAS.reduce((acc, d) => { acc[d] = []; return acc }, {} as Record<string, Clase[]>),
       }
     }
-    const nombreDia = DIA_INDEX[new Date(clase.fecha).getDay()]
+    const nombreDia = DIA_INDEX[new Date(clase.fecha).getUTCDay()]
     porUnidad[key].grilla[nombreDia].push(clase)
   }
 

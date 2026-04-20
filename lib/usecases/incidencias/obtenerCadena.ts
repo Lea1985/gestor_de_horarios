@@ -1,3 +1,4 @@
+//lib/usecases/incidencias/obtenerCadena.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 
 export class IncidenciaNoEncontradaError extends Error {

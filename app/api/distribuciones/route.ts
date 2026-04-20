@@ -1,3 +1,4 @@
+// app/api/distribuciones/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { listarDistribuciones } from "@/lib/usecases/distribuciones/listarDistribuciones"

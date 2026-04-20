@@ -1,3 +1,4 @@
+//api/incidencias/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerIncidencia, IncidenciaNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/incidencias/obtenerIncidencia"
 import { actualizarIncidencia, IncidenciaNoEncontradaError as ActualizarNotFound, RangoFechasInvalidoError, CodigarioItemNoValidoError, SuperposicionError } from "@/lib/usecases/incidencias/actualizarIncidencia"

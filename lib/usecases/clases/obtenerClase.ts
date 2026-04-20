@@ -1,3 +1,4 @@
+//lib/usecases/clases/obtenerClase.ts
 import { claseRepository } from "@/lib/repositories/claseRepository"
 
 export class ClaseNoEncontradaError extends Error {

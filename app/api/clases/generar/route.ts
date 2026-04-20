@@ -1,3 +1,4 @@
+//app/api/clases/generar/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { generarClases, DatosGenerarInvalidosError, FechasInvalidasError, RangoInvalidoError, DistribucionNoEncontradaError } from "@/lib/usecases/clases/generarClases"
 

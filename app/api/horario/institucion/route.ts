@@ -1,3 +1,4 @@
+// app/api/horario/institucion/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerHorarioInstitucion, SemanaObligatoriaError } from "@/lib/usecases/horario/obtenerHorarioInstitucion"
 

@@ -1,3 +1,4 @@
+//lib/usecases/codigarios/crearItem.ts
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
 
 export class DatosItemInvalidosError extends Error {

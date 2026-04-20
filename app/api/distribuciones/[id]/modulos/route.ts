@@ -1,3 +1,4 @@
+//api/distribuciones/[id]/modulos/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { asignarModulos, DistribucionNoEncontradaError, ModulosInvalidosError, FormatoModulosInvalidoError } from "@/lib/usecases/distribuciones/asignarModulos"
 
@@ -28,4 +29,4 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       return Response.json({ error: "Error asignando módulos" }, { status: 500 })
     }
   })
-}
+}   

@@ -1,3 +1,4 @@
+//lib/usecases/codigarios/crearCodigario.ts
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
 
 export class NombreObligatorioError extends Error {

@@ -1,3 +1,4 @@
+//lib/usecases/incidencias/crearIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 
 export class DatosIncidenciaInvalidosError extends Error {

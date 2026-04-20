@@ -1,3 +1,4 @@
+// app/api/instituciones/route.ts
 import { Prisma } from "@prisma/client"
 import { listarInstituciones } from "@/lib/usecases/instituciones/listarInstituciones"
 import { crearInstitucion, NoAutenticadoError, SesionInvalidaError, NoAutorizadoError, DatosInstitucionInvalidosError } from "@/lib/usecases/instituciones/crearInstitucion"

@@ -1,3 +1,5 @@
+
+//lib/usecases/clases/actualizarClase.ts
 import { claseRepository } from "@/lib/repositories/claseRepository"
 import { EstadoClase } from "@prisma/client"
 

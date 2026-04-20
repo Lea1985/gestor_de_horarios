@@ -1,3 +1,4 @@
+// lib/repositories/horarioRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
@@ -5,14 +6,14 @@ export const DIAS = ["LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO","D
 export const DIA_INDEX = ["DOMINGO","LUNES","MARTES","MIERCOLES","JUEVES","VIERNES","SABADO"]
 
 export function rangoDeSemana(semana: string): { lunes: Date; domingo: Date } {
-  const fecha = new Date(semana)
-  const dia   = fecha.getDay() === 0 ? 7 : fecha.getDay()
+  const fecha = new Date(semana + "T12:00:00.000Z")
+  const dia   = fecha.getUTCDay() === 0 ? 7 : fecha.getUTCDay()
   const lunes = new Date(fecha)
-  lunes.setDate(fecha.getDate() - dia + 1)
-  lunes.setHours(0, 0, 0, 0)
+  lunes.setUTCDate(fecha.getUTCDate() - dia + 1)
+  lunes.setUTCHours(0, 0, 0, 0)
   const domingo = new Date(lunes)
-  domingo.setDate(lunes.getDate() + 6)
-  domingo.setHours(23, 59, 59, 999)
+  domingo.setUTCDate(lunes.getUTCDate() + 6)
+  domingo.setUTCHours(23, 59, 59, 999)
   return { lunes, domingo }
 }
 

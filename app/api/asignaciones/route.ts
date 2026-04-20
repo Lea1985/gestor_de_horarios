@@ -1,4 +1,4 @@
-//
+//api/asignaciones/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { listarAsignaciones } from "@/lib/usecases/asignaciones/listarAsignaciones"

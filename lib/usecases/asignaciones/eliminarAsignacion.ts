@@ -1,3 +1,4 @@
+//lib/usecases/asignaciones/eliminarAsignacion.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
 export async function eliminarAsignacion(id: number, tenantId: number) {

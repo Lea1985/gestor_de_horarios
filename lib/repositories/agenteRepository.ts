@@ -1,3 +1,4 @@
+// lib/repositories/agenteRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
@@ -97,6 +98,7 @@ export const agenteRepository = {
   }) {
     return prisma.$transaction(async (tx) => {
       const dataAgente: Prisma.AgenteUpdateInput = {}
+
       if (data.nombre    !== undefined) dataAgente.nombre    = data.nombre
       if (data.apellido  !== undefined) dataAgente.apellido  = data.apellido
       if (data.email     !== undefined) dataAgente.email     = data.email
@@ -113,7 +115,10 @@ export const agenteRepository = {
       if (data.documento !== undefined) {
         await tx.agenteInstitucion.update({
           where: {
-            agenteId_institucionId: { agenteId, institucionId: tenantId },
+            agenteId_institucionId: {
+              agenteId,
+              institucionId: tenantId,
+            },
           },
           data: { documento: data.documento },
         })
@@ -123,13 +128,41 @@ export const agenteRepository = {
     })
   },
 
-  eliminar(agenteId: number) {
-    return prisma.agente.update({
-      where: { id: agenteId },
-      data: {
-        activo:    false,
-        deletedAt: new Date(),
-      },
+  /**
+   * Eliminación correcta multi-tenant:
+   * 1. elimina la relación con el tenant
+   * 2. si el agente no tiene más relaciones → soft delete
+   */
+  async eliminar(agenteId: number, tenantId: number) {
+    return prisma.$transaction(async (tx) => {
+
+      // 1. eliminar relación con el tenant
+      await tx.agenteInstitucion.delete({
+        where: {
+          agenteId_institucionId: {
+            agenteId,
+            institucionId: tenantId,
+          },
+        },
+      })
+
+      // 2. verificar si quedan relaciones
+      const relacionesRestantes = await tx.agenteInstitucion.count({
+        where: { agenteId },
+      })
+
+      // 3. si no quedan → soft delete del agente
+      if (relacionesRestantes === 0) {
+        await tx.agente.update({
+          where: { id: agenteId },
+          data: {
+            activo: false,
+            deletedAt: new Date(),
+          },
+        })
+      }
+
+      return { ok: true }
     })
   },
 }

@@ -1,3 +1,4 @@
+//app/api/codigarios/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { listarCodigarios } from "@/lib/usecases/codigarios/listarCodigarios"

@@ -1,270 +1,301 @@
 // tests/reemplazos.test.ts
+
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { authHeaders, BASE_URL } from "./helpers/auth"
-import {
-  cleanupAgente,
-  cleanupUnidad,
-  cleanupAsignacion,
-  cleanupModulo,
-  cleanupDistribucion,
-  cleanupClases,
-  cleanupAgenteByDocumento,
-  cleanupUnidadByCodigo,
-} from "./helpers/cleanup"
+import { createTestTenant, createTestAgente, destroyInstitucion, prisma } from "./helpers/factories"
+import { randomUUID } from "crypto"
 
-let headers:          Record<string, string>
-let agenteId:         number
-let suplenteId:       number
-let unidadId:         number
-let asignacionId:     number
-let asigSuplenteId:   number
-let distribucionId:   number
-let moduloId:         number
-let claseId:          number
-let reemplazoId:      number
-
-const TENANT_ID = "1"
-const ts = Date.now()
+let headers:         Record<string, string>
+let institucionId:   number
+let asignacionId:    number
+let asigSuplenteId:  number
+let claseId:         number
+let reemplazoId:     number
 
 beforeAll(async () => {
-  headers = await authHeaders(TENANT_ID)
+  const tenant  = await createTestTenant()
+  institucionId = tenant.institucionId
+  headers       = authHeaders(String(institucionId), tenant.token)
 
-  // 🔥 limpiar residuos
-  await cleanupAgenteByDocumento(`${ts}RT`)
-  await cleanupAgenteByDocumento(`${ts}RS`)
-  await cleanupUnidadByCodigo((ts % 1000000) + 4)
+  const agenteTitular  = await createTestAgente(institucionId)
+  const agenteSuplente = await createTestAgente(institucionId)
 
-  // Agente titular
-  const aRes = await fetch(`${BASE_URL}/agentes`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      nombre: "Titular",
-      apellido: "Reemplazo",
-      documento: `${ts}RT`,
-    }),
+  const unidad = await prisma.unidadOrganizativa.create({
+    data: { institucionId, codigoUnidad: 1, nombre: "Aula Reemp Test" },
   })
-  agenteId = (await aRes.json()).agente.id
 
-  // Agente suplente
-  const sRes = await fetch(`${BASE_URL}/agentes`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      nombre: "Suplente",
-      apellido: "Reemplazo",
-      documento: `${ts}RS`,
-    }),
+  const asignacionTitular = await prisma.asignacion.create({
+    data: {
+      institucionId,
+      agenteId:                agenteTitular.id,
+      unidadId:                unidad.id,
+      identificadorEstructural: `REEMP-TIT-${randomUUID()}`,
+      fecha_inicio:            new Date("2026-01-01"),
+    },
   })
-  suplenteId = (await sRes.json()).agente.id
+  asignacionId = asignacionTitular.id
 
-  // Unidad
-  const uRes = await fetch(`${BASE_URL}/unidades`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      codigoUnidad: (ts % 1000000) + 4,
-      nombre: `Unidad Reemp ${ts}`,
-    }),
+  const asignacionSuplente = await prisma.asignacion.create({
+    data: {
+      institucionId,
+      agenteId:                agenteSuplente.id,
+      unidadId:                unidad.id,
+      identificadorEstructural: `REEMP-SUP-${randomUUID()}`,
+      fecha_inicio:            new Date("2026-01-01"),
+    },
   })
-  unidadId = (await uRes.json()).id
+  asigSuplenteId = asignacionSuplente.id
 
-  // Asignación titular
-  const asRes = await fetch(`${BASE_URL}/asignaciones`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      agenteId,
-      unidadId,
-      identificadorEstructural: `REEMP_TIT_${ts}`,
-      fecha_inicio: "2026-01-01T00:00:00.000Z",
-    }),
+  const modulo = await prisma.moduloHorario.create({
+    data: { institucionId, dia_semana: "DOMINGO", hora_desde: 480, hora_hasta: 520 },
   })
-  asignacionId = (await asRes.json()).id
 
-  // Asignación suplente
-  const asSupRes = await fetch(`${BASE_URL}/asignaciones`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      agenteId: suplenteId,
-      unidadId,
-      identificadorEstructural: `REEMP_SUP_${ts}`,
-      fecha_inicio: "2026-01-01T00:00:00.000Z",
-    }),
-  })
-  asigSuplenteId = (await asSupRes.json()).id
-
-  // Distribución
-  const dRes = await fetch(`${BASE_URL}/distribuciones`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
+  const distribucion = await prisma.distribucionHoraria.create({
+    data: {
+      institucionId,
       asignacionId,
-      version: 1,
-      fecha_vigencia_desde: "2026-01-01T00:00:00.000Z",
-    }),
-  })
-  distribucionId = (await dRes.json()).id
-
-  // Módulo
-  const mRes = await fetch(`${BASE_URL}/modulosHorarios`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      dia_semana: "DOMINGO",
-      hora_desde: 9,
-      hora_hasta: 10,
-    }),
-  })
-  const mData = await mRes.json()
-  moduloId = mRes.status === 409 ? mData.modulo.id : mData.id
-
-  // Vincular módulo
-  await fetch(`${BASE_URL}/distribuciones/${distribucionId}/modulos`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ modulos: [moduloId] }),
+      version:              1,
+      fecha_vigencia_desde: new Date("2026-01-01"),
+    },
   })
 
-  // Generar clases
-  await fetch(`${BASE_URL}/clases/generar`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      distribucionHorariaId: distribucionId,
-      fecha_desde: "2026-04-01",
-      fecha_hasta: "2026-04-30",
-    }),
+  await prisma.distribucionModulo.create({
+    data: { distribucionHorariaId: distribucion.id, moduloHorarioId: modulo.id },
   })
 
-  // Obtener clase
-  const clasesRes = await fetch(
-    `${BASE_URL}/clases?asignacionId=${asignacionId}&fecha_desde=2026-04-01&fecha_hasta=2026-04-30`,
-    { headers }
-  )
-
-  const clases = await clasesRes.json()
-
-  expect(clases.length).toBeGreaterThan(0) // 🔥 clave para evitar undefined
-  claseId = clases[0].id
+  // Crear clase directamente — mediodía UTC para evitar drift de timezone
+  const clase = await prisma.claseProgramada.create({
+    data: {
+      institucionId,
+      asignacionId,
+      moduloId: modulo.id,
+      unidadId: unidad.id,
+      fecha:    new Date("2026-04-05T12:00:00.000Z"), // domingo
+      estado:   "PROGRAMADA",
+    },
+  })
+  claseId = clase.id
 })
 
 afterAll(async () => {
-  if (asignacionId)     await cleanupClases(asignacionId)
-  if (distribucionId)   await cleanupDistribucion(distribucionId)
-  if (asignacionId)     await cleanupAsignacion(asignacionId)
-  if (asigSuplenteId)   await cleanupAsignacion(asigSuplenteId)
-  if (unidadId)         await cleanupUnidad(unidadId)
-  if (agenteId)         await cleanupAgente(agenteId)
-  if (suplenteId)       await cleanupAgente(suplenteId)
-  if (moduloId)         await cleanupModulo(moduloId)
+  await destroyInstitucion(institucionId)
 })
+
+// ─── POST /api/reemplazos ─────────────────────────────────────────────────────
 
 describe("POST /api/reemplazos", () => {
   it("crea un reemplazo y marca la clase como REEMPLAZADA", async () => {
     const res = await fetch(`${BASE_URL}/reemplazos`, {
-      method: "POST",
+      method:  "POST",
       headers,
-      body: JSON.stringify({
+      body:    JSON.stringify({
         claseId,
-        asignacionTitularId: asignacionId,
+        asignacionTitularId:  asignacionId,
         asignacionSuplenteId: asigSuplenteId,
-        observacion: "Test reemplazo",
+        observacion:          "Test reemplazo",
       }),
     })
-
     expect(res.status).toBe(201)
-
     const data = await res.json()
     expect(data.claseId).toBe(claseId)
-
     reemplazoId = data.id
 
-    // verificar estado clase
+    // verificar que la clase quedó REEMPLAZADA
     const claseRes = await fetch(`${BASE_URL}/clases/${claseId}`, { headers })
-    const clase = await claseRes.json()
-
+    const clase    = await claseRes.json()
     expect(clase.estado).toBe("REEMPLAZADA")
   })
 
-  it("rechaza duplicado", async () => {
+  it("rechaza duplicado (409)", async () => {
     const res = await fetch(`${BASE_URL}/reemplazos`, {
-      method: "POST",
+      method:  "POST",
       headers,
-      body: JSON.stringify({
+      body:    JSON.stringify({
         claseId,
-        asignacionTitularId: asignacionId,
+        asignacionTitularId:  asignacionId,
         asignacionSuplenteId: asigSuplenteId,
       }),
     })
-
     expect(res.status).toBe(409)
   })
 
-  it("rechaza titular igual a suplente", async () => {
+  it("rechaza titular igual a suplente (400)", async () => {
     const res = await fetch(`${BASE_URL}/reemplazos`, {
-      method: "POST",
+      method:  "POST",
       headers,
-      body: JSON.stringify({
+      body:    JSON.stringify({
         claseId,
-        asignacionTitularId: asignacionId,
+        asignacionTitularId:  asignacionId,
         asignacionSuplenteId: asignacionId,
       }),
     })
-
     expect(res.status).toBe(400)
+  })
+
+  it("rechaza sin claseId (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify({
+        asignacionTitularId:  asignacionId,
+        asignacionSuplenteId: asigSuplenteId,
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza sin asignacionTitularId (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify({
+        claseId,
+        asignacionSuplenteId: asigSuplenteId,
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza sin asignacionSuplenteId (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify({
+        claseId,
+        asignacionTitularId: asignacionId,
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza clase inexistente (404)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify({
+        claseId:              999999,
+        asignacionTitularId:  asignacionId,
+        asignacionSuplenteId: asigSuplenteId,
+      }),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it("rechaza JSON inválido (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers,
+      body:    "esto no es json{{{",
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza sin tenant (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        claseId,
+        asignacionTitularId:  asignacionId,
+        asignacionSuplenteId: asigSuplenteId,
+      }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza con tenant pero sin token (401)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json", "x-tenant-id": String(institucionId) },
+      body:    JSON.stringify({
+        claseId,
+        asignacionTitularId:  asignacionId,
+        asignacionSuplenteId: asigSuplenteId,
+      }),
+    })
+    expect(res.status).toBe(401)
   })
 })
 
+// ─── GET /api/reemplazos ──────────────────────────────────────────────────────
+
 describe("GET /api/reemplazos", () => {
-  it("filtra por clase", async () => {
-    const res = await fetch(`${BASE_URL}/reemplazos?claseId=${claseId}`, { headers })
-
+  it("filtra por claseId", async () => {
+    const res  = await fetch(`${BASE_URL}/reemplazos?claseId=${claseId}`, { headers })
     expect(res.status).toBe(200)
-
     const data = await res.json()
     expect(Array.isArray(data)).toBe(true)
-    expect(data.some((r: any) => r.id === reemplazoId)).toBe(true)
+    expect(data.some((r: { id: number }) => r.id === reemplazoId)).toBe(true)
   })
 
-  it("rechaza sin filtros", async () => {
+  it("rechaza sin filtros (400)", async () => {
     const res = await fetch(`${BASE_URL}/reemplazos`, { headers })
     expect(res.status).toBe(400)
   })
-})
 
-describe("GET /api/reemplazos/[id]", () => {
-  it("devuelve reemplazo", async () => {
-    const res = await fetch(`${BASE_URL}/reemplazos/${reemplazoId}`, { headers })
-
-    expect(res.status).toBe(200)
-
-    const data = await res.json()
-    expect(data.id).toBe(reemplazoId)
+  it("rechaza sin tenant (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos?claseId=${claseId}`)
+    expect(res.status).toBe(400)
   })
 
-  it("404 si no existe", async () => {
+  it("rechaza con tenant pero sin token (401)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos?claseId=${claseId}`, {
+      headers: { "x-tenant-id": String(institucionId) },
+    })
+    expect(res.status).toBe(401)
+  })
+})
+
+// ─── GET /api/reemplazos/[id] ─────────────────────────────────────────────────
+
+describe("GET /api/reemplazos/[id]", () => {
+  it("devuelve el reemplazo por id", async () => {
+    const res  = await fetch(`${BASE_URL}/reemplazos/${reemplazoId}`, { headers })
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.id).toBe(reemplazoId)
+    expect(data.claseId).toBe(claseId)
+  })
+
+  it("devuelve 404 para id inexistente", async () => {
     const res = await fetch(`${BASE_URL}/reemplazos/999999`, { headers })
     expect(res.status).toBe(404)
   })
+
+  it("devuelve 400 para id inválido", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos/abc`, { headers })
+    expect(res.status).toBe(400)
+  })
 })
 
+// ─── DELETE /api/reemplazos/[id] ──────────────────────────────────────────────
+
 describe("DELETE /api/reemplazos/[id]", () => {
-  it("soft delete + revierte clase", async () => {
-    const res = await fetch(`${BASE_URL}/reemplazos/${reemplazoId}`, {
-      method: "DELETE",
-      headers,
+  it("soft delete y revierte estado de la clase a PROGRAMADA", async () => {
+    const res  = await fetch(`${BASE_URL}/reemplazos/${reemplazoId}`, {
+      method: "DELETE", headers,
     })
-
     expect(res.status).toBe(200)
-
     const data = await res.json()
     expect(data.deleted).toBe(true)
 
+    // verificar que la clase volvió a PROGRAMADA
     const claseRes = await fetch(`${BASE_URL}/clases/${claseId}`, { headers })
-    const clase = await claseRes.json()
-
+    const clase    = await claseRes.json()
     expect(clase.estado).toBe("PROGRAMADA")
+  })
+
+  it("devuelve 404 para id inexistente", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos/999999`, {
+      method: "DELETE", headers,
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it("rechaza id inválido (400)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos/abc`, {
+      method: "DELETE", headers,
+    })
+    expect(res.status).toBe(400)
   })
 })

@@ -1,3 +1,4 @@
+//lib/usecases/codigarios/actualizarItem.ts
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
 import { Prisma } from "@prisma/client"
 

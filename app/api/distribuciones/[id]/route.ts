@@ -1,3 +1,4 @@
+//api/distribuciones/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerDistribucion, DistribucionNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/distribuciones/obtenerDistribucion"

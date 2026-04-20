@@ -1,3 +1,5 @@
+
+// lib/usecases/instituciones/crearInstitucion.ts
 import { institucionRepository } from "@/lib/repositories/institucionRepository"
 
 export class NoAutenticadoError extends Error {

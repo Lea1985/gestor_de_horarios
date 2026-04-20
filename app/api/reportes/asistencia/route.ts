@@ -1,75 +1,57 @@
-// app/api/reportes/asistencia/route.ts
-
 import { withContext } from "@/lib/auth/withContext"
-import prisma from "@/lib/prisma"
+
+import {
+  obtenerReporteAsistencia,
+  ReporteAsistenciaInvalidoError,
+} from "@/lib/usecases/reportes/obtenerReporteAsistencia"
 
 export async function GET(req: Request) {
-  return withContext(req, async ({ tenantId }) => {
+  const { searchParams } = new URL(req.url)
 
-    const { searchParams } = new URL(req.url)
-    const asignacionId = searchParams.get("asignacionId")
-    const fecha_desde  = searchParams.get("fecha_desde")
-    const fecha_hasta  = searchParams.get("fecha_hasta")
+  const asignacionId = searchParams.get("asignacionId")
+  const desde = searchParams.get("desde")
+  const hasta = searchParams.get("hasta")
 
-    if (!asignacionId || !fecha_desde || !fecha_hasta) {
+  // Validación básica de parámetros
+  if (!asignacionId || !desde || !hasta) {
+    return Response.json(
+      { error: "Parámetros inválidos" },
+      { status: 400 }
+    )
+  }
+
+  // Validación de formato de asignacionId
+  if (isNaN(Number(asignacionId))) {
+    return Response.json(
+      { error: "asignacionId inválido" },
+      { status: 400 }
+    )
+  }
+
+  return withContext(req, async (ctx) => {
+    try {
+      const reporte = await obtenerReporteAsistencia(
+        ctx,
+        asignacionId, // se mantiene string (consistente con tu usecase)
+        desde,
+        hasta
+      )
+
+      return Response.json(reporte)
+
+    } catch (error) {
+
+      if (error instanceof ReporteAsistenciaInvalidoError) {
+        return Response.json(
+          { error: error.message },
+          { status: 400 }
+        )
+      }
+
       return Response.json(
-        { error: "asignacionId, fecha_desde y fecha_hasta son obligatorios" },
-        { status: 400 }
+        { error: "Error generando reporte" },
+        { status: 500 }
       )
     }
-
-    const donde = {
-      institucionId: tenantId,
-      asignacionId:  parseInt(asignacionId),
-      fecha: {
-        gte: new Date(fecha_desde),
-        lte: new Date(fecha_hasta),
-      },
-    }
-
-    const [programadas, dictadas, suspendidas, reemplazadas] = await Promise.all([
-      prisma.claseProgramada.count({ where: { ...donde, estado: "PROGRAMADA"  } }),
-      prisma.claseProgramada.count({ where: { ...donde, estado: "DICTADA"     } }),
-      prisma.claseProgramada.count({ where: { ...donde, estado: "SUSPENDIDA"  } }),
-      prisma.claseProgramada.count({ where: { ...donde, estado: "REEMPLAZADA" } }),
-    ])
-
-    const total = programadas + dictadas + suspendidas + reemplazadas
-
-    const clases = await prisma.claseProgramada.findMany({
-      where:   donde,
-      orderBy: { fecha: "asc" },
-      select: {
-        id:     true,
-        fecha:  true,
-        estado: true,
-        modulo: { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
-        unidad: { select: { nombre: true } },
-        incidencia: {
-          select: {
-            id:            true,
-            fecha_desde:   true,
-            fecha_hasta:   true,
-            observacion:   true,
-            codigarioItem: { select: { codigo: true, nombre: true } },
-          },
-        },
-      },
-    })
-
-    return Response.json({
-      asignacionId:  parseInt(asignacionId),
-      periodo:       { desde: fecha_desde, hasta: fecha_hasta },
-      resumen: {
-        total,
-        programadas,
-        dictadas,
-        suspendidas,
-        reemplazadas,
-        porcentajeDictadas:    total > 0 ? Math.round((dictadas    / total) * 100) : 0,
-        porcentajeSuspendidas: total > 0 ? Math.round((suspendidas / total) * 100) : 0,
-      },
-      clases,
-    })
   })
 }

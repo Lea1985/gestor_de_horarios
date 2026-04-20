@@ -1,3 +1,4 @@
+//lib/usecases/distribuciones/asignarModulos.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 
 export class DistribucionNoEncontradaError extends Error {

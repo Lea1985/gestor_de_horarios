@@ -1,3 +1,4 @@
+//lib/usecases/distribuciones/eliminarDistribucion.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 
 export async function eliminarDistribucion(id: number, tenantId: number) {

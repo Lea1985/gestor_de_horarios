@@ -1,9 +1,6 @@
 // app/api/auth/logout/route.ts
-// Ruta pública — el proxy la bypassea (/api/auth).
-// Leemos el token manualmente desde el header Authorization.
-// ?all=true invalida todas las sesiones del usuario en todas las instituciones.
 
-import prisma from "@/lib/prisma"
+import { cerrarSesion, SesionNoEncontradaError } from "@/lib/usecases/auth/cerrarSesion"
 
 export async function POST(req: Request) {
   try {
@@ -13,31 +10,17 @@ export async function POST(req: Request) {
       return Response.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    const sesion = await prisma.sesion.findUnique({
-      where:  { token },
-      select: { usuarioId: true },
-    })
-
-    if (!sesion) {
-      return Response.json({ error: "Sesión no encontrada" }, { status: 404 })
-    }
-
     const { searchParams } = new URL(req.url)
-    const cerrarTodas = searchParams.get("all") === "true"
+    const cerrarTodas      = searchParams.get("all") === "true"
 
-    if (cerrarTodas) {
-      await prisma.sesion.deleteMany({
-        where: { usuarioId: sesion.usuarioId },
-      })
-    } else {
-      await prisma.sesion.delete({
-        where: { token },
-      })
-    }
+    await cerrarSesion(token, cerrarTodas)
 
     return Response.json({ ok: true })
 
   } catch (error) {
+    if (error instanceof SesionNoEncontradaError) {
+      return Response.json({ error: error.message }, { status: 404 })
+    }
     console.error("Error en logout:", error)
     return Response.json({ error: "Error en logout" }, { status: 500 })
   }

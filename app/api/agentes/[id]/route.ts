@@ -1,3 +1,4 @@
+// app/api/agentes/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerAgente, AgenteNoEncontradoError as ObtenerNotFound } from "@/lib/usecases/agentes/obtenerAgente"

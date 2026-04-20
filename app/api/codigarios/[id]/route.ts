@@ -1,3 +1,5 @@
+//app/api/codigarios/[id]/route.ts
+
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerCodigario, CodigarioNoEncontradoError as ObtenerNotFound } from "@/lib/usecases/codigarios/obtenerCodigario"

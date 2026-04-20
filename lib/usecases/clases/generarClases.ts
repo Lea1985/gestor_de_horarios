@@ -1,3 +1,4 @@
+//lib/usecases/clases/generarClases.ts
 import { claseRepository } from "@/lib/repositories/claseRepository"
 
 export class DatosGenerarInvalidosError extends Error {

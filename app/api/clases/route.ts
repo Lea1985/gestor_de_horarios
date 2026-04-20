@@ -1,3 +1,4 @@
+//app/api/clases/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { listarClases, FiltrosInsuficientesError, EstadoInvalidoError } from "@/lib/usecases/clases/listarClases"
 

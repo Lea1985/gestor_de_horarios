@@ -1,3 +1,4 @@
+//api/incidencias/[id]/cadena/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerCadena, IncidenciaNoEncontradaError } from "@/lib/usecases/incidencias/obtenerCadena"
 

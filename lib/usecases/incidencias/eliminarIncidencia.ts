@@ -1,3 +1,4 @@
+//lib/usecases/incidencias/eliminarIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 
 export async function eliminarIncidencia(id: number, tenantId: number) {

@@ -1,3 +1,4 @@
+//app/api/incidencias/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { listarIncidencias } from "@/lib/usecases/incidencias/listarIncidencias"
 import { crearIncidencia, DatosIncidenciaInvalidosError, RangoFechasInvalidoError, AsignacionNoValidaError, CodigarioItemNoValidoError, IncidenciaPadreNoValidaError, SuperposicionError } from "@/lib/usecases/incidencias/crearIncidencia"

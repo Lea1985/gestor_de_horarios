@@ -1,3 +1,4 @@
+// lib/usecases/horario/obtenerHorarioSemana.ts
 import { horarioRepository, DIAS, DIA_INDEX, rangoDeSemana } from "@/lib/repositories/horarioRepository"
 
 export class SemanaObligatoriaError extends Error {

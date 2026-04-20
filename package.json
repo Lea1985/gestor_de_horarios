@@ -3,16 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "next dev",
-    "check:watch": "nodemon --watch app --watch src --watch prisma --ext js,ts,json --exec \"node tests/ejecutarTests.js\"",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "format": "prettier --write .",
-    "seed": "node --loader ts-node/esm prisma/seed.ts",
-    "test": "vitest run tests/"
-  },
+ "scripts": {
+  "dev": "next dev",
+  "dev:test": "NODE_ENV=test next dev",
+
+  "build": "next build",
+  "start": "next start",
+
+  "lint": "eslint",
+  "format": "prettier --write .",
+
+  "seed": "node --loader ts-node/esm prisma/seed.ts",
+
+  "test": "cross-env NODE_ENV=test vitest",
+  "test:run": "cross-env DATABASE_URL=postgresql://admin:admin123@localhost:5432/gestor_test?schema=public vitest run --reporter=verbose"},
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
@@ -20,6 +24,8 @@
     "@prisma/client": "^5.22.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
+    "cross-env": "^10.1.0",
+    "dotenv-cli": "^11.0.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -31,6 +37,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "nodemon": "^3.1.14",
@@ -39,6 +46,7 @@
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.4",
     "wait-on": "^9.0.4"
   }

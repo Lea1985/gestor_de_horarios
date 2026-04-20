@@ -1,3 +1,4 @@
+//api/incidencias/asignacion/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { listarIncidencias } from "@/lib/usecases/incidencias/listarIncidencias"
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"

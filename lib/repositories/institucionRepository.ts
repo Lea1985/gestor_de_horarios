@@ -1,3 +1,4 @@
+// lib/repositories/institucionRepository.ts
 import prisma from "@/lib/prisma"
 
 export const institucionRepository = {

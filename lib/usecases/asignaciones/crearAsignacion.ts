@@ -1,3 +1,4 @@
+//lib/usecases/asignaciones/crearAsignacion.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
 export class DatosAsignacionInvalidosError extends Error {

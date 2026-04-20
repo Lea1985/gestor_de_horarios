@@ -1,3 +1,4 @@
+//lib/usecases/distribuciones/crearDistribucion.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 
 export class DatosDistribucionInvalidosError extends Error {

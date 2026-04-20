@@ -1,3 +1,4 @@
+// tests/helpers/cleanup.ts
 // Orden estricto de FK:
 // Reemplazo → ClaseProgramada → Incidencia → HorarioAsignado
 // → DistribucionModulo → DistribucionHoraria → Asignacion

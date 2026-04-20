@@ -1,3 +1,4 @@
+//app/api/codigarios/[id]/items/[itemId]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"

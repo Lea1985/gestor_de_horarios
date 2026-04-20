@@ -1,3 +1,4 @@
+//app/api/clases/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerClase, ClaseNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/clases/obtenerClase"
 import { actualizarClase, ClaseNoEncontradaError as ActualizarNotFound, SinCamposError, EstadoInvalidoError, IncidenciaInvalidaError } from "@/lib/usecases/clases/actualizarClase"

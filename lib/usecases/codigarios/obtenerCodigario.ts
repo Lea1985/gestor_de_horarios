@@ -1,3 +1,4 @@
+//lib/usecases/codigarios/obtenerCodigario.ts
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
 
 export class CodigarioNoEncontradoError extends Error {

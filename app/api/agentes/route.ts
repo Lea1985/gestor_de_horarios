@@ -1,3 +1,4 @@
+// app/api/agentes/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { listarAgentes } from "@/lib/usecases/agentes/listarAgentes"
