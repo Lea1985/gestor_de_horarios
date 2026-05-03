@@ -1,9 +1,8 @@
-
-// app/api/asignaciones/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
-import { obtenerAsignacion, AsignacionNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/asignaciones/obtenerAsignacion"
-import { actualizarAsignacion, AsignacionNoEncontradaError as ActualizarNotFound, SinCamposParaActualizarError } from "@/lib/usecases/asignaciones/actualizarAsignacion"
+
+import { obtenerAsignacion } from "@/lib/usecases/asignaciones/obtenerAsignacion"
+import { actualizarAsignacion, SinCamposParaActualizarError } from "@/lib/usecases/asignaciones/actualizarAsignacion"
 import { eliminarAsignacion } from "@/lib/usecases/asignaciones/eliminarAsignacion"
 
 function parseId(id: string) {
@@ -11,35 +10,19 @@ function parseId(id: string) {
   return isNaN(n) ? null : n
 }
 
-export async function GET(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  const { id } = await context.params
-  const asignacionId = parseId(id)
-  if (!asignacionId) return Response.json({ error: "ID inválido" }, { status: 400 })
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const id = parseId(params.id)
+  if (!id) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async ({ tenantId }) => {
-    try {
-      const asignacion = await obtenerAsignacion(asignacionId, tenantId)
-      return Response.json(asignacion)
-    } catch (error) {
-      if (error instanceof ObtenerNotFound) {
-        return Response.json({ error: error.message }, { status: 404 })
-      }
-      console.error("Error obteniendo asignación:", error)
-      return Response.json({ error: "Error obteniendo asignación" }, { status: 500 })
-    }
+    const data = await obtenerAsignacion(id, tenantId)
+    return Response.json(data)
   })
 }
 
-export async function PATCH(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  const { id } = await context.params
-  const asignacionId = parseId(id)
-  if (!asignacionId) return Response.json({ error: "ID inválido" }, { status: 400 })
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const id = parseId(params.id)
+  if (!id) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async ({ tenantId }) => {
     let body
@@ -50,34 +33,23 @@ export async function PATCH(
     }
 
     try {
-      const actualizada = await actualizarAsignacion(asignacionId, tenantId, body)
-      return Response.json(actualizada)
+      const updated = await actualizarAsignacion(id, tenantId, body)
+      return Response.json(updated)
     } catch (error) {
-      if (error instanceof ActualizarNotFound) {
-        return Response.json({ error: error.message }, { status: 404 })
-      }
-      if (error instanceof SinCamposParaActualizarError) {
+      if (error instanceof SinCamposParaActualizarError)
         return Response.json({ error: error.message }, { status: 400 })
-      }
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return Response.json({ error: "El identificador estructural ya existe en esta institución" }, { status: 409 })
-      }
-      console.error("Error actualizando asignación:", error)
-      return Response.json({ error: "Error actualizando asignación" }, { status: 500 })
+
+      return Response.json({ error: "Error actualizando" }, { status: 500 })
     }
   })
 }
 
-export async function DELETE(
-  req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  const { id } = await context.params
-  const asignacionId = parseId(id)
-  if (!asignacionId) return Response.json({ error: "ID inválido" }, { status: 400 })
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const id = parseId(params.id)
+  if (!id) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async ({ tenantId }) => {
-    const result = await eliminarAsignacion(asignacionId, tenantId)
+    const result = await eliminarAsignacion(id, tenantId)
     return Response.json(result)
   })
 }

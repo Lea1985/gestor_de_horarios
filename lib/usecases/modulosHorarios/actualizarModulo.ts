@@ -46,5 +46,5 @@ export async function actualizarModulo(id: number, tenantId: number, body: Recor
     data.turno = body.turnoId ? { connect: { id: body.turnoId as number } } : { disconnect: true }
   }
 
-  return moduloHorarioRepository.actualizar(id, data)
+  return moduloHorarioRepository.actualizar(id, tenantId, data)
 }

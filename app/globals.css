@@ -1,26 +1,132 @@
 @import 'tailwindcss';
 
+/* ============================================================
+   ALNEXT — Design Tokens
+   Regla: nunca usar valores hardcodeados en componentes.
+   Siempre referenciar estas variables.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+
+  /* ── Brand ─────────────────────────────────────────────── */
+  --color-primary:         #0A2540;
+  --color-primary-hover:   #163A5F;
+  --color-primary-subtle:  #E8EFF6;
+
+  /* ── Accent — teal del logo ─────────────────────────────── */
+  --color-accent:          #1E9BB8;
+  --color-accent-hover:    #1787A0;
+  --color-accent-light:    #D0F0F7;
+
+  /* ── Estados semánticos ─────────────────────────────────── */
+  --color-success:         #00A86B;
+  --color-success-bg:      #D1F5E7;
+  --color-success-text:    #005F3E;
+
+  --color-error:           #E5484D;
+  --color-error-bg:        #FDE8E8;
+  --color-error-text:      #9B1B1D;
+
+  --color-warning:         #F5A524;
+  --color-warning-bg:      #FEF3D7;
+  --color-warning-text:    #7A4E00;
+
+  /* ── Fondos & superficies ───────────────────────────────── */
+  --color-bg:              #F7F9FC;
+  --color-surface:         #FFFFFF;
+  --color-surface-raised:  #F1F4F8;
+  --color-surface-dark:    #0F172A;
+
+  /* ── Texto ──────────────────────────────────────────────── */
+  --color-text-primary:    #1A1A1A;
+  --color-text-secondary:  #6B7280;
+  --color-text-hint:       #9CA3AF;
+  --color-text-on-dark:    #F1F5F9;
+
+  /* ── Bordes ─────────────────────────────────────────────── */
+  --color-border:          #E5E7EB;
+  --color-border-strong:   #D1D5DB;
+
+  /* ── Tipografía — escala ────────────────────────────────── */
+  --text-2xs:  11px;
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   18px;
+  --text-xl:   24px;
+  --text-2xl:  32px;
+
+  /* ── Tipografía — pesos (solo estos dos) ───────────────── */
+  --font-regular: 400;
+  --font-medium:  500;
+
+  /* ── Espaciado — base 4px ───────────────────────────────── */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-12:  48px;
+
+  /* ── Border radius ──────────────────────────────────────── */
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  8px;
+  --radius-xl:  12px;
+
+  /* ── Z-index — solo estos 6 niveles ────────────────────── */
+  --z-base:      0;
+  --z-dropdown:  10;
+  --z-sidebar:   100;
+  --z-topbar:    200;
+  --z-modal:     300;
+  --z-toast:     400;
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  --sidebar-width:           220px;
+  --sidebar-width-collapsed: 56px;
+  --topbar-height:           56px;
+
+  /* ── Tailwind bridge ────────────────────────────────────── */
+  --background: var(--color-bg);
+  --foreground: var(--color-text-primary);
 }
 
+/* ── Tailwind theme ─────────────────────────────────────────*/
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans:        var(--font-geist-sans);
+  --font-mono:        var(--font-geist-mono);
 }
 
+/* ── Dark mode ──────────────────────────────────────────────
+   Agregar aquí el equivalente de cada nuevo token que se cree.
+   ─────────────────────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-bg:             #0F172A;
+    --color-surface:        #1E293B;
+    --color-surface-raised: #273548;
+    --color-border:         rgba(255, 255, 255, 0.08);
+    --color-border-strong:  rgba(255, 255, 255, 0.14);
+    --color-text-primary:   #F1F5F9;
+    --color-text-secondary: #94A3B8;
+    --color-text-hint:      #64748B;
+
+    /* Tailwind bridge dark */
+    --background: var(--color-bg);
+    --foreground: var(--color-text-primary);
   }
 }
 
+/* ── Base ───────────────────────────────────────────────────*/
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color:      var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size:   var(--text-sm);
+  line-height: 1.6;
 }
+

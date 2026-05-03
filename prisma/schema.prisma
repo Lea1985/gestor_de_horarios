@@ -246,6 +246,7 @@ model Curso {
   institucion Institucion @relation(fields: [institucionId], references: [id])
   comisiones  Comision[]
   asignaciones Asignacion[]
+  materias Materia[]
 
   @@unique([institucionId, nombre])
   @@index([institucionId])
@@ -315,7 +316,6 @@ model Asignacion {
   curso       Curso?             @relation(fields: [cursoId], references: [id])
   comision    Comision?          @relation(fields: [comisionId], references: [id])
   turno       Turno?             @relation(fields: [turnoId], references: [id])
-
   distribuciones    DistribucionHoraria[]
   incidencias       Incidencia[]
   horariosAsignados HorarioAsignado[]     @relation("HorarioAsignado_Asignacion")
@@ -562,17 +562,21 @@ model CodigarioItem {
 model Materia {
   id            Int       @id @default(autoincrement())
   institucionId Int
+  cursoId       Int?
   nombre        String
   activo        Boolean   @default(true)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  institucion  Institucion  @relation(fields: [institucionId], references: [id])
+  institucion Institucion @relation(fields: [institucionId], references: [id])
+  curso       Curso?       @relation(fields: [cursoId], references: [id])
+
   asignaciones Asignacion[]
 
-  @@unique([institucionId, nombre])
+  @@unique([cursoId, nombre])
   @@index([institucionId])
-  @@index([institucionId, activo])
-  @@index([deletedAt])
+  @@index([cursoId])
 }
+
+

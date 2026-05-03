@@ -1,62 +1,88 @@
-//lib/usecases/asignaciones/crearAsignacion.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
-export class DatosAsignacionInvalidosError extends Error {
-  constructor() { super("agenteId, unidadId, identificadorEstructural y fecha_inicio son requeridos") }
+export class DatosAsignacionInvalidosError extends Error {}
+export class EntidadNoEncontradaError extends Error {}
+
+type Input = {
+  agenteId: number
+  unidadId: number
+  materiaId?: number | null
+  cursoId?: number | null
+  comisionId?: number | null
+  turnoId?: number | null
+  fecha_inicio: string | Date
+  fecha_fin?: string | Date | null
+  identificadorEstructural: string
 }
 
-export class EntidadNoEncontradaError extends Error {
-  constructor(public readonly entidad: string) {
-    super(`${entidad} no encontrada en esta institución`)
-  }
-}
-
-export async function crearAsignacion(tenantId: number, body: {
-  agenteId?:                number
-  unidadId?:                number
-  identificadorEstructural?: string
-  fecha_inicio?:            string
-  fecha_fin?:               string
-  materiaId?:               number
-  cursoId?:                 number
-  comisionId?:              number
-  turnoId?:                 number
-}) {
-  const { agenteId, unidadId, identificadorEstructural, fecha_inicio, fecha_fin, materiaId, cursoId, comisionId, turnoId } = body
-
-  if (!agenteId || !unidadId || !identificadorEstructural || !fecha_inicio) {
-    throw new DatosAsignacionInvalidosError()
+export async function crearAsignacion(
+  tenantId: number,
+  data: Input
+) {
+  if (!data.agenteId || !data.unidadId || !data.identificadorEstructural) {
+    throw new DatosAsignacionInvalidosError("Faltan datos obligatorios")
   }
 
-  if (!await asignacionRepository.verificarAgente(agenteId, tenantId)) {
-    throw new EntidadNoEncontradaError("Agente")
-  }
-  if (!await asignacionRepository.verificarUnidad(unidadId, tenantId)) {
-    throw new EntidadNoEncontradaError("Unidad")
-  }
-  if (materiaId && !await asignacionRepository.verificarMateria(materiaId, tenantId)) {
-    throw new EntidadNoEncontradaError("Materia")
-  }
-  if (cursoId && !await asignacionRepository.verificarCurso(cursoId, tenantId)) {
-    throw new EntidadNoEncontradaError("Curso")
-  }
-  if (comisionId && !await asignacionRepository.verificarComision(comisionId, tenantId)) {
-    throw new EntidadNoEncontradaError("Comisión")
-  }
-  if (turnoId && !await asignacionRepository.verificarTurno(turnoId, tenantId)) {
-    throw new EntidadNoEncontradaError("Turno")
+  // 🔥 parse fechas
+  const fechaInicio = new Date(data.fecha_inicio)
+  const fechaFin = data.fecha_fin ? new Date(data.fecha_fin) : null
+
+  if (isNaN(fechaInicio.getTime())) {
+    throw new DatosAsignacionInvalidosError("Fecha inicio inválida")
   }
 
+  // 🔥 VALIDACIONES EN PARALELO (performance + consistencia)
+  const [
+    agente,
+    unidad,
+    materia,
+    curso,
+    comision,
+    turno,
+  ] = await Promise.all([
+    asignacionRepository.verificarAgente(data.agenteId, tenantId),
+    asignacionRepository.verificarUnidad(data.unidadId, tenantId),
+    data.materiaId
+      ? asignacionRepository.verificarMateria(data.materiaId, tenantId)
+      : Promise.resolve(true),
+    data.cursoId
+      ? asignacionRepository.verificarCurso(data.cursoId, tenantId)
+      : Promise.resolve(true),
+    data.comisionId
+      ? asignacionRepository.verificarComision(data.comisionId, tenantId)
+      : Promise.resolve(true),
+    data.turnoId
+      ? asignacionRepository.verificarTurno(data.turnoId, tenantId)
+      : Promise.resolve(true),
+  ])
+
+  // 🔥 validaciones críticas
+  if (!agente) throw new EntidadNoEncontradaError("Agente no encontrado")
+  if (!unidad) throw new EntidadNoEncontradaError("Unidad no encontrada")
+
+  if (data.materiaId && !materia)
+    throw new EntidadNoEncontradaError("Materia no encontrada")
+
+  if (data.cursoId && !curso)
+    throw new EntidadNoEncontradaError("Curso no encontrado")
+
+  if (data.comisionId && !comision)
+    throw new EntidadNoEncontradaError("Comisión no encontrada")
+
+  if (data.turnoId && !turno)
+    throw new EntidadNoEncontradaError("Turno no encontrado")
+
+  // 🔥 CREACIÓN FINAL
   return asignacionRepository.crear({
     tenantId,
-    agenteId,
-    unidadId,
-    identificadorEstructural,
-    fecha_inicio: new Date(fecha_inicio),
-    fecha_fin:    fecha_fin ? new Date(fecha_fin) : null,
-    materiaId:    materiaId  ?? null,
-    cursoId:      cursoId    ?? null,
-    comisionId:   comisionId ?? null,
-    turnoId:      turnoId    ?? null,
+    agenteId: data.agenteId,
+    unidadId: data.unidadId,
+    identificadorEstructural: data.identificadorEstructural,
+    fecha_inicio: fechaInicio,
+    fecha_fin: fechaFin,
+    materiaId: data.materiaId ?? null,
+    cursoId: data.cursoId ?? null,
+    comisionId: data.comisionId ?? null,
+    turnoId: data.turnoId ?? null,
   })
 }

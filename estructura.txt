@@ -1,0 +1,318 @@
+.
+├── Dockerfile
+├── README.md
+├── app
+│   ├── api
+│   │   ├── agentes
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   ├── asignaciones
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   ├── auth
+│   │   │   ├── login
+│   │   │   └── logout
+│   │   ├── clases
+│   │   │   ├── [id]
+│   │   │   ├── generar
+│   │   │   └── route.ts
+│   │   ├── codigarios
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   ├── distribuciones
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   ├── horario
+│   │   │   ├── institucion
+│   │   │   └── route.ts
+│   │   ├── incidencias
+│   │   │   ├── [id]
+│   │   │   ├── asignacion
+│   │   │   ├── route.ts
+│   │   │   └── validar-superposicion
+│   │   ├── instituciones
+│   │   │   └── route.ts
+│   │   ├── mi-institucion
+│   │   │   └── route.ts
+│   │   ├── modulosHorarios
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   ├── reemplazos
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   ├── reportes
+│   │   │   ├── agente
+│   │   │   ├── asistencia
+│   │   │   ├── reemplazos
+│   │   │   └── unidad
+│   │   ├── unidades
+│   │   │   ├── [id]
+│   │   │   └── route.ts
+│   │   └── usuarios
+│   │       └── route.ts
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── hooks
+│   │   └── useAuth.ts
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── protected
+│   │   └── dashboard
+│   │       ├── agentes
+│   │       ├── asignaciones
+│   │       ├── clases
+│   │       ├── incidencias
+│   │       ├── layout.tsx
+│   │       └── page.tsx
+│   ├── public
+│   │   └── login
+│   │       └── page.tsx
+│   └── ui
+│       ├── components
+│       │   ├── Button.tsx
+│       │   ├── Card.tsx
+│       │   ├── Input.tsx
+│       │   ├── LogoutButton.tsx
+│       │   ├── Table.tsx
+│       │   └── layout
+│       ├── index.ts
+│       └── styles
+├── backup_gestor_horarios
+│   ├── backup_gestor_horarios_20260308_075940.dump
+│   ├── backup_gestor_horarios_20260308_080114.dump
+│   ├── backup_gestor_horarios_20260308_080204.dump
+│   ├── backup_gestor_horarios_20260308_080236.dump
+│   └── backup_gestor_horarios_20260308_080544.dump
+├── ciclos
+│   ├── sprint-1
+│   │   ├── sprint-backlog.md
+│   │   ├── sprint-planning.md
+│   │   └── sprint-review-retrospective.md
+│   ├── sprint-2
+│   │   ├── sprint-backlog-2.md
+│   │   ├── sprint-planning-2.md
+│   │   └── sprint-review-retrospective-2.md
+│   ├── sprint-3
+│   │   ├── sprint-backlog-3.md
+│   │   ├── sprint-planning-3.md
+│   │   └── sprint-review-retrospective-3.md
+│   ├── sprint-4
+│   │   ├── sprint-backlog-4.md
+│   │   ├── sprint-planning-4.md
+│   │   └── sprint-review-retrospective-4.md
+│   └── sprint-4-5
+│       ├── sprint-backlog-4-5.md
+│       └── sprint-planning-4-5.md
+├── docker-compose.yml
+├── docs
+│   ├── arquitectura_v1.md
+│   ├── cadena_reemplazos_incidencias.md
+│   ├── cambios-relevantes-sistema.md
+│   ├── decisiones.md
+│   ├── design-system-alnext.md
+│   ├── diagrama_de_estados_v1.md
+│   ├── diagrama_er.md
+│   ├── flujo_nueva_version_distribucion.md
+│   ├── funcionalidades.md
+│   ├── leerme.md
+│   ├── modelo_dominio.md
+│   ├── reglas_negocio.md
+│   ├── tests_del_entorno
+│   │   ├── preDesarrollo.md
+│   │   └── pruebaPrisma.md
+│   └── vistas modelo en produccion.txt
+├── eslint.config.mjs
+├── estructura.txt
+├── gestor_tmp@0.1.0
+├── global.d.ts
+├── lib
+│   ├── auth
+│   │   ├── getSession.ts
+│   │   └── withContext.ts
+│   ├── prisma.ts
+│   ├── repositories
+│   │   ├── agenteRepository.ts
+│   │   ├── asignacionRepository.ts
+│   │   ├── authRepository.ts
+│   │   ├── claseRepository.ts
+│   │   ├── codigarioRepository.ts
+│   │   ├── distribucionRepository.ts
+│   │   ├── horarioRepository.ts
+│   │   ├── incidenciaRepository.ts
+│   │   ├── institucionRepository.ts
+│   │   ├── miInstitucionRepository.ts
+│   │   ├── moduloHorarioRepository.ts
+│   │   ├── reemplazoRepository.ts
+│   │   ├── reporteRepository.ts
+│   │   └── unidadRepository.ts
+│   ├── tenant
+│   │   ├── getTenantId.ts
+│   │   └── resolveTenant.ts
+│   ├── types
+│   │   └── context.ts
+│   └── usecases
+│       ├── agentes
+│       │   ├── actualizarAgente.ts
+│       │   ├── crearAgente.ts
+│       │   ├── eliminarAgente.ts
+│       │   ├── listarAgentes.ts
+│       │   └── obtenerAgente.ts
+│       ├── asignaciones
+│       │   ├── actualizarAsignacion.ts
+│       │   ├── crearAsignacion.ts
+│       │   ├── eliminarAsignacion.ts
+│       │   ├── listarAsignaciones.ts
+│       │   └── obtenerAsignacion.ts
+│       ├── auth
+│       │   ├── cerrarSesion.ts
+│       │   └── iniciarSesion.ts
+│       ├── clases
+│       │   ├── actualizarClase.ts
+│       │   ├── generarClases.ts
+│       │   ├── listarClases.ts
+│       │   └── obtenerClase.ts
+│       ├── codigarios
+│       │   ├── actualizarCodigario.ts
+│       │   ├── actualizarItem.ts
+│       │   ├── crearCodigario.ts
+│       │   ├── crearItem.ts
+│       │   ├── eliminarCodigario.ts
+│       │   ├── eliminarItem.ts
+│       │   ├── listarCodigarios.ts
+│       │   └── obtenerCodigario.ts
+│       ├── distribuciones
+│       │   ├── actualizarDistribucion.ts
+│       │   ├── asignarModulos.ts
+│       │   ├── crearDistribucion.ts
+│       │   ├── eliminarDistribucion.ts
+│       │   ├── listarDistribuciones.ts
+│       │   └── obtenerDistribucion.ts
+│       ├── horario
+│       │   ├── obtenerHorarioInstitucion.ts
+│       │   └── obtenerHorarioSemana.ts
+│       ├── incidencias
+│       │   ├── actualizarIncidencia.ts
+│       │   ├── crearIncidencia.ts
+│       │   ├── eliminarIncidencia.ts
+│       │   ├── listarIncidencias.ts
+│       │   ├── obtenerCadena.ts
+│       │   └── obtenerIncidencia.ts
+│       ├── instituciones
+│       │   ├── crearInstitucion.ts
+│       │   └── listarInstituciones.ts
+│       ├── miInstitucion
+│       │   ├── actualizarMiInstitucion.ts
+│       │   └── obtenerMiInstitucion.ts
+│       ├── modulosHorarios
+│       │   ├── actualizarModulo.ts
+│       │   ├── crearModulo.ts
+│       │   ├── eliminarModulo.ts
+│       │   ├── listarModulos.ts
+│       │   └── obtenerModulo.ts
+│       ├── reemplazos
+│       │   ├── crearReemplazo.ts
+│       │   ├── eliminarReemplazo.ts
+│       │   ├── listarReemplazos.ts
+│       │   └── obtenerReemplazo.ts
+│       ├── reportes
+│       │   ├── obtenerReporteAgente.ts
+│       │   ├── obtenerReporteAsistencia.ts
+│       │   ├── obtenerReporteReemplazos.ts
+│       │   └── obtenerReporteUnidad.ts
+│       ├── unidades
+│       │   ├── actualizarUnidad.ts
+│       │   ├── crearUnidad.ts
+│       │   ├── eliminarUnidad.ts
+│       │   ├── listarUnidades.ts
+│       │   └── obtenerUnidad.ts
+│       └── usuarios
+├── next
+├── next-env.d.ts
+├── next.config.ts
+├── node
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── prisma
+│   ├── migrations
+│   │   ├── 20260304202855_init
+│   │   │   └── migration.sql
+│   │   ├── 20260305204059_multi_tenant_base
+│   │   │   └── migration.sql
+│   │   ├── 20260308111141_update_modulo_horario
+│   │   │   └── migration.sql
+│   │   ├── 20260309213204_add_usuarios_roles
+│   │   │   └── migration.sql
+│   │   ├── 20260309220623_update
+│   │   │   └── migration.sql
+│   │   ├── 20260316225901_agregar_clases
+│   │   │   └── migration.sql
+│   │   ├── 20260316232603_add_unique_documento_por_institucion
+│   │   │   └── migration.sql
+│   │   ├── 20260324110203_cambios_articulos
+│   │   │   └── migration.sql
+│   │   ├── 20260325173005_mejora_codigarios
+│   │   │   └── migration.sql
+│   │   ├── 20260325183806_tipo_de_insidencia_opciona
+│   │   │   └── migration.sql
+│   │   ├── 20260326212620_add_codigario_nullable
+│   │   │   └── migration.sql
+│   │   ├── 20260326215423_remove_tipo_enum
+│   │   │   └── migration.sql
+│   │   ├── 20260328113736_dominio_proxy
+│   │   │   └── migration.sql
+│   │   ├── 20260329011812_add_soft_delete_reemplazo
+│   │   │   └── migration.sql
+│   │   ├── 20260407200444_add_institucion_to_sesion
+│   │   │   └── migration.sql
+│   │   ├── 20260408230725_add_super_admin
+│   │   │   └── migration.sql
+│   │   └── migration_lock.toml
+│   ├── schema.prisma
+│   ├── seed.ts
+│   └── triggers.sql
+├── proxy.ts
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── repository
+│   └── personaRepository.ts
+├── services
+│   └── instituciones
+│       └── getConfiguracionInstitucion.ts
+├── tests
+│   ├── agentes.test.ts
+│   ├── asignaciones.test.ts
+│   ├── auth.test.ts
+│   ├── checkEntornoWSL.test.ts
+│   ├── checkMigraciones.test.ts
+│   ├── clases.test.ts
+│   ├── codigarios.test.ts
+│   ├── distribuciones.test.ts
+│   ├── helpers
+│   │   ├── auth.ts
+│   │   ├── cleanup.ts
+│   │   ├── factories.ts
+│   │   └── reportesSetup.ts
+│   ├── horario.test.ts
+│   ├── incidencias.test.ts
+│   ├── instituciones.test.ts
+│   ├── mi-institucion.test.ts
+│   ├── middleware.test.ts
+│   ├── modulosHorarios.test.ts
+│   ├── preDesarrollo.test.ts
+│   ├── prisma-runtime.test.ts
+│   ├── reemplazos.test.ts
+│   ├── reportes.asistencia.test.ts
+│   ├── reportes.reemplazos.test.ts
+│   ├── reportes.unidad.test.ts
+│   ├── setup.ts
+│   ├── unidades.test.ts
+│   └── usuarios.test.ts
+├── tsconfig.json
+└── vitest.config.ts
+
+103 directories, 212 files

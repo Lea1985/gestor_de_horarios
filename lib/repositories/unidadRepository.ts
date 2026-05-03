@@ -4,7 +4,6 @@ import prisma from "@/lib/prisma"
 import { TipoUnidad, Prisma } from "@prisma/client"
 
 export const unidadRepository = {
-
   listar(tenantId: number) {
     return prisma.unidadOrganizativa.findMany({
       where: {
@@ -41,16 +40,46 @@ export const unidadRepository = {
     })
   },
 
-  actualizar(id: number, data: Prisma.UnidadOrganizativaUpdateInput) {
+  async actualizar(
+    id: number,
+    tenantId: number,
+    data: Prisma.UnidadOrganizativaUpdateInput
+  ) {
+    const existente = await prisma.unidadOrganizativa.findFirst({
+      where: {
+        id,
+        institucionId: tenantId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+
+    if (!existente) {
+      throw new Error("Unidad no encontrada")
+    }
+
     return prisma.unidadOrganizativa.update({
-      where: { id },
+      where: { id: existente.id },
       data,
     })
   },
 
-  softDelete(id: number) {
+  async softDelete(id: number, tenantId: number) {
+    const existente = await prisma.unidadOrganizativa.findFirst({
+      where: {
+        id,
+        institucionId: tenantId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+
+    if (!existente) {
+      throw new Error("Unidad no encontrada")
+    }
+
     return prisma.unidadOrganizativa.update({
-      where: { id },
+      where: { id: existente.id },
       data: {
         deletedAt: new Date(),
         activo: false,
@@ -60,8 +89,14 @@ export const unidadRepository = {
 
   existe(id: number, tenantId: number) {
     return prisma.unidadOrganizativa.findFirst({
-      where: { id, institucionId: tenantId },
-      select: { id: true, deletedAt: true },
+      where: {
+        id,
+        institucionId: tenantId,
+      },
+      select: {
+        id: true,
+        deletedAt: true,
+      },
     })
   },
 }

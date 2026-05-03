@@ -74,17 +74,15 @@ function resolveFromHost(req: Request): string | null {
   const hostname  = host.split(":")[0]
   const subdomain = hostname.split(".")[0]
 
-  // Ignorar localhost y IPs — no tienen subdominio de tenant
   if (
     !hostname ||
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
     /^\d+\.\d+\.\d+\.\d+$/.test(hostname)
   ) {
-    return null
+    // En desarrollo, usar dominio simulado desde variable de entorno
+    return process.env.DEV_TENANT_DOMAIN ?? null
   }
 
-  // Subdominio único (ej: "escuela12") → usarlo como dominio a buscar
-  // Subdominio compuesto (ej: "escuela12.gestor.com") → tomar solo el primero
   return subdomain || null
 }

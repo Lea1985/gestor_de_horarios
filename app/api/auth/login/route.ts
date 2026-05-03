@@ -6,7 +6,22 @@ import { Estado } from "@prisma/client"
 
 export async function POST(req: Request) {
   try {
-    // ── 1. Resolver tenant ─────────────────────────────────────────────────
+    let body
+    try {
+      body = await req.json()
+    } catch {
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const { email, password } = body
+
+    if (!email || !password) {
+      return Response.json(
+        { error: "email y password son requeridos" },
+        { status: 400 }
+      )
+    }
+
     let tenantId: number
 
     try {
@@ -28,24 +43,6 @@ export async function POST(req: Request) {
       throw error
     }
 
-    // ── 2. Validar body ────────────────────────────────────────────────────
-    let body
-    try {
-      body = await req.json()
-    } catch {
-      return Response.json({ error: "JSON inválido" }, { status: 400 })
-    }
-
-    const { email, password } = body
-
-    if (!email || !password) {
-      return Response.json(
-        { error: "email y password son requeridos" },
-        { status: 400 }
-      )
-    }
-
-    // ── 3. Iniciar sesión ──────────────────────────────────────────────────
     const sesion = await iniciarSesion(tenantId, email, password, {
       ip:        req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip"),
       userAgent: req.headers.get("user-agent"),
