@@ -1,58 +1,72 @@
 // lib/repositories/agenteRepository.ts
 import prisma from "@/lib/prisma"
-import { Prisma } from "@prisma/client"
+import { Prisma, Estado } from "@prisma/client"
 
 export const agenteSelect = {
-  id:        true,
-  nombre:    true,
-  apellido:  true,
-  documento: true,
-  email:     true,
-  telefono:  true,
-  domicilio: true,
-  estado:    true,
-  createdAt: true,
-  updatedAt: true,
-}
+  id:            true,
+  institucionId: true,
+  nombre:        true,
+  apellido:      true,
+  documento:     true,
+  email:         true,
+  telefono:      true,
+  domicilio:     true,
 
+  estado:        true,
+  activo:        true,
+  deletedAt:     true,
+
+  createdAt:     true,
+  updatedAt:     true,
+}
 export const agenteRepository = {
 
-  listar(tenantId: number) {
-    return prisma.agenteInstitucion.findMany({
-      where: {
-        institucionId: tenantId,
-        agente: { activo: true, deletedAt: null },
-      },
-      include: {
-        agente: { select: agenteSelect },
-      },
-      orderBy: { agente: { apellido: "asc" } },
-    })
-  },
+listar(tenantId: number, incluirInactivos = false) {
+  return prisma.agente.findMany({
+    where: {
+      institucionId: tenantId,
+      ...(incluirInactivos ? {} : { activo: true, deletedAt: null }),
+    },
+    select: agenteSelect,
+    orderBy: incluirInactivos
+      ? [{ activo: "desc" }, { apellido: "asc" }]
+      : { apellido: "asc" },
+  })
+},
 
   obtenerPorId(agenteId: number, tenantId: number) {
-    return prisma.agenteInstitucion.findFirst({
+    return prisma.agente.findFirst({
       where: {
-        agenteId,
+        id: agenteId,
         institucionId: tenantId,
-        agente: { activo: true, deletedAt: null },
+        activo: true,
+        deletedAt: null,
       },
-      include: {
-        agente: { select: agenteSelect },
-      },
+      select: agenteSelect,
     })
   },
 
   existeEnTenant(agenteId: number, tenantId: number) {
-    return prisma.agenteInstitucion.findFirst({
+    return prisma.agente.findFirst({
       where: {
-        agenteId,
+        id: agenteId,
         institucionId: tenantId,
-        agente: { activo: true, deletedAt: null },
+        activo: true,
+        deletedAt: null,
       },
-      select: { agenteId: true },
+      select: { id: true },
     })
   },
+  existeEliminado(agenteId: number, tenantId: number) {
+  return prisma.agente.findFirst({
+    where: {
+      id: agenteId,
+      institucionId: tenantId,
+      activo: false,  // solo busca inactivos
+    },
+    select: { id: true },
+  })
+},
 
   crear(data: {
     nombre:    string
@@ -63,28 +77,17 @@ export const agenteRepository = {
     domicilio: string | null
     tenantId:  number
   }) {
-    return prisma.$transaction(async (tx) => {
-      const agente = await tx.agente.create({
-        data: {
-          nombre:    data.nombre,
-          apellido:  data.apellido,
-          documento: data.documento,
-          email:     data.email,
-          telefono:  data.telefono,
-          domicilio: data.domicilio,
-        },
-        select: agenteSelect,
-      })
-
-      const agenteInstitucion = await tx.agenteInstitucion.create({
-        data: {
-          agenteId:      agente.id,
-          institucionId: data.tenantId,
-          documento:     data.documento,
-        },
-      })
-
-      return { agente, agenteInstitucion }
+    return prisma.agente.create({
+      data: {
+        institucionId: data.tenantId,
+        nombre:        data.nombre,
+        apellido:      data.apellido,
+        documento:     data.documento,
+        email:         data.email,
+        telefono:      data.telefono,
+        domicilio:     data.domicilio,
+      },
+      select: agenteSelect,
     })
   },
 
@@ -96,73 +99,72 @@ export const agenteRepository = {
     telefono?:  string
     domicilio?: string
   }) {
+    const dataAgente: Prisma.AgenteUpdateInput = {}
+
+    if (data.nombre    !== undefined) dataAgente.nombre    = data.nombre
+    if (data.apellido  !== undefined) dataAgente.apellido  = data.apellido
+    if (data.email     !== undefined) dataAgente.email     = data.email
+    if (data.telefono  !== undefined) dataAgente.telefono  = data.telefono
+    if (data.domicilio !== undefined) dataAgente.domicilio = data.domicilio
+    if (data.documento !== undefined) dataAgente.documento = data.documento
+
     return prisma.$transaction(async (tx) => {
-      const dataAgente: Prisma.AgenteUpdateInput = {}
-
-      if (data.nombre    !== undefined) dataAgente.nombre    = data.nombre
-      if (data.apellido  !== undefined) dataAgente.apellido  = data.apellido
-      if (data.email     !== undefined) dataAgente.email     = data.email
-      if (data.telefono  !== undefined) dataAgente.telefono  = data.telefono
-      if (data.domicilio !== undefined) dataAgente.domicilio = data.domicilio
-      if (data.documento !== undefined) dataAgente.documento = data.documento
-
-      const agente = await tx.agente.update({
-        where: { id: agenteId },
-        data:  dataAgente,
-        select: agenteSelect,
+      await tx.agente.updateMany({
+        where: {
+          id: agenteId,
+          institucionId: tenantId,
+        },
+        data: dataAgente,
       })
 
-      if (data.documento !== undefined) {
-        await tx.agenteInstitucion.update({
-          where: {
-            agenteId_institucionId: {
-              agenteId,
-              institucionId: tenantId,
-            },
-          },
-          data: { documento: data.documento },
-        })
-      }
-
-      return agente
+      return tx.agente.findFirst({
+        where: {
+          id: agenteId,
+          institucionId: tenantId,
+          activo: true,
+          deletedAt: null,
+        },
+        select: agenteSelect,
+      })
     })
   },
 
   /**
-   * Eliminación correcta multi-tenant:
-   * 1. elimina la relación con el tenant
-   * 2. si el agente no tiene más relaciones → soft delete
+   * Soft delete dentro del tenant
    */
-  async eliminar(agenteId: number, tenantId: number) {
-    return prisma.$transaction(async (tx) => {
+eliminar(agenteId: number, tenantId: number) {
+  return prisma.agente.updateMany({
+    where: { id: agenteId, institucionId: tenantId },
+    data: {
+      activo: false,
+      deletedAt: new Date(),
+      estado: Estado.INACTIVO,
+    },
+  })
+},
 
-      // 1. eliminar relación con el tenant
-      await tx.agenteInstitucion.delete({
-        where: {
-          agenteId_institucionId: {
-            agenteId,
-            institucionId: tenantId,
-          },
-        },
-      })
 
-      // 2. verificar si quedan relaciones
-      const relacionesRestantes = await tx.agenteInstitucion.count({
-        where: { agenteId },
-      })
 
-      // 3. si no quedan → soft delete del agente
-      if (relacionesRestantes === 0) {
-        await tx.agente.update({
-          where: { id: agenteId },
-          data: {
-            activo: false,
-            deletedAt: new Date(),
-          },
-        })
-      }
 
-      return { ok: true }
+listarConInactivos(tenantId: number) {
+  return prisma.agente.findMany({
+    where: {
+      institucionId: tenantId,
+      // sin filtro → trae activos Y eliminados
+    },
+    select: agenteSelect,
+    orderBy: [{ activo: "desc" }, { apellido: "asc" }],
+  })
+},
+
+  reactivar(agenteId: number, tenantId: number) {
+    return prisma.agente.updateMany({
+      where: { id: agenteId, institucionId: tenantId },
+      data: {
+        activo:    true,
+        deletedAt: null,
+        estado:    Estado.ACTIVO,
+      },
     })
   },
 }

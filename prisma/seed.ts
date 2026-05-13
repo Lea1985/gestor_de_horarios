@@ -13,7 +13,7 @@
  */
 
 import { PrismaClient, Estado, TipoUnidad, Dias, EstadoClase } from "@prisma/client";
-import * as bcrypt from "bcrypt";
+import bcrypt from "bcrypt"
 
 const prisma = new PrismaClient();
 
@@ -197,7 +197,7 @@ async function main() {
         token: "token-admin-escuela-seed-001",
         ip: "192.168.1.10",
         userAgent: "Mozilla/5.0",
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 8), // 8hs
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 8),
       },
       {
         usuarioId: usuarioAdminSanatorio.id,
@@ -218,32 +218,32 @@ async function main() {
   const turnoMananaEscuela = await prisma.turno.upsert({
     where: { institucionId_nombre: { institucionId: escuela.id, nombre: "Mañana" } },
     update: {},
-    create: { institucionId: escuela.id, nombre: "Mañana", horaInicio: 420, horaFin: 720 }, // 7:00 - 12:00
+    create: { institucionId: escuela.id, nombre: "Mañana", horaInicio: 420, horaFin: 720 },
   });
 
   const turnoTardeEscuela = await prisma.turno.upsert({
     where: { institucionId_nombre: { institucionId: escuela.id, nombre: "Tarde" } },
     update: {},
-    create: { institucionId: escuela.id, nombre: "Tarde", horaInicio: 780, horaFin: 1020 }, // 13:00 - 17:00
+    create: { institucionId: escuela.id, nombre: "Tarde", horaInicio: 780, horaFin: 1020 },
   });
 
   // TURNOS — SANATORIO
   const turnoManaSanatorio = await prisma.turno.upsert({
     where: { institucionId_nombre: { institucionId: sanatorio.id, nombre: "Mañana" } },
     update: {},
-    create: { institucionId: sanatorio.id, nombre: "Mañana", horaInicio: 420, horaFin: 840 }, // 7:00 - 14:00
+    create: { institucionId: sanatorio.id, nombre: "Mañana", horaInicio: 420, horaFin: 840 },
   });
 
   const turnoTardeSanatorio = await prisma.turno.upsert({
     where: { institucionId_nombre: { institucionId: sanatorio.id, nombre: "Tarde" } },
     update: {},
-    create: { institucionId: sanatorio.id, nombre: "Tarde", horaInicio: 840, horaFin: 1260 }, // 14:00 - 21:00
+    create: { institucionId: sanatorio.id, nombre: "Tarde", horaInicio: 840, horaFin: 1260 },
   });
 
   const turnoNocheSanatorio = await prisma.turno.upsert({
     where: { institucionId_nombre: { institucionId: sanatorio.id, nombre: "Noche" } },
     update: {},
-    create: { institucionId: sanatorio.id, nombre: "Noche", horaInicio: 1260, horaFin: 420 }, // 21:00 - 7:00
+    create: { institucionId: sanatorio.id, nombre: "Noche", horaInicio: 1260, horaFin: 420 },
   });
 
   console.log("✅ Turnos creados");
@@ -349,7 +349,7 @@ async function main() {
     },
   });
 
-  // COMISIONES — SANATORIO (guardias por sector)
+  // COMISIONES — SANATORIO
   const guardiaMananaUTI = await prisma.comision.upsert({
     where: { cursoId_nombre: { cursoId: sectorUTI.id, nombre: "Guardia Mañana UTI" } },
     update: {},
@@ -357,7 +357,7 @@ async function main() {
       institucionId: sanatorio.id,
       cursoId: sectorUTI.id,
       turnoId: turnoManaSanatorio.id,
-      unidadId: utiSanatorio.id, // fija en UTI
+      unidadId: utiSanatorio.id,
       nombre: "Guardia Mañana UTI",
     },
   });
@@ -369,7 +369,7 @@ async function main() {
       institucionId: sanatorio.id,
       cursoId: sectorGuardia.id,
       turnoId: turnoNocheSanatorio.id,
-      unidadId: null, // sin unidad fija
+      unidadId: null,
       nombre: "Guardia Noche Central",
     },
   });
@@ -378,29 +378,34 @@ async function main() {
 
   // -----------------------------------------------------------------------
   // MATERIAS — ESCUELA
+  //
+  // El unique ahora es [cursoId, nombre], no [institucionId, nombre].
+  // Las materias sin cursoId (transversales) no pueden usar upsert por
+  // ese unique ya que cursoId sería null; se usan findFirst + create.
   // -----------------------------------------------------------------------
   const matLengua = await prisma.materia.upsert({
-    where: { institucionId_nombre: { institucionId: escuela.id, nombre: "Lengua" } },
+    where: { cursoId_nombre: { cursoId: curso1.id, nombre: "Lengua" } },
     update: {},
-    create: { institucionId: escuela.id, nombre: "Lengua" },
+    create: { institucionId: escuela.id, cursoId: curso1.id, nombre: "Lengua" },
   });
 
   const matMatematica = await prisma.materia.upsert({
-    where: { institucionId_nombre: { institucionId: escuela.id, nombre: "Matemática" } },
+    where: { cursoId_nombre: { cursoId: curso2.id, nombre: "Matemática" } },
     update: {},
-    create: { institucionId: escuela.id, nombre: "Matemática" },
+    create: { institucionId: escuela.id, cursoId: curso2.id, nombre: "Matemática" },
   });
 
+  // Ciencias Naturales se dicta en 1° Año en el laboratorio
   const matCiencias = await prisma.materia.upsert({
-    where: { institucionId_nombre: { institucionId: escuela.id, nombre: "Ciencias Naturales" } },
+    where: { cursoId_nombre: { cursoId: curso1.id, nombre: "Ciencias Naturales" } },
     update: {},
-    create: { institucionId: escuela.id, nombre: "Ciencias Naturales" },
+    create: { institucionId: escuela.id, cursoId: curso1.id, nombre: "Ciencias Naturales" },
   });
 
   console.log("✅ Materias creadas");
 
   // -----------------------------------------------------------------------
-  // CODIGARIOS — ESCUELA (tipos de incidencia)
+  // CODIGARIOS — ESCUELA
   // -----------------------------------------------------------------------
   const codigarioAusentismoEscuela = await prisma.codigario.upsert({
     where: { institucionId_nombre: { institucionId: escuela.id, nombre: "Ausentismo Docente" } },
@@ -458,213 +463,207 @@ async function main() {
 
   console.log("✅ Codigarios creados");
 
+ // -----------------------------------------------------------------------
+// AGENTES
+// -----------------------------------------------------------------------
+const agenteGarcia = await prisma.agente.upsert({
+  where: { institucionId_documento: { institucionId: escuela.id, documento: "25111222" } },
+  update: {},
+  create: {
+    institucionId: escuela.id,
+    nombre: "María",
+    apellido: "García",
+    documento: "25111222",
+    email: "garcia.maria@escuela12.edu.ar",
+    telefono: "0341-155001001",
+    domicilio: "Pellegrini 800, Rosario",
+    estado: Estado.ACTIVO,
+  },
+})
+
+const agenteLopez = await prisma.agente.upsert({
+  where: { institucionId_documento: { institucionId: escuela.id, documento: "30222333" } },
+  update: {},
+  create: {
+    institucionId: escuela.id,
+    nombre: "Juan",
+    apellido: "López",
+    documento: "30222333",
+    email: "lopez.juan@escuela12.edu.ar",
+    estado: Estado.ACTIVO,
+  },
+})
+
+const agenteMedico = await prisma.agente.upsert({
+  where: { institucionId_documento: { institucionId: sanatorio.id, documento: "28333444" } },
+  update: {},
+  create: {
+    institucionId: sanatorio.id,
+    nombre: "Carlos",
+    apellido: "Fernández",
+    documento: "28333444",
+    email: "fernandez@sanatoriosur.com.ar",
+    estado: Estado.ACTIVO,
+  },
+})
+
+const agenteMulti = await prisma.agente.upsert({
+  where: { institucionId_documento: { institucionId: sanatorio.id, documento: "32444555" } },
+  update: {},
+  create: {
+    institucionId: sanatorio.id,
+    nombre: "Laura",
+    apellido: "Rodríguez",
+    documento: "32444555",
+    email: "rodriguez.laura@gmail.com",
+    estado: Estado.ACTIVO,
+  },
+})
+
+ 
   // -----------------------------------------------------------------------
-  // AGENTES
-  // -----------------------------------------------------------------------
-
-  // Agente que trabaja en la escuela (docente + director = múltiples cargos)
-  const agenteGarcia = await prisma.agente.upsert({
-    where: { id: 1 },
-    update: {},
-    create: {
-      nombre: "María",
-      apellido: "García",
-      documento: "25111222",
-      email: "garcia.maria@escuela12.edu.ar",
-      telefono: "0341-155001001",
-      domicilio: "Pellegrini 800, Rosario",
-      estado: Estado.ACTIVO,
-    },
-  });
-
-  // Agente docente simple
-  const agenteLopez = await prisma.agente.upsert({
-    where: { id: 2 },
-    update: {},
-    create: {
-      nombre: "Juan",
-      apellido: "López",
-      documento: "30222333",
-      email: "lopez.juan@escuela12.edu.ar",
-      estado: Estado.ACTIVO,
-    },
-  });
-
-  // Agente en sanatorio
-  const agenteMedico = await prisma.agente.upsert({
-    where: { id: 3 },
-    update: {},
-    create: {
-      nombre: "Carlos",
-      apellido: "Fernández",
-      documento: "28333444",
-      email: "fernandez@sanatoriosur.com.ar",
-      estado: Estado.ACTIVO,
-    },
-  });
-
-  // Agente en AMBAS instituciones (valida multi-tenant)
-  const agenteMulti = await prisma.agente.upsert({
-    where: { id: 4 },
-    update: {},
-    create: {
-      nombre: "Laura",
-      apellido: "Rodríguez",
-      documento: "32444555",
-      email: "rodriguez.laura@gmail.com",
-      estado: Estado.ACTIVO,
-    },
-  });
-
-  console.log("✅ Agentes creados");
-
-  // -----------------------------------------------------------------------
-  // AGENTE-INSTITUCIÓN (vinculación multi-tenant)
-  // -----------------------------------------------------------------------
-  await prisma.agenteInstitucion.upsert({
-    where: { agenteId_institucionId: { agenteId: agenteGarcia.id, institucionId: escuela.id } },
-    update: {},
-    create: { agenteId: agenteGarcia.id, institucionId: escuela.id, documento: "25111222" },
-  });
-
-  await prisma.agenteInstitucion.upsert({
-    where: { agenteId_institucionId: { agenteId: agenteLopez.id, institucionId: escuela.id } },
-    update: {},
-    create: { agenteId: agenteLopez.id, institucionId: escuela.id, documento: "30222333" },
-  });
-
-  await prisma.agenteInstitucion.upsert({
-    where: { agenteId_institucionId: { agenteId: agenteMedico.id, institucionId: sanatorio.id } },
-    update: {},
-    create: { agenteId: agenteMedico.id, institucionId: sanatorio.id, documento: "28333444" },
-  });
-
-  // Laura trabaja en ambas instituciones
-  await prisma.agenteInstitucion.upsert({
-    where: { agenteId_institucionId: { agenteId: agenteMulti.id, institucionId: escuela.id } },
-    update: {},
-    create: { agenteId: agenteMulti.id, institucionId: escuela.id, documento: "32444555" },
-  });
-
-  await prisma.agenteInstitucion.upsert({
-    where: { agenteId_institucionId: { agenteId: agenteMulti.id, institucionId: sanatorio.id } },
-    update: {},
-    create: { agenteId: agenteMulti.id, institucionId: sanatorio.id, documento: "32444555" },
-  });
-
-  console.log("✅ AgenteInstitucion vinculados");
-
-  // -----------------------------------------------------------------------
-  // ASIGNACIONES — ESCUELA
+  // ASIGNACIONES
   //
-  // García tiene DOS cargos en la misma institución:
-  //   1. Docente de Lengua en 1°A
-  //   2. Directora (cargo ADMIN en Dirección)
-  // Esto valida que se eliminó el unique [agenteId, unidadId, institucionId]
+  // agenteId ya no existe en Asignacion. El titular se crea en
+  // TitularAsignacion después de cada upsert de asignación.
+  //
+  // cursoId tampoco existe en Asignacion (vive en Comision/Materia).
+  //
+  // turnoId es obligatorio: asigGarciaDir (cargo directivo) necesita uno.
   // -----------------------------------------------------------------------
+
+  // — Escuela: García, Lengua en 1°A —
   const asigGarciaLengua = await prisma.asignacion.upsert({
     where: { institucionId_identificadorEstructural: { institucionId: escuela.id, identificadorEstructural: "DOC-1A-LENGUA" } },
     update: {},
     create: {
-      institucionId: escuela.id,
-      agenteId: agenteGarcia.id,
-      unidadId: aulaA.id,
+      institucionId:            escuela.id,
+      unidadId:                 aulaA.id,
       identificadorEstructural: "DOC-1A-LENGUA",
-      fecha_inicio: new Date("2025-03-01"),
-      estado: Estado.ACTIVO,
-      materiaId: matLengua.id,
-      cursoId: curso1.id,
-      comisionId: comision1A.id,
-      turnoId: turnoMananaEscuela.id,
+      fecha_inicio:             new Date("2025-03-01"),
+      estado:                   Estado.ACTIVO,
+      materiaId:                matLengua.id,
+      comisionId:               comision1A.id,
+      turnoId:                  turnoMananaEscuela.id,
     },
   });
 
-  // Mismo agente (García), misma institución → cargo directivo en otra unidad
+  // — Escuela: García, cargo directivo (sin materia ni comisión) —
   const asigGarciaDir = await prisma.asignacion.upsert({
     where: { institucionId_identificadorEstructural: { institucionId: escuela.id, identificadorEstructural: "DIR-001" } },
     update: {},
     create: {
-      institucionId: escuela.id,
-      agenteId: agenteGarcia.id,
-      unidadId: direccion.id,
+      institucionId:            escuela.id,
+      unidadId:                 direccion.id,
       identificadorEstructural: "DIR-001",
-      fecha_inicio: new Date("2024-03-01"),
-      estado: Estado.ACTIVO,
-      // Sin materia, curso ni comisión → cargo administrativo
+      fecha_inicio:             new Date("2024-03-01"),
+      estado:                   Estado.ACTIVO,
+      turnoId:                  turnoMananaEscuela.id, // turno requerido; directivo en turno mañana
     },
   });
 
+  // — Escuela: López, Matemática en 2°A —
   const asigLopezMat = await prisma.asignacion.upsert({
     where: { institucionId_identificadorEstructural: { institucionId: escuela.id, identificadorEstructural: "DOC-2A-MAT" } },
     update: {},
     create: {
-      institucionId: escuela.id,
-      agenteId: agenteLopez.id,
-      unidadId: aulaB.id,
+      institucionId:            escuela.id,
+      unidadId:                 aulaB.id,
       identificadorEstructural: "DOC-2A-MAT",
-      fecha_inicio: new Date("2025-03-01"),
-      estado: Estado.ACTIVO,
-      materiaId: matMatematica.id,
-      cursoId: curso2.id,
-      comisionId: comision2A.id,
-      turnoId: turnoTardeEscuela.id,
+      fecha_inicio:             new Date("2025-03-01"),
+      estado:                   Estado.ACTIVO,
+      materiaId:                matMatematica.id,
+      comisionId:               comision2A.id,
+      turnoId:                  turnoTardeEscuela.id,
     },
   });
 
+  // — Escuela: López, Ciencias en laboratorio (1°A) —
   const asigLopezCiencias = await prisma.asignacion.upsert({
     where: { institucionId_identificadorEstructural: { institucionId: escuela.id, identificadorEstructural: "DOC-1A-CIEN" } },
     update: {},
     create: {
-      institucionId: escuela.id,
-      agenteId: agenteLopez.id,
-      unidadId: laboratorio.id,
+      institucionId:            escuela.id,
+      unidadId:                 laboratorio.id,
       identificadorEstructural: "DOC-1A-CIEN",
-      fecha_inicio: new Date("2025-03-01"),
-      estado: Estado.ACTIVO,
-      materiaId: matCiencias.id,
-      cursoId: curso1.id,
-      comisionId: comision1A.id,
-      turnoId: turnoMananaEscuela.id,
+      fecha_inicio:             new Date("2025-03-01"),
+      estado:                   Estado.ACTIVO,
+      materiaId:                matCiencias.id,
+      comisionId:               comision1A.id,
+      turnoId:                  turnoMananaEscuela.id,
     },
   });
 
-  // ASIGNACIONES — SANATORIO
+  // — Sanatorio: Fernández, UTI mañana —
   const asigMedicoUTI = await prisma.asignacion.upsert({
     where: { institucionId_identificadorEstructural: { institucionId: sanatorio.id, identificadorEstructural: "MED-UTI-MAN" } },
     update: {},
     create: {
-      institucionId: sanatorio.id,
-      agenteId: agenteMedico.id,
-      unidadId: utiSanatorio.id,
+      institucionId:            sanatorio.id,
+      unidadId:                 utiSanatorio.id,
       identificadorEstructural: "MED-UTI-MAN",
-      fecha_inicio: new Date("2024-01-01"),
-      estado: Estado.ACTIVO,
-      turnoId: turnoManaSanatorio.id,
-      comisionId: guardiaMananaUTI.id,
-      // Sin materia ni curso
+      fecha_inicio:             new Date("2024-01-01"),
+      estado:                   Estado.ACTIVO,
+      turnoId:                  turnoManaSanatorio.id,
+      comisionId:               guardiaMananaUTI.id,
     },
   });
 
+  // — Sanatorio: Laura, guardia noche central —
   const asigMultiGuardia = await prisma.asignacion.upsert({
     where: { institucionId_identificadorEstructural: { institucionId: sanatorio.id, identificadorEstructural: "ENF-GUAR-NOC" } },
     update: {},
     create: {
-      institucionId: sanatorio.id,
-      agenteId: agenteMulti.id,
-      unidadId: guardiaSanatorio.id,
+      institucionId:            sanatorio.id,
+      unidadId:                 guardiaSanatorio.id,
       identificadorEstructural: "ENF-GUAR-NOC",
-      fecha_inicio: new Date("2024-06-01"),
-      estado: Estado.ACTIVO,
-      turnoId: turnoNocheSanatorio.id,
-      comisionId: guardiaNocheGuardia.id,
+      fecha_inicio:             new Date("2024-06-01"),
+      estado:                   Estado.ACTIVO,
+      turnoId:                  turnoNocheSanatorio.id,
+      comisionId:               guardiaNocheGuardia.id,
     },
   });
 
   console.log("✅ Asignaciones creadas");
 
   // -----------------------------------------------------------------------
-  // MÓDULOS HORARIOS — ESCUELA (minutos desde medianoche)
-  // Turno mañana: módulos 7:40-8:20, 8:20-9:00, 9:00-9:40
+  // TITULARES DE ASIGNACIÓN
+  //
+  // Un upsert no es posible porque TitularAsignacion no tiene un unique
+  // compuesto que lo identifique de forma idempotente (puede haber varios
+  // registros por asignación). Se usa findFirst + create para que el seed
+  // sea re-ejecutable sin duplicar titulares.
+  // -----------------------------------------------------------------------
+  async function upsertTitular(params: {
+    institucionId: number
+    asignacionId: number
+    agenteId: number
+    fecha_desde: Date
+  }) {
+    const existe = await prisma.titularAsignacion.findFirst({
+      where: {
+        asignacionId: params.asignacionId,
+        agenteId:     params.agenteId,
+        fecha_desde:  params.fecha_desde,
+      },
+    })
+
+    if (!existe) {
+      await prisma.titularAsignacion.create({ data: params })
+    }
+  }
+
+  await upsertTitular({ institucionId: escuela.id,   asignacionId: asigGarciaLengua.id, agenteId: agenteGarcia.id, fecha_desde: new Date("2025-03-01") })
+  await upsertTitular({ institucionId: escuela.id,   asignacionId: asigGarciaDir.id,    agenteId: agenteGarcia.id, fecha_desde: new Date("2024-03-01") })
+  await upsertTitular({ institucionId: escuela.id,   asignacionId: asigLopezMat.id,     agenteId: agenteLopez.id,  fecha_desde: new Date("2025-03-01") })
+  await upsertTitular({ institucionId: escuela.id,   asignacionId: asigLopezCiencias.id,agenteId: agenteLopez.id,  fecha_desde: new Date("2025-03-01") })
+  await upsertTitular({ institucionId: sanatorio.id, asignacionId: asigMedicoUTI.id,    agenteId: agenteMedico.id, fecha_desde: new Date("2024-01-01") })
+  await upsertTitular({ institucionId: sanatorio.id, asignacionId: asigMultiGuardia.id, agenteId: agenteMulti.id,  fecha_desde: new Date("2024-06-01") })
+
+  console.log("✅ Titulares de asignación creados");
+
+  // -----------------------------------------------------------------------
+  // MÓDULOS HORARIOS — ESCUELA
   // -----------------------------------------------------------------------
   const modulo1 = await prisma.moduloHorario.upsert({
     where: { institucionId_dia_semana_hora_desde_hora_hasta: { institucionId: escuela.id, dia_semana: Dias.LUNES, hora_desde: 460, hora_hasta: 500 } },
@@ -684,7 +683,7 @@ async function main() {
     create: { institucionId: escuela.id, dia_semana: Dias.MIERCOLES, hora_desde: 460, hora_hasta: 500, turnoId: turnoMananaEscuela.id },
   });
 
-  // MÓDULOS HORARIOS — SANATORIO (guardias de 6hs = 360 min)
+  // MÓDULOS HORARIOS — SANATORIO
   const moduloGuardiaManaUTI = await prisma.moduloHorario.upsert({
     where: { institucionId_dia_semana_hora_desde_hora_hasta: { institucionId: sanatorio.id, dia_semana: Dias.LUNES, hora_desde: 420, hora_hasta: 780 } },
     update: {},
@@ -694,15 +693,15 @@ async function main() {
   console.log("✅ Módulos horarios creados");
 
   // -----------------------------------------------------------------------
-  // DISTRIBUCIÓN HORARIA — ESCUELA (García → Lengua lunes y miércoles)
+  // DISTRIBUCIÓN HORARIA
   // -----------------------------------------------------------------------
   const distGarciaLengua = await prisma.distribucionHoraria.upsert({
     where: { asignacionId_version: { asignacionId: asigGarciaLengua.id, version: 1 } },
     update: {},
     create: {
       institucionId: escuela.id,
-      asignacionId: asigGarciaLengua.id,
-      version: 1,
+      asignacionId:  asigGarciaLengua.id,
+      version:       1,
       fecha_vigencia_desde: new Date("2025-03-01"),
       estado: Estado.ACTIVO,
     },
@@ -720,14 +719,13 @@ async function main() {
     create: { distribucionHorariaId: distGarciaLengua.id, moduloHorarioId: modulo3.id },
   });
 
-  // DISTRIBUCIÓN HORARIA — López → Matemática lunes
   const distLopezMat = await prisma.distribucionHoraria.upsert({
     where: { asignacionId_version: { asignacionId: asigLopezMat.id, version: 1 } },
     update: {},
     create: {
       institucionId: escuela.id,
-      asignacionId: asigLopezMat.id,
-      version: 1,
+      asignacionId:  asigLopezMat.id,
+      version:       1,
       fecha_vigencia_desde: new Date("2025-03-01"),
       estado: Estado.ACTIVO,
     },
@@ -742,17 +740,18 @@ async function main() {
   console.log("✅ Distribuciones horarias creadas");
 
   // -----------------------------------------------------------------------
-  // HORARIOS ASIGNADOS (vista desnormalizada)
+  // HORARIOS ASIGNADOS
+  // agenteId es snapshot del titular al momento de crear el horario.
   // -----------------------------------------------------------------------
   await prisma.horarioAsignado.upsert({
     where: { distribucionHorariaId_moduloHorarioId: { distribucionHorariaId: distGarciaLengua.id, moduloHorarioId: modulo1.id } },
     update: {},
     create: {
-      institucionId: escuela.id,
-      agenteId: agenteGarcia.id,
-      asignacionId: asigGarciaLengua.id,
+      institucionId:         escuela.id,
+      agenteId:              agenteGarcia.id,  // snapshot
+      asignacionId:          asigGarciaLengua.id,
       distribucionHorariaId: distGarciaLengua.id,
-      moduloHorarioId: modulo1.id,
+      moduloHorarioId:       modulo1.id,
     },
   });
 
@@ -760,75 +759,105 @@ async function main() {
     where: { distribucionHorariaId_moduloHorarioId: { distribucionHorariaId: distGarciaLengua.id, moduloHorarioId: modulo3.id } },
     update: {},
     create: {
-      institucionId: escuela.id,
-      agenteId: agenteGarcia.id,
-      asignacionId: asigGarciaLengua.id,
+      institucionId:         escuela.id,
+      agenteId:              agenteGarcia.id,  // snapshot
+      asignacionId:          asigGarciaLengua.id,
       distribucionHorariaId: distGarciaLengua.id,
-      moduloHorarioId: modulo3.id,
+      moduloHorarioId:       modulo3.id,
     },
   });
 
   console.log("✅ Horarios asignados creados");
 
   // -----------------------------------------------------------------------
-  // CLASES PROGRAMADAS — semana del 7 al 11 de abril 2025
+  // CLASES PROGRAMADAS
   // -----------------------------------------------------------------------
-  const claseGarciaLunes = await prisma.claseProgramada.create({
-    data: {
-      institucionId: escuela.id,
+const claseGarciaLunes = await prisma.claseProgramada.upsert({
+  where: {
+    asignacionId_moduloId_fecha: {
       asignacionId: asigGarciaLengua.id,
       moduloId: modulo1.id,
-      unidadId: aulaA.id,
-      comisionId: comision1A.id,
       fecha: new Date("2025-04-07T07:40:00"),
-      estado: EstadoClase.DICTADA,
     },
-  });
+  },
+  update: {},
+  create: {
+    institucionId: escuela.id,
+    asignacionId: asigGarciaLengua.id,
+    moduloId: modulo1.id,
+    unidadId: aulaA.id,
+    comisionId: comision1A.id,
+    fecha: new Date("2025-04-07T07:40:00"),
+    estado: EstadoClase.DICTADA,
+  },
+});
 
-  const claseGarciaMartes = await prisma.claseProgramada.create({
-    data: {
-      institucionId: escuela.id,
+const claseGarciaMartes = await prisma.claseProgramada.upsert({
+  where: {
+    asignacionId_moduloId_fecha: {
       asignacionId: asigGarciaLengua.id,
       moduloId: modulo3.id,
-      unidadId: aulaA.id,
-      comisionId: comision1A.id,
       fecha: new Date("2025-04-09T07:40:00"),
-      estado: EstadoClase.PROGRAMADA,
     },
-  });
+  },
+  update: {},
+  create: {
+    institucionId: escuela.id,
+    asignacionId: asigGarciaLengua.id,
+    moduloId: modulo3.id,
+    unidadId: aulaA.id,
+    comisionId: comision1A.id,
+    fecha: new Date("2025-04-09T07:40:00"),
+    estado: EstadoClase.PROGRAMADA,
+  },
+});
 
-  const caseLopezLunes = await prisma.claseProgramada.create({
-    data: {
-      institucionId: escuela.id,
+const claseLopezLunes = await prisma.claseProgramada.upsert({
+  where: {
+    asignacionId_moduloId_fecha: {
       asignacionId: asigLopezMat.id,
       moduloId: modulo2.id,
-      unidadId: aulaB.id,
-      comisionId: comision2A.id,
       fecha: new Date("2025-04-07T08:20:00"),
-      estado: EstadoClase.PROGRAMADA,
     },
-  });
+  },
+  update: {},
+  create: {
+    institucionId: escuela.id,
+    asignacionId: asigLopezMat.id,
+    moduloId: modulo2.id,
+    unidadId: aulaB.id,
+    comisionId: comision2A.id,
+    fecha: new Date("2025-04-07T08:20:00"),
+    estado: EstadoClase.PROGRAMADA,
+  },
+});
 
   console.log("✅ Clases programadas creadas");
 
   // -----------------------------------------------------------------------
-  // INCIDENCIA — García ausente el 9/4 por enfermedad
+  // INCIDENCIA — García ausente el 9/4
   // -----------------------------------------------------------------------
-  const incidenciaGarcia = await prisma.incidencia.create({
-    data: {
+const incidenciaGarcia = await prisma.incidencia.upsert({
+  where: {
+    asignacionId_fecha_desde: {
       asignacionId: asigGarciaLengua.id,
       fecha_desde: new Date("2025-04-09"),
-      fecha_hasta: new Date("2025-04-09"),
-      codigarioItemId: itemEnfermedad.id,
-      observacion: "Certificado médico presentado",
     },
-  });
+  },
+  update: {},
+  create: {
+    asignacionId: asigGarciaLengua.id,
+    fecha_desde: new Date("2025-04-09"),
+    fecha_hasta: new Date("2025-04-09"),
+    codigarioItemId: itemEnfermedad.id,
+    observacion: "Certificado médico presentado",
+  },
+});
 
-  // Clase del miércoles queda SUSPENDIDA por la incidencia
   await prisma.claseProgramada.update({
     where: { id: claseGarciaMartes.id },
     data: {
-      estado: EstadoClase.SUSPENDIDA,
+      estado:      EstadoClase.SUSPENDIDA,
       incidenciaId: incidenciaGarcia.id,
     },
   });
@@ -838,14 +867,21 @@ async function main() {
   // -----------------------------------------------------------------------
   // REEMPLAZO — López reemplaza a García el miércoles
   // -----------------------------------------------------------------------
-  await prisma.reemplazo.create({
-    data: {
+await prisma.reemplazo.upsert({
+  where: {
+    claseId_asignacionSuplenteId: {
       claseId: claseGarciaMartes.id,
-      asignacionTitularId: asigGarciaLengua.id,
       asignacionSuplenteId: asigLopezCiencias.id,
-      observacion: "Reemplazo de emergencia por enfermedad titular",
     },
-  });
+  },
+  update: {},
+  create: {
+    claseId: claseGarciaMartes.id,
+    asignacionTitularId: asigGarciaLengua.id,
+    asignacionSuplenteId: asigLopezCiencias.id,
+    observacion: "Reemplazo de emergencia por enfermedad titular",
+  },
+});
 
   console.log("✅ Reemplazo creado");
 
@@ -856,17 +892,17 @@ async function main() {
     skipDuplicates: true,
     data: [
       {
-        institucionId: escuela.id,
-        fecha: new Date("2025-04-02"),
-        descripcion: "Feriado Nacional - Malvinas",
-        esFeriado: true,
+        institucionId:  escuela.id,
+        fecha:          new Date("2025-04-02"),
+        descripcion:    "Feriado Nacional - Malvinas",
+        esFeriado:      true,
         suspendeClases: true,
       },
       {
-        institucionId: escuela.id,
-        fecha: new Date("2025-07-07"),
-        descripcion: "Inicio receso invernal",
-        esFeriado: false,
+        institucionId:  escuela.id,
+        fecha:          new Date("2025-07-07"),
+        descripcion:    "Inicio receso invernal",
+        esFeriado:      false,
         suspendeClases: true,
       },
     ],
@@ -885,8 +921,9 @@ async function main() {
   console.log("Turnos        : 2 escuela (M/T) + 3 sanatorio (M/T/N)");
   console.log("Cursos        : 2 escuela + 2 sanatorio (sectores)");
   console.log("Comisiones    : 2 escuela + 2 sanatorio (guardias)");
-  console.log("Materias      : 3 (solo escuela)");
-  console.log("Asignaciones  : 6 (incluye doble cargo García y multi-tenant Laura)");
+  console.log("Materias      : 3 (solo escuela, con cursoId)");
+  console.log("Asignaciones  : 6 (sin agenteId — titular en TitularAsignacion)");
+  console.log("Titulares     : 6 registros iniciales en TitularAsignacion");
   console.log("Clases        : 3 programadas (1 dictada, 1 suspendida, 1 programada)");
   console.log("Incidencias   : 1 (enfermedad García con reemplazo)");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

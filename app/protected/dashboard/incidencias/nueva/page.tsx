@@ -10,10 +10,11 @@ import { useAuth } from "@/app/hooks/useAuth"
 type Asignacion = {
   id:                       number
   identificadorEstructural: string
-  agente:   { nombre: string; apellido: string; documento: string }
+  titularidades: {
+    agente: { nombre: string; apellido: string; documento: string }
+  }[]
   unidad:   { nombre: string }
-  curso:    { id: number; nombre: string } | null
-  comision: { id: number; nombre: string } | null
+  comision: { id: number; nombre: string; curso?: { id: number; nombre: string } } | null
   turno:    { id: number; nombre: string } | null
 }
 
@@ -76,6 +77,14 @@ function blurStyle(hasError: boolean) {
   }
 }
 
+// ── Helper titular ────────────────────────────────────────────
+
+function nombreAgente(a: Asignacion): string {
+  const agente = a.titularidades[0]?.agente
+  if (!agente) return "Vacante"
+  return `${agente.apellido}, ${agente.nombre}`
+}
+
 // ── Indicador de pasos ────────────────────────────────────────
 
 function Stepper({ paso }: { paso: 1 | 2 | 3 }) {
@@ -83,9 +92,9 @@ function Stepper({ paso }: { paso: 1 | 2 | 3 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
       {pasos.map((label, i) => {
-        const n       = i + 1
-        const activo  = n === paso
-        const hecho   = n < paso
+        const n      = i + 1
+        const activo = n === paso
+        const hecho  = n < paso
         return (
           <div key={n} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
             <div style={{
@@ -121,28 +130,23 @@ export default function NuevaIncidenciaPage() {
   const { authHeaders } = useAuth()
   const router          = useRouter()
 
-  // Datos base
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [codigarios,   setCodigarios]   = useState<Codigario[]>([])
   const [items,        setItems]        = useState<CodigarioItem[]>([])
   const [loadingBase,  setLoadingBase]  = useState(true)
   const [loadingItems, setLoadingItems] = useState(false)
 
-  // Paso actual
   const [paso, setPaso] = useState<1 | 2 | 3>(1)
 
-  // Paso 1 — filtros y selección
   const [filtroTexto,   setFiltroTexto]   = useState("")
   const [filtroCurso,   setFiltroCurso]   = useState("")
   const [seleccionados, setSeleccionados] = useState<number[]>([])
 
-  // Paso 3 — datos comunes
-  const [datos,      setDatos]      = useState<DatosComunes>(DATOS_VACIO)
-  const [datosErr,   setDatosErr]   = useState<Partial<DatosComunes>>({})
-  const [guardando,  setGuardando]  = useState(false)
-  const [resultado,  setResultado]  = useState<ResultadoCarga[] | null>(null)
+  const [datos,     setDatos]     = useState<DatosComunes>(DATOS_VACIO)
+  const [datosErr,  setDatosErr]  = useState<Partial<DatosComunes>>({})
+  const [guardando, setGuardando] = useState(false)
+  const [resultado, setResultado] = useState<ResultadoCarga[] | null>(null)
 
-  // Error global
   const [error, setError] = useState<string | null>(null)
 
   // ── Carga inicial ────────────────────────────────────────────
@@ -166,7 +170,7 @@ export default function NuevaIncidenciaPage() {
     cargar()
   }, [authHeaders.Authorization])
 
-  // ── Cargar items cuando cambia codigario ─────────────────────
+  // ── Items cuando cambia codigario ────────────────────────────
 
   useEffect(() => {
     if (!datos.codigarioId) { setItems([]); setDatos(p => ({ ...p, codigarioItemId: "" })); return }
@@ -178,12 +182,15 @@ export default function NuevaIncidenciaPage() {
       .finally(() => setLoadingItems(false))
   }, [datos.codigarioId])
 
-  // ── Cursos únicos para filtro ────────────────────────────────
+  // ── Cursos únicos para filtro (derivados de comision.curso) ──
 
   const cursosUnicos = useMemo(() => {
     const vistos = new Map<number, string>()
-    asignaciones.forEach(a => { if (a.curso) vistos.set(a.curso.id, a.curso.nombre) })
-    return Array.from(vistos.entries()).map(([id, nombre]) => ({ id, nombre }))
+    asignaciones.forEach(a => {
+      if (a.comision?.curso) vistos.set(a.comision.curso.id, a.comision.curso.nombre)
+    })
+    return Array.from(vistos.entries())
+      .map(([id, nombre]) => ({ id, nombre }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
   }, [asignaciones])
 
@@ -192,24 +199,24 @@ export default function NuevaIncidenciaPage() {
   const asignacionesFiltradas = useMemo(() => {
     const q = filtroTexto.toLowerCase().trim()
     return asignaciones.filter(a => {
+      const agente = a.titularidades[0]?.agente
       const matchTexto = !q || (
-        a.identificadorEstructural.toLowerCase().includes(q) ||
-        a.agente.apellido.toLowerCase().includes(q)          ||
-        a.agente.nombre.toLowerCase().includes(q)            ||
-        a.agente.documento.toLowerCase().includes(q)
+        a.identificadorEstructural.toLowerCase().includes(q)       ||
+        (agente?.apellido.toLowerCase().includes(q)  ?? false)     ||
+        (agente?.nombre.toLowerCase().includes(q)    ?? false)     ||
+        (agente?.documento.toLowerCase().includes(q) ?? false)
       )
-      const matchCurso = !filtroCurso || a.curso?.id === Number(filtroCurso)
+      const matchCurso = !filtroCurso || a.comision?.curso?.id === Number(filtroCurso)
       return matchTexto && matchCurso
     })
   }, [asignaciones, filtroTexto, filtroCurso])
 
-  // Asignaciones del lote (para paso 2 y 3)
   const asignacionesLote = useMemo(
     () => asignaciones.filter(a => seleccionados.includes(a.id)),
     [asignaciones, seleccionados]
   )
 
-  // ── Helpers selección ────────────────────────────────────────
+  // ── Selección ────────────────────────────────────────────────
 
   function toggleSeleccion(id: number) {
     setSeleccionados(prev =>
@@ -231,7 +238,7 @@ export default function NuevaIncidenciaPage() {
     setSeleccionados(prev => prev.filter(x => x !== id))
   }
 
-  // ── Validar datos comunes ────────────────────────────────────
+  // ── Validación ───────────────────────────────────────────────
 
   function validarDatos(): boolean {
     const err: Partial<DatosComunes> = {}
@@ -269,7 +276,7 @@ export default function NuevaIncidenciaPage() {
         resultados.push({
           asignacionId:  a.id,
           identificador: a.identificadorEstructural,
-          agente:        `${a.agente.apellido}, ${a.agente.nombre}`,
+          agente:        nombreAgente(a),
           ok:            res.ok,
           error:         res.ok ? undefined : (data.error ?? "Error desconocido"),
         })
@@ -277,7 +284,7 @@ export default function NuevaIncidenciaPage() {
         resultados.push({
           asignacionId:  a.id,
           identificador: a.identificadorEstructural,
-          agente:        `${a.agente.apellido}, ${a.agente.nombre}`,
+          agente:        nombreAgente(a),
           ok:            false,
           error:         "Error de red",
         })
@@ -392,7 +399,6 @@ export default function NuevaIncidenciaPage() {
       {paso === 1 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
 
-          {/* Filtros */}
           <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" as const }}>
             <input
               value={filtroTexto}
@@ -414,14 +420,12 @@ export default function NuevaIncidenciaPage() {
             </select>
           </div>
 
-          {/* Contador seleccionados */}
           {seleccionados.length > 0 && (
             <p style={{ fontSize: "var(--text-xs)", color: "var(--color-accent)", fontWeight: "var(--font-medium)" }}>
               {seleccionados.length} asignación{seleccionados.length !== 1 ? "es" : ""} seleccionada{seleccionados.length !== 1 ? "s" : ""}
             </p>
           )}
 
-          {/* Tabla */}
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -448,6 +452,7 @@ export default function NuevaIncidenciaPage() {
                   </tr>
                 ) : asignacionesFiltradas.map(a => {
                   const seleccionado = seleccionados.includes(a.id)
+                  const agente = a.titularidades[0]?.agente
                   return (
                     <tr
                       key={a.id}
@@ -469,9 +474,9 @@ export default function NuevaIncidenciaPage() {
                         />
                       </td>
                       <td style={s.td}>
-                        {a.agente.apellido}, {a.agente.nombre}
+                        {nombreAgente(a)}
                         <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)" }}>
-                          {a.agente.documento}
+                          {agente?.documento ?? "—"}
                         </span>
                       </td>
                       <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
@@ -481,7 +486,7 @@ export default function NuevaIncidenciaPage() {
                         {a.unidad.nombre}
                       </td>
                       <td style={{ ...s.td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                        {[a.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
+                        {[a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
                       </td>
                     </tr>
                   )
@@ -526,14 +531,17 @@ export default function NuevaIncidenciaPage() {
               </thead>
               <tbody>
                 {asignacionesLote.map(a => (
-                  <tr key={a.id}
+                  <tr
+                    key={a.id}
                     style={{ transition: "background 0.1s" }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     <td style={s.td}>
-                      {a.agente.apellido}, {a.agente.nombre}
-                      <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)" }}>{a.agente.documento}</span>
+                      {nombreAgente(a)}
+                      <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)" }}>
+                        {a.titularidades[0]?.agente.documento ?? "—"}
+                      </span>
                     </td>
                     <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
                       {a.identificadorEstructural}
@@ -542,7 +550,7 @@ export default function NuevaIncidenciaPage() {
                       {a.unidad.nombre}
                     </td>
                     <td style={{ ...s.td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                      {[a.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
+                      {[a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td style={s.td}>
                       <button
@@ -586,7 +594,6 @@ export default function NuevaIncidenciaPage() {
       {paso === 3 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
 
-          {/* Resumen del lote */}
           <div style={{ background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
             <p style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-secondary)", marginBottom: "var(--space-2)" }}>
               LOTE — {asignacionesLote.length} asignación{asignacionesLote.length !== 1 ? "es" : ""}
@@ -598,13 +605,12 @@ export default function NuevaIncidenciaPage() {
                   borderRadius: "var(--radius-sm)", background: "var(--color-surface)",
                   border: "1px solid var(--color-border)", color: "var(--color-text-primary)",
                 }}>
-                  {a.agente.apellido}, {a.agente.nombre}
+                  {nombreAgente(a)}
                 </span>
               ))}
             </div>
           </div>
 
-          {/* Formulario datos comunes */}
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)" }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               Datos de la incidencia
@@ -612,7 +618,6 @@ export default function NuevaIncidenciaPage() {
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
 
-              {/* Codigario */}
               <div>
                 <label style={s.label}>Tipo de incidencia <span style={{ color: "var(--color-error)" }}>*</span></label>
                 <select
@@ -627,7 +632,6 @@ export default function NuevaIncidenciaPage() {
                 {datosErr.codigarioId && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{datosErr.codigarioId}</span>}
               </div>
 
-              {/* Item */}
               <div>
                 <label style={s.label}>Código <span style={{ color: "var(--color-error)" }}>*</span></label>
                 <select
@@ -649,7 +653,6 @@ export default function NuevaIncidenciaPage() {
                 {datosErr.codigarioItemId && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{datosErr.codigarioItemId}</span>}
               </div>
 
-              {/* Fecha desde */}
               <div>
                 <label style={s.label}>Fecha desde <span style={{ color: "var(--color-error)" }}>*</span></label>
                 <input
@@ -661,7 +664,6 @@ export default function NuevaIncidenciaPage() {
                 {datosErr.fecha_desde && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{datosErr.fecha_desde}</span>}
               </div>
 
-              {/* Fecha hasta */}
               <div>
                 <label style={s.label}>Fecha hasta <span style={{ color: "var(--color-error)" }}>*</span></label>
                 <input
@@ -673,7 +675,6 @@ export default function NuevaIncidenciaPage() {
                 {datosErr.fecha_hasta && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{datosErr.fecha_hasta}</span>}
               </div>
 
-              {/* Observación */}
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={s.label}>
                   Observación <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>

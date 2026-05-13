@@ -13,7 +13,9 @@ type Incidencia = {
   observacion:  string | null
   asignacion?: {
     identificadorEstructural: string
-    agente: { nombre: string; apellido: string }
+    titularidades: {
+      agente: { nombre: string; apellido: string }
+    }[]
   }
   codigarioItem?: {
     codigo: string
@@ -169,10 +171,12 @@ export default function IncidenciasPage() {
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
                   <td style={s.td}>
-                    {i.asignacion
-                      ? `${i.asignacion.agente.apellido}, ${i.asignacion.agente.nombre}`
-                      : `#${i.asignacionId}`
-                    }
+                    {(() => {
+                      const agente = i.asignacion?.titularidades[0]?.agente
+                      if (!i.asignacion) return `#${i.asignacionId}`
+                      if (!agente) return <em>Vacante</em>
+                      return `${agente.apellido}, ${agente.nombre}`
+                    })()}
                   </td>
                   <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
                     {i.asignacion?.identificadorEstructural ?? "—"}

@@ -1,29 +1,29 @@
+// lib/usecases/asignaciones/crearAsignacion.ts
+
+import prisma from "@/lib/prisma"
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
 export class DatosAsignacionInvalidosError extends Error {}
 export class EntidadNoEncontradaError extends Error {}
 
 type Input = {
-  agenteId: number
+  agenteId?: number | null
   unidadId: number
   materiaId?: number | null
-  cursoId?: number | null
   comisionId?: number | null
-  turnoId?: number | null
+  turnoId: number
   fecha_inicio: string | Date
   fecha_fin?: string | Date | null
   identificadorEstructural: string
 }
 
-export async function crearAsignacion(
-  tenantId: number,
-  data: Input
-) {
-  if (!data.agenteId || !data.unidadId || !data.identificadorEstructural) {
+export async function crearAsignacion(tenantId: number, data: Input) {
+  const identificador = data.identificadorEstructural?.trim()
+
+  if (!data.unidadId || !data.turnoId || !identificador) {
     throw new DatosAsignacionInvalidosError("Faltan datos obligatorios")
   }
 
-  // 🔥 parse fechas
   const fechaInicio = new Date(data.fecha_inicio)
   const fechaFin = data.fecha_fin ? new Date(data.fecha_fin) : null
 
@@ -31,58 +31,102 @@ export async function crearAsignacion(
     throw new DatosAsignacionInvalidosError("Fecha inicio inválida")
   }
 
-  // 🔥 VALIDACIONES EN PARALELO (performance + consistencia)
-  const [
-    agente,
-    unidad,
-    materia,
-    curso,
-    comision,
-    turno,
-  ] = await Promise.all([
-    asignacionRepository.verificarAgente(data.agenteId, tenantId),
+  if (fechaFin && isNaN(fechaFin.getTime())) {
+    throw new DatosAsignacionInvalidosError("Fecha fin inválida")
+  }
+
+  if (fechaFin && fechaFin < fechaInicio) {
+    throw new DatosAsignacionInvalidosError(
+      "La fecha fin no puede ser anterior a la fecha inicio"
+    )
+  }
+
+  const [agente, unidad, materia, comision, turno] = await Promise.all([
+    data.agenteId
+      ? asignacionRepository.verificarAgente(data.agenteId, tenantId)
+      : Promise.resolve(null),
     asignacionRepository.verificarUnidad(data.unidadId, tenantId),
     data.materiaId
       ? asignacionRepository.verificarMateria(data.materiaId, tenantId)
-      : Promise.resolve(true),
-    data.cursoId
-      ? asignacionRepository.verificarCurso(data.cursoId, tenantId)
-      : Promise.resolve(true),
+      : Promise.resolve(null),
     data.comisionId
       ? asignacionRepository.verificarComision(data.comisionId, tenantId)
-      : Promise.resolve(true),
-    data.turnoId
-      ? asignacionRepository.verificarTurno(data.turnoId, tenantId)
-      : Promise.resolve(true),
+      : Promise.resolve(null),
+    asignacionRepository.verificarTurno(data.turnoId, tenantId),
   ])
 
-  // 🔥 validaciones críticas
-  if (!agente) throw new EntidadNoEncontradaError("Agente no encontrado")
-  if (!unidad) throw new EntidadNoEncontradaError("Unidad no encontrada")
+  if (data.agenteId && !agente) {
+    throw new EntidadNoEncontradaError("Agente no encontrado")
+  }
 
-  if (data.materiaId && !materia)
+  if (!unidad) {
+    throw new EntidadNoEncontradaError("Unidad no encontrada")
+  }
+
+  if (data.materiaId && !materia) {
     throw new EntidadNoEncontradaError("Materia no encontrada")
+  }
 
-  if (data.cursoId && !curso)
-    throw new EntidadNoEncontradaError("Curso no encontrado")
-
-  if (data.comisionId && !comision)
+  if (data.comisionId && !comision) {
     throw new EntidadNoEncontradaError("Comisión no encontrada")
+  }
 
-  if (data.turnoId && !turno)
+  if (!turno) {
     throw new EntidadNoEncontradaError("Turno no encontrado")
+  }
 
-  // 🔥 CREACIÓN FINAL
-  return asignacionRepository.crear({
-    tenantId,
-    agenteId: data.agenteId,
-    unidadId: data.unidadId,
-    identificadorEstructural: data.identificadorEstructural,
-    fecha_inicio: fechaInicio,
-    fecha_fin: fechaFin,
-    materiaId: data.materiaId ?? null,
-    cursoId: data.cursoId ?? null,
-    comisionId: data.comisionId ?? null,
-    turnoId: data.turnoId ?? null,
+  if (comision) {
+    if (comision.turnoId !== data.turnoId) {
+      throw new DatosAsignacionInvalidosError(
+        "El turno no coincide con la comisión"
+      )
+    }
+
+    if (comision.unidadId && comision.unidadId !== data.unidadId) {
+      throw new DatosAsignacionInvalidosError(
+        "La unidad no coincide con la comisión"
+      )
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const asignacion = await tx.asignacion.create({
+      data: {
+        institucionId: tenantId,
+        unidadId: data.unidadId,
+        identificadorEstructural: identificador,
+        fecha_inicio: fechaInicio,
+        fecha_fin: fechaFin,
+        materiaId: data.materiaId ?? null,
+        comisionId: data.comisionId ?? null,
+        turnoId: data.turnoId,
+      },
+      include: {
+        unidad: true,
+        materia: true,
+        comision: true,
+        turno: true,
+        titularidades: {
+          where: { activo: true, fecha_hasta: null },
+          include: { agente: true },
+          take: 1,
+        },
+      },
+    })
+
+    // Si se especificó agente, crear el primer registro de titularidad.
+    // Un cargo sin agenteId queda vacante hasta que se le asigne titular.
+    if (data.agenteId) {
+      await tx.titularAsignacion.create({
+        data: {
+          institucionId: tenantId,
+          asignacionId: asignacion.id,
+          agenteId: data.agenteId,
+          fecha_desde: fechaInicio,
+        },
+      })
+    }
+
+    return asignacion
   })
 }

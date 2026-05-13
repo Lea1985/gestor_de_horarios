@@ -1,6 +1,8 @@
-//lib/usecases/asignaciones/listarAsignaciones.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
-export async function listarAsignaciones(tenantId: number) {
-  return asignacionRepository.listar(tenantId)
+export function listarAsignaciones(
+  tenantId: number,
+  incluirInactivas = false
+) {
+  return asignacionRepository.listar(tenantId, incluirInactivas)
 }

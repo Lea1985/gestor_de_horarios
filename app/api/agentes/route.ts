@@ -6,7 +6,10 @@ import { crearAgente, DatosAgenteInvalidosError } from "@/lib/usecases/agentes/c
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
-    const agentes = await listarAgentes(tenantId)
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
+    const agentes = await listarAgentes(tenantId, incluirInactivos)
+    console.log(agentes)
     return Response.json(agentes)
   })
 }

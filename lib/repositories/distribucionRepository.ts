@@ -11,6 +11,22 @@ function solapa(inicioA: Date, finA: Date, inicioB: Date, finB: Date) {
   return inicioA <= finB && finA >= inicioB
 }
 
+// Include completo para la lista — incluye agente, curso y turno
+// que la page necesita para mostrar y filtrar
+const asignacionInclude = {
+  agente: true,
+ turno: true,
+  unidad: true,
+  materia: true,
+  comision: {
+    include: {
+      curso: true,
+      turno: true,
+      unidad: true,
+    },
+  },
+} satisfies Prisma.AsignacionInclude
+
 export const distribucionRepository = {
   listar(tenantId: number) {
     return prisma.distribucionHoraria.findMany({
@@ -19,7 +35,9 @@ export const distribucionRepository = {
         deletedAt: null,
       },
       include: {
-        asignacion: true,
+        asignacion: {
+          include: asignacionInclude,
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -35,7 +53,9 @@ export const distribucionRepository = {
         deletedAt: null,
       },
       include: {
-        asignacion: true,
+        asignacion: {
+          include: asignacionInclude,
+        },
         distribucionModulos: {
           include: {
             moduloHorario: true,
@@ -65,21 +85,23 @@ export const distribucionRepository = {
     desde: Date,
     hasta: Date
   ) {
+    const versionNumber = typeof version === "number" ? version : Number(version)
+
+    if (!Number.isInteger(versionNumber)) {
+      throw new Error("version inválida")
+    }
+
     const versionExistente = await prisma.distribucionHoraria.findFirst({
       where: {
         institucionId: tenantId,
         asignacionId,
-        version,
+        version: versionNumber,
         deletedAt: null,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     })
 
-    if (versionExistente) {
-      return { tipo: "version" as const }
-    }
+    if (versionExistente) return { tipo: "version" as const }
 
     const existentes = await prisma.distribucionHoraria.findMany({
       where: {
@@ -91,30 +113,27 @@ export const distribucionRepository = {
 
     const conflicto = existentes.find((d) => {
       const dInicio = new Date(d.fecha_vigencia_desde)
-      const dFin = d.fecha_vigencia_hasta ?? new Date("9999-12-31")
-
+      const dFin    = d.fecha_vigencia_hasta ?? new Date("9999-12-31")
       return solapa(desde, hasta, dInicio, dFin)
     })
 
-    if (conflicto) {
-      return { tipo: "solapamiento" as const }
-    }
+    if (conflicto) return { tipo: "solapamiento" as const }
 
     return null
   },
 
   crear(data: {
-    tenantId: number
-    asignacionId: number
-    version: number
+    tenantId:             number
+    asignacionId:         number
+    version:              number
     fecha_vigencia_desde: Date
     fecha_vigencia_hasta: Date | null
   }) {
     return prisma.distribucionHoraria.create({
       data: {
-        institucionId: data.tenantId,
-        asignacionId: data.asignacionId,
-        version: data.version,
+        institucionId:        data.tenantId,
+        asignacionId:         data.asignacionId,
+        version:              Number(data.version),
         fecha_vigencia_desde: data.fecha_vigencia_desde,
         fecha_vigencia_hasta: data.fecha_vigencia_hasta,
       },
@@ -127,62 +146,33 @@ export const distribucionRepository = {
     data: Prisma.DistribucionHorariaUpdateInput
   ) {
     const existente = await prisma.distribucionHoraria.findFirst({
-      where: {
-        id,
-        institucionId: tenantId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
+      where: { id, institucionId: tenantId, deletedAt: null },
+      select: { id: true },
     })
 
-    if (!existente) {
-      return null
-    }
+    if (!existente) return null
 
     return prisma.distribucionHoraria.update({
-      where: {
-        id,
-      },
+      where: { id },
       data,
     })
   },
 
   async eliminar(id: number, tenantId: number) {
     const existente = await prisma.distribucionHoraria.findFirst({
-      where: {
-        id,
-        institucionId: tenantId,
-      },
-      select: {
-        id: true,
-        deletedAt: true,
-      },
+      where: { id, institucionId: tenantId },
+      select: { id: true, deletedAt: true },
     })
 
-    if (!existente) {
-      return { ok: true, deleted: false }
-    }
-
-    if (existente.deletedAt) {
-      return { ok: true, deleted: false }
-    }
+    if (!existente)          return { ok: true, deleted: false }
+    if (existente.deletedAt) return { ok: true, deleted: false }
 
     await prisma.distribucionHoraria.update({
-      where: {
-        id,
-      },
-      data: {
-        deletedAt: new Date(),
-        activo: false,
-      },
+      where: { id },
+      data: { deletedAt: new Date(), activo: false },
     })
 
-    return {
-      ok: true,
-      deleted: true,
-    }
+    return { ok: true, deleted: true }
   },
 
   async asignarModulos(
@@ -192,49 +182,31 @@ export const distribucionRepository = {
   ) {
     const modulosUnicos = [...new Set(modulos.map(Number))]
 
-    if (modulosUnicos.some(isNaN)) {
-      return null
-    }
+    if (modulosUnicos.some(isNaN)) return null
 
     const distribucion = await prisma.distribucionHoraria.findFirst({
-      where: {
-        id: distribucionId,
-        institucionId: tenantId,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-      },
+      where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
+      select: { id: true },
     })
 
-    if (!distribucion) {
-      return null
-    }
+    if (!distribucion) return null
 
     if (modulosUnicos.length > 0) {
       const modulosValidos = await prisma.moduloHorario.findMany({
         where: {
-          id: {
-            in: modulosUnicos,
-          },
+          id: { in: modulosUnicos },
           institucionId: tenantId,
           deletedAt: null,
         },
-        select: {
-          id: true,
-        },
+        select: { id: true },
       })
 
-      if (modulosValidos.length !== modulosUnicos.length) {
-        return null
-      }
+      if (modulosValidos.length !== modulosUnicos.length) return null
     }
 
     return prisma.$transaction(async (tx) => {
       await tx.distribucionModulo.deleteMany({
-        where: {
-          distribucionHorariaId: distribucionId,
-        },
+        where: { distribucionHorariaId: distribucionId },
       })
 
       if (modulosUnicos.length > 0) {
@@ -247,12 +219,8 @@ export const distribucionRepository = {
       }
 
       return tx.distribucionModulo.findMany({
-        where: {
-          distribucionHorariaId: distribucionId,
-        },
-        include: {
-          moduloHorario: true,
-        },
+        where: { distribucionHorariaId: distribucionId },
+        include: { moduloHorario: true },
       })
     })
   },

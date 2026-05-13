@@ -5,15 +5,13 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
-// ── Tipos ────────────────────────────────────────────────────
-
 type Distribucion = {
-  id:                    number
-  asignacionId:          number
-  version:               number
-  fecha_vigencia_desde:  string
-  fecha_vigencia_hasta:  string | null
-  estado:                string
+  id:                   number
+  asignacionId:         number
+  version:              number
+  fecha_vigencia_desde: string
+  fecha_vigencia_hasta: string | null
+  estado:               string
   asignacion: {
     identificadorEstructural: string
     agente?: { nombre: string; apellido: string }
@@ -39,8 +37,6 @@ type FormData = {
 const FORM_VACIO: FormData = {
   asignacionId: "", fecha_vigencia_desde: "", fecha_vigencia_hasta: "",
 }
-
-// ── Estilos ───────────────────────────────────────────────────
 
 const s = {
   label: {
@@ -107,21 +103,24 @@ function Badge({ estado }: { estado: string }) {
   )
 }
 
-// ── Página ────────────────────────────────────────────────────
-
 export default function DistribucionesPage() {
   const { authHeaders } = useAuth()
 
   const [distribuciones, setDistribuciones] = useState<Distribucion[]>([])
   const [asignaciones,   setAsignaciones]   = useState<Asignacion[]>([])
   const [loading,        setLoading]        = useState(true)
-  const [mostrarForm,    setMostrarForm]     = useState(false)
+  const [mostrarForm,    setMostrarForm]    = useState(false)
   const [guardando,      setGuardando]      = useState(false)
   const [error,          setError]          = useState<string | null>(null)
   const [form,           setForm]           = useState<FormData>(FORM_VACIO)
   const [formErrors,     setFormErrors]     = useState<Partial<FormData>>({})
   const [confirmarId,    setConfirmarId]    = useState<number | null>(null)
   const [expandidos,     setExpandidos]     = useState<Set<number>>(new Set())
+
+  const [filtroTexto,  setFiltroTexto]  = useState("")
+  const [filtroCurso,  setFiltroCurso]  = useState("")
+  const [filtroTurno,  setFiltroTurno]  = useState("")
+  const [filtroEstado, setFiltroEstado] = useState("")
 
   async function cargar() {
     try {
@@ -144,8 +143,6 @@ export default function DistribucionesPage() {
     if (authHeaders.Authorization !== "Bearer ") cargar()
   }, [authHeaders.Authorization])
 
-  // ── Agrupar distribuciones por asignación ─────────────────
-
   const grupos = useMemo(() => {
     const map = new Map<number, Distribucion[]>()
     for (const d of distribuciones) {
@@ -153,14 +150,51 @@ export default function DistribucionesPage() {
       lista.push(d)
       map.set(d.asignacionId, lista)
     }
-    // Ordenar versiones dentro de cada grupo desc
-    for (const lista of map.values()) {
-      lista.sort((a, b) => b.version - a.version)
-    }
+    for (const lista of map.values()) lista.sort((a, b) => b.version - a.version)
     return map
   }, [distribuciones])
 
-  // ── Próxima versión automática para la asignación elegida ──
+  const cursosUnicos = useMemo(() => {
+    const vistos = new Map<string, string>()
+    for (const d of distribuciones) {
+      const nombre = d.asignacion.curso?.nombre
+      if (nombre) vistos.set(nombre, nombre)
+    }
+    return Array.from(vistos.keys()).sort()
+  }, [distribuciones])
+
+  const turnosUnicos = useMemo(() => {
+    const vistos = new Map<string, string>()
+    for (const d of distribuciones) {
+      const nombre = d.asignacion.turno?.nombre
+      if (nombre) vistos.set(nombre, nombre)
+    }
+    return Array.from(vistos.keys()).sort()
+  }, [distribuciones])
+
+  const gruposFiltrados = useMemo(() => {
+    const q = filtroTexto.toLowerCase().trim()
+    const resultado = new Map<number, Distribucion[]>()
+    for (const [asignacionId, lista] of grupos.entries()) {
+      const asignacion = lista[0].asignacion
+      const matchTexto = !q || (
+        asignacion.identificadorEstructural.toLowerCase().includes(q) ||
+        asignacion.agente?.apellido?.toLowerCase().includes(q) ||
+        asignacion.agente?.nombre?.toLowerCase().includes(q)
+      )
+      const matchCurso  = !filtroCurso  || asignacion.curso?.nombre === filtroCurso
+      const matchTurno  = !filtroTurno  || asignacion.turno?.nombre === filtroTurno
+      const matchEstado = !filtroEstado || lista.some(d => d.estado === filtroEstado)
+      if (matchTexto && matchCurso && matchTurno && matchEstado) resultado.set(asignacionId, lista)
+    }
+    return resultado
+  }, [grupos, filtroTexto, filtroCurso, filtroTurno, filtroEstado])
+
+  const hayFiltros = filtroTexto || filtroCurso || filtroTurno || filtroEstado
+
+  function limpiarFiltros() {
+    setFiltroTexto(""); setFiltroCurso(""); setFiltroTurno(""); setFiltroEstado("")
+  }
 
   const proximaVersion = useMemo(() => {
     if (!form.asignacionId) return 1
@@ -168,8 +202,6 @@ export default function DistribucionesPage() {
     if (lista.length === 0) return 1
     return Math.max(...lista.map(d => d.version)) + 1
   }, [form.asignacionId, grupos])
-
-  // ── Form ──────────────────────────────────────────────────
 
   function campo<K extends keyof FormData>(key: K, value: string) {
     setForm(p => ({ ...p, [key]: value }))
@@ -186,31 +218,22 @@ export default function DistribucionesPage() {
 
   async function crear() {
     if (!validar()) return
-    setGuardando(true)
-    setError(null)
+    setGuardando(true); setError(null)
     try {
       const res = await fetch("/api/distribuciones", {
-        method: "POST",
-        headers: authHeaders,
+        method: "POST", headers: authHeaders,
         body: JSON.stringify({
-          asignacionId:         Number(form.asignacionId),
-          version:              proximaVersion,
+          asignacionId: Number(form.asignacionId), version: proximaVersion,
           fecha_vigencia_desde: form.fecha_vigencia_desde,
           fecha_vigencia_hasta: form.fecha_vigencia_hasta || null,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? "Error creando"); return }
-      setForm(FORM_VACIO)
-      setMostrarForm(false)
+      setForm(FORM_VACIO); setMostrarForm(false)
       await cargar()
-      // Expandir el grupo de la asignación recién creada
       setExpandidos(prev => new Set([...prev, Number(form.asignacionId)]))
-    } catch {
-      setError("Error de red")
-    } finally {
-      setGuardando(false)
-    }
+    } catch { setError("Error de red") } finally { setGuardando(false) }
   }
 
   async function eliminar(id: number) {
@@ -218,11 +241,7 @@ export default function DistribucionesPage() {
       const res = await fetch(`/api/distribuciones/${id}`, { method: "DELETE", headers: authHeaders })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? "Error eliminando"); return }
       await cargar()
-    } catch {
-      setError("Error de red")
-    } finally {
-      setConfirmarId(null)
-    }
+    } catch { setError("Error de red") } finally { setConfirmarId(null) }
   }
 
   function toggleExpandido(asignacionId: number) {
@@ -233,16 +252,14 @@ export default function DistribucionesPage() {
     })
   }
 
-  // ── Loading ───────────────────────────────────────────────
-
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando distribuciones...
     </div>
   )
 
-  const asignacionesConDist  = Array.from(grupos.keys())
-  const asignacionesSinDist  = asignaciones.filter(a => !grupos.has(a.id))
+  const asignacionesConDist = Array.from(grupos.keys())
+  const asignacionesSinDist = asignaciones.filter(a => !grupos.has(a.id))
 
   return (
     <>
@@ -256,27 +273,21 @@ export default function DistribucionesPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
 
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
-              Distribuciones horarias
-            </h1>
+            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Distribuciones horarias</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
               {distribuciones.length} distribución{distribuciones.length !== 1 ? "es" : ""} · {asignacionesConDist.length} asignación{asignacionesConDist.length !== 1 ? "es" : ""} con horario
             </p>
           </div>
           {!mostrarForm && (
-            <button
-              onClick={() => { setMostrarForm(true); setForm(FORM_VACIO); setFormErrors({}); setError(null) }}
-              style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
-            >
+            <button onClick={() => { setMostrarForm(true); setForm(FORM_VACIO); setFormErrors({}); setError(null) }}
+              style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}>
               + Nueva distribución
             </button>
           )}
         </div>
 
-        {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -285,203 +296,166 @@ export default function DistribucionesPage() {
           </div>
         )}
 
-        {/* Formulario */}
         {mostrarForm && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 560 }}>
-            <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
-              Nueva distribución
-            </h2>
-
+            <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>Nueva distribución</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
-
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={s.label}>Asignación <span style={{ color: "var(--color-error)" }}>*</span></label>
-                <select
-                  value={form.asignacionId}
-                  onChange={e => campo("asignacionId", e.target.value)}
+                <select value={form.asignacionId} onChange={e => campo("asignacionId", e.target.value)}
                   style={{ ...s.input, ...(formErrors.asignacionId ? { borderColor: "var(--color-error)" } : {}) }}
-                  onFocus={focusStyle} onBlur={blurStyle(!!formErrors.asignacionId)}
-                >
+                  onFocus={focusStyle} onBlur={blurStyle(!!formErrors.asignacionId)}>
                   <option value="">Seleccionar asignación...</option>
-                  {asignaciones
-                    .sort((a, b) => a.identificadorEstructural.localeCompare(b.identificadorEstructural))
-                    .map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.identificadorEstructural} — {a.agente.apellido}, {a.agente.nombre}
-                        {a.curso ? ` (${a.curso.nombre})` : ""}
-                      </option>
-                    ))
-                  }
+                  {asignaciones.sort((a, b) => a.identificadorEstructural.localeCompare(b.identificadorEstructural)).map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.identificadorEstructural} — {a.agente.apellido}, {a.agente.nombre}{a.curso ? ` (${a.curso.nombre})` : ""}
+                    </option>
+                  ))}
                 </select>
                 {formErrors.asignacionId && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.asignacionId}</span>}
               </div>
-
-              {/* Versión calculada automáticamente */}
               {form.asignacionId && (
                 <div style={{ gridColumn: "1 / -1" }}>
                   <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", padding: "6px 10px", background: "var(--color-surface-raised)", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)" }}>
-                    Se creará la <strong>versión {proximaVersion}</strong>
-                    {proximaVersion > 1 ? ` (la asignación ya tiene ${proximaVersion - 1} versión${proximaVersion - 1 !== 1 ? "es" : ""})` : " (primera versión)"}
+                    Se creará la <strong>versión {proximaVersion}</strong>{proximaVersion > 1 ? ` (la asignación ya tiene ${proximaVersion - 1} versión${proximaVersion - 1 !== 1 ? "es" : ""})` : " (primera versión)"}
                   </p>
                 </div>
               )}
-
               <div>
                 <label style={s.label}>Vigencia desde <span style={{ color: "var(--color-error)" }}>*</span></label>
-                <input
-                  type="date" value={form.fecha_vigencia_desde}
-                  onChange={e => campo("fecha_vigencia_desde", e.target.value)}
+                <input type="date" value={form.fecha_vigencia_desde} onChange={e => campo("fecha_vigencia_desde", e.target.value)}
                   style={{ ...s.input, ...(formErrors.fecha_vigencia_desde ? { borderColor: "var(--color-error)" } : {}) }}
-                  onFocus={focusStyle} onBlur={blurStyle(!!formErrors.fecha_vigencia_desde)}
-                />
+                  onFocus={focusStyle} onBlur={blurStyle(!!formErrors.fecha_vigencia_desde)} />
                 {formErrors.fecha_vigencia_desde && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.fecha_vigencia_desde}</span>}
               </div>
-
               <div>
-                <label style={s.label}>
-                  Vigencia hasta <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>
-                </label>
-                <input
-                  type="date" value={form.fecha_vigencia_hasta}
-                  onChange={e => campo("fecha_vigencia_hasta", e.target.value)}
-                  style={s.input}
-                  onFocus={focusStyle} onBlur={blurStyle(false)}
-                />
+                <label style={s.label}>Vigencia hasta <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span></label>
+                <input type="date" value={form.fecha_vigencia_hasta} onChange={e => campo("fecha_vigencia_hasta", e.target.value)}
+                  style={s.input} onFocus={focusStyle} onBlur={blurStyle(false)} />
               </div>
-
             </div>
-
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => { setMostrarForm(false); setForm(FORM_VACIO); setFormErrors({}); setError(null) }}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-              >
+              <button onClick={() => { setMostrarForm(false); setForm(FORM_VACIO); setFormErrors({}); setError(null) }}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>
                 Cancelar
               </button>
-              <button
-                onClick={crear}
-                disabled={guardando}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
-              >
+              <button onClick={crear} disabled={guardando}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
                 {guardando ? "Creando..." : "Crear distribución"}
               </button>
             </div>
           </div>
         )}
 
-        {/* Lista agrupada por asignación */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+        {!mostrarForm && distribuciones.length > 0 && (
+          <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" as const, alignItems: "flex-end" }}>
+            <div style={{ flex: "1 1 220px", minWidth: 180 }}>
+              <input value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)}
+                placeholder="Buscar por identificador o agente..."
+                style={s.input} onFocus={focusStyle} onBlur={blurStyle(false)} />
+            </div>
+            {cursosUnicos.length > 0 && (
+              <div style={{ flex: "0 1 180px" }}>
+                <select value={filtroCurso} onChange={e => setFiltroCurso(e.target.value)}
+                  style={s.input} onFocus={focusStyle} onBlur={blurStyle(false)}>
+                  <option value="">Todos los cursos</option>
+                  {cursosUnicos.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            {turnosUnicos.length > 0 && (
+              <div style={{ flex: "0 1 160px" }}>
+                <select value={filtroTurno} onChange={e => setFiltroTurno(e.target.value)}
+                  style={s.input} onFocus={focusStyle} onBlur={blurStyle(false)}>
+                  <option value="">Todos los turnos</option>
+                  {turnosUnicos.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{ flex: "0 1 140px" }}>
+              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
+                style={s.input} onFocus={focusStyle} onBlur={blurStyle(false)}>
+                <option value="">Todos los estados</option>
+                <option value="ACTIVO">Activo</option>
+                <option value="INACTIVO">Inactivo</option>
+              </select>
+            </div>
+            {hayFiltros && (
+              <button onClick={limpiarFiltros}
+                style={{ padding: "8px 12px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
 
+        {hayFiltros && (
+          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+            {gruposFiltrados.size === 0 ? "Sin resultados para esa búsqueda" : `${gruposFiltrados.size} asignación${gruposFiltrados.size !== 1 ? "es" : ""} encontrada${gruposFiltrados.size !== 1 ? "s" : ""}`}
+          </p>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {distribuciones.length === 0 && (
             <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-12)", textAlign: "center", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
               No hay distribuciones registradas
             </div>
           )}
-
-          {Array.from(grupos.entries()).map(([asignacionId, lista]) => {
+          {gruposFiltrados.size === 0 && hayFiltros && (
+            <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-12)", textAlign: "center", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+              Sin resultados. <button onClick={limpiarFiltros} style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", padding: 0 }}>Limpiar filtros</button>
+            </div>
+          )}
+          {Array.from(gruposFiltrados.entries()).map(([asignacionId, lista]) => {
             const expandido  = expandidos.has(asignacionId)
             const activa     = lista.find(d => d.estado === "ACTIVO")
-            const primera    = lista[0] // versión más alta (ya ordenado desc)
+            const primera    = lista[0]
             const asignacion = lista[0].asignacion
-
             return (
-              <div
-                key={asignacionId}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}
-              >
-                {/* Cabecera del grupo */}
-                <div
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", cursor: "pointer", borderBottom: expandido ? "1px solid var(--color-border)" : "none" }}
-                  onClick={() => toggleExpandido(asignacionId)}
-                >
+              <div key={asignacionId} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", cursor: "pointer", borderBottom: expandido ? "1px solid var(--color-border)" : "none" }}
+                  onClick={() => toggleExpandido(asignacionId)}>
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", userSelect: "none" as const }}>
-                      {expandido ? "▾" : "▸"}
-                    </span>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", userSelect: "none" as const }}>{expandido ? "▾" : "▸"}</span>
                     <div>
-                      <span style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>
-                        {asignacion.identificadorEstructural}
-                      </span>
-                      {asignacion.agente && (
-                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", marginLeft: "var(--space-2)" }}>
-                          {asignacion.agente.apellido}, {asignacion.agente.nombre}
-                        </span>
-                      )}
-                      {asignacion.curso && (
-                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-2)" }}>
-                          · {asignacion.curso.nombre}
-                        </span>
-                      )}
+                      <span style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)" }}>{asignacion.identificadorEstructural}</span>
+                      {asignacion.agente && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", marginLeft: "var(--space-2)" }}>{asignacion.agente.apellido}, {asignacion.agente.nombre}</span>}
+                      {asignacion.curso && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-2)" }}>· {asignacion.curso.nombre}</span>}
+                      {asignacion.turno && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-1)" }}>· {asignacion.turno.nombre}</span>}
                     </div>
                   </div>
-
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
                     {activa && <Badge estado="ACTIVO" />}
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
-                      {lista.length} versión{lista.length !== 1 ? "es" : ""}
-                    </span>
-                    {/* Acceso rápido a la versión activa/última sin expandir */}
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>{lista.length} versión{lista.length !== 1 ? "es" : ""}</span>
                     {!expandido && (
                       <div style={{ display: "flex", gap: "var(--space-2)" }} onClick={e => e.stopPropagation()}>
-                        <Link
-                          href={`/protected/dashboard/distribuciones/${primera.id}/modulos`}
-                          style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}
-                        >
+                        <Link href={`/protected/dashboard/distribuciones/${primera.id}/modulos`}
+                          style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
                           Módulos →
                         </Link>
                       </div>
                     )}
                   </div>
                 </div>
-
-                {/* Tabla de versiones (expandible) */}
                 {expandido && (
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
-                      <tr>
-                        {["Versión", "Estado", "Vigencia desde", "Vigencia hasta", ""].map(col => (
-                          <th key={col} style={s.th}>{col}</th>
-                        ))}
-                      </tr>
+                      <tr>{["Versión", "Estado", "Vigencia desde", "Vigencia hasta", ""].map(col => <th key={col} style={s.th}>{col}</th>)}</tr>
                     </thead>
                     <tbody>
                       {lista.map(d => (
-                        <tr
-                          key={d.id}
-                          style={{ transition: "background 0.1s" }}
+                        <tr key={d.id} style={{ transition: "background 0.1s" }}
                           onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                        >
-                          <td style={s.td}>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>v{d.version}</span>
-                          </td>
+                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                          <td style={s.td}><span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>v{d.version}</span></td>
                           <td style={s.td}><Badge estado={d.estado} /></td>
-                          <td style={{ ...s.td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                            {d.fecha_vigencia_desde.slice(0, 10)}
-                          </td>
-                          <td style={{ ...s.td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                            {d.fecha_vigencia_hasta?.slice(0, 10) ?? <span style={{ color: "var(--color-text-hint)" }}>Indefinida</span>}
-                          </td>
+                          <td style={{ ...s.td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>{d.fecha_vigencia_desde.slice(0, 10)}</td>
+                          <td style={{ ...s.td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>{d.fecha_vigencia_hasta?.slice(0, 10) ?? <span style={{ color: "var(--color-text-hint)" }}>Indefinida</span>}</td>
                           <td style={s.td}>
                             <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                              <Link
-                                href={`/protected/dashboard/distribuciones/${d.id}/modulos`}
-                                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", textDecoration: "none" }}
-                              >
-                                Módulos
-                              </Link>
-                              <Link
-                                href={`/protected/dashboard/distribuciones/${d.id}`}
-                                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-secondary)", cursor: "pointer", textDecoration: "none" }}
-                              >
-                                Editar
-                              </Link>
-                              <button
-                                onClick={() => setConfirmarId(d.id)}
-                                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
-                              >
-                                Eliminar
-                              </button>
+                              <Link href={`/protected/dashboard/distribuciones/${d.id}/modulos`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>Módulos</Link>
+                              <Link href={`/protected/dashboard/distribuciones/${d.id}`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-secondary)", textDecoration: "none" }}>Editar</Link>
+                              <button onClick={() => setConfirmarId(d.id)} style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}>Eliminar</button>
                             </div>
                           </td>
                         </tr>
@@ -494,18 +468,14 @@ export default function DistribucionesPage() {
           })}
         </div>
 
-        {/* Asignaciones sin distribución */}
-        {asignacionesSinDist.length > 0 && (
+        {asignacionesSinDist.length > 0 && !hayFiltros && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border)", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-secondary)", textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>
               Sin distribución asignada ({asignacionesSinDist.length})
             </div>
             <div style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--space-2)", padding: "var(--space-4)" }}>
               {asignacionesSinDist.map(a => (
-                <span
-                  key={a.id}
-                  style={{ fontSize: "var(--text-xs)", padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", color: "var(--color-text-hint)", fontFamily: "var(--font-mono)" }}
-                >
+                <span key={a.id} style={{ fontSize: "var(--text-xs)", padding: "3px 8px", borderRadius: "var(--radius-sm)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", color: "var(--color-text-hint)", fontFamily: "var(--font-mono)" }}>
                   {a.identificadorEstructural}
                 </span>
               ))}

@@ -3,20 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
- "scripts": {
-  "dev": "next dev",
-  "dev:test": "NODE_ENV=test next dev",
-
-  "build": "next build",
-  "start": "next start",
-
-  "lint": "eslint",
-  "format": "prettier --write .",
-
-  "seed": "node --loader ts-node/esm prisma/seed.ts",
-
-  "test": "cross-env NODE_ENV=test vitest",
-  "test:run": "cross-env DATABASE_URL=postgresql://admin:admin123@localhost:5432/gestor_test?schema=public vitest run --reporter=verbose"},
+  "scripts": {
+    "dev": "next dev",
+    "dev:test": "NODE_ENV=test next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "format": "prettier --write .",
+    "seed": "node --loader ts-node/esm prisma/seed.ts",
+    "test": "cross-env NODE_ENV=test vitest",
+    "test:run": "cross-env DATABASE_URL=postgresql://admin:admin123@localhost:5432/gestor_test?schema=public vitest run --reporter=verbose"
+  },
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },

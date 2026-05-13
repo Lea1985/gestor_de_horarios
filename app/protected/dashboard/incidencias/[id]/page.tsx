@@ -20,7 +20,9 @@ type Incidencia = {
   observacion:   string | null
   asignacion?: {
     identificadorEstructural: string
-    agente: { nombre: string; apellido: string; documento: string }
+    titularidades: {
+      agente: { nombre: string; apellido: string; documento: string }
+    }[]
     unidad: { nombre: string; codigoUnidad: number }
   }
   codigarioItem?: { codigo: string; nombre: string }
@@ -167,7 +169,8 @@ export default function IncidenciaDetallePage() {
     </div>
   )
 
-  const dias = diasEntre(incidencia.fecha_desde, incidencia.fecha_hasta)
+  const dias    = diasEntre(incidencia.fecha_desde, incidencia.fecha_hasta)
+  const agente  = incidencia.asignacion?.titularidades[0]?.agente ?? null
 
   return (
     <>
@@ -201,7 +204,6 @@ export default function IncidenciaDetallePage() {
             </p>
           </div>
 
-          {/* Acciones */}
           <div style={{ display: "flex", gap: "var(--space-2)" }}>
             <button
               onClick={() => router.push(`/protected/dashboard/incidencias/editar/${id}`)}
@@ -227,21 +229,23 @@ export default function IncidenciaDetallePage() {
           </div>
         )}
 
-        {/* Agente y asignación */}
+        {/* Titular y asignación */}
         <div style={{ ...s.card, padding: "var(--space-6)" }}>
           <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-5)" }}>
             Agente y asignación
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "var(--space-5)" }}>
             <Campo label="Agente">
-              {incidencia.asignacion
-                ? `${incidencia.asignacion.agente.apellido}, ${incidencia.asignacion.agente.nombre}`
-                : `#${incidencia.asignacionId}`
+              {agente
+                ? `${agente.apellido}, ${agente.nombre}`
+                : incidencia.asignacion
+                  ? <em style={{ fontWeight: 400, color: "var(--color-text-hint)" }}>Vacante</em>
+                  : `#${incidencia.asignacionId}`
               }
             </Campo>
             <Campo label="Documento">
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-                {incidencia.asignacion?.agente.documento ?? "—"}
+                {agente?.documento ?? "—"}
               </span>
             </Campo>
             <Campo label="Unidad">
@@ -353,8 +357,8 @@ export default function IncidenciaDetallePage() {
                   </td>
                 </tr>
               ) : cadena.map(item => {
-                const esActual   = item.id === Number(id)
-                const diasItem   = diasEntre(item.fecha_desde, item.fecha_hasta)
+                const esActual = item.id === Number(id)
+                const diasItem = diasEntre(item.fecha_desde, item.fecha_hasta)
                 return (
                   <tr
                     key={item.id}

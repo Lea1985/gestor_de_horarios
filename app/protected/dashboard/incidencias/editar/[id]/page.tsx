@@ -26,6 +26,11 @@ const s = {
     borderRadius: "var(--radius-md)", padding: "8px 12px", fontSize: "var(--text-sm)",
     color: "var(--color-text-primary)", outline: "none",
   },
+  inputDisabled: {
+    width: "100%", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md)", padding: "8px 12px", fontSize: "var(--text-sm)",
+    color: "var(--color-text-hint)", outline: "none", cursor: "not-allowed" as const,
+  },
 }
 
 function focusStyle(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -46,13 +51,16 @@ export default function EditarIncidenciaPage() {
   const params          = useParams()
   const id              = params.id as string
 
-  const [loading,      setLoading]      = useState(true)
-  const [guardando,    setGuardando]    = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
-  const [codigarios,   setCodigarios]   = useState<Codigario[]>([])
-  const [items,        setItems]        = useState<Item[]>([])
-  const [loadingItems, setLoadingItems] = useState(false)
-  const [formErrors,   setFormErrors]   = useState<Partial<FormData>>({})
+  const [loading,       setLoading]       = useState(true)
+  const [guardando,     setGuardando]     = useState(false)
+  const [error,         setError]         = useState<string | null>(null)
+  const [codigarios,    setCodigarios]    = useState<Codigario[]>([])
+  const [items,         setItems]         = useState<Item[]>([])
+  const [loadingItems,  setLoadingItems]  = useState(false)
+  const [formErrors,    setFormErrors]    = useState<Partial<FormData>>({})
+
+  // true cuando la incidencia tiene al menos un reemplazo asociado
+  const [tieneReemplazo, setTieneReemplazo] = useState(false)
 
   const [form, setForm] = useState<FormData>({
     codigarioId: "", codigarioItemId: "",
@@ -76,6 +84,19 @@ export default function EditarIncidenciaPage() {
         const catalogos  = await r2.json()
 
         setCodigarios(catalogos)
+
+        // Una incidencia tiene reemplazo si alguna ClaseProgramada vinculada
+        // tiene reemplazos registrados. El API de detalle incluye la incidencia
+        // con sus clases; aquí usamos la presencia del campo como señal.
+        // Si el backend expone directamente tieneReemplazo, usarlo directamente.
+        const conReemplazo =
+          Array.isArray(incidencia.ClaseProgramada) &&
+          incidencia.ClaseProgramada.some(
+            (c: { reemplazos?: unknown[] }) => (c.reemplazos?.length ?? 0) > 0
+          )
+
+        setTieneReemplazo(conReemplazo)
+
         setForm({
           codigarioId:     incidencia.codigarioItem?.codigarioId?.toString() ?? "",
           codigarioItemId: incidencia.codigarioItemId?.toString() ?? "",
@@ -115,10 +136,17 @@ export default function EditarIncidenciaPage() {
 
   function validar(): boolean {
     const err: Partial<FormData> = {}
-    if (!form.codigarioId)     err.codigarioId     = "Requerido"
-    if (!form.codigarioItemId) err.codigarioItemId = "Requerido"
-    if (!form.fecha_desde)     err.fecha_desde     = "Requerido"
-    if (!form.fecha_hasta)     err.fecha_hasta     = "Requerido"
+
+    if (tieneReemplazo) {
+      // Con reemplazo solo se valida fecha_hasta
+      if (!form.fecha_hasta) err.fecha_hasta = "Requerido"
+    } else {
+      if (!form.codigarioId)     err.codigarioId     = "Requerido"
+      if (!form.codigarioItemId) err.codigarioItemId = "Requerido"
+      if (!form.fecha_desde)     err.fecha_desde     = "Requerido"
+      if (!form.fecha_hasta)     err.fecha_hasta     = "Requerido"
+    }
+
     setFormErrors(err)
     return Object.keys(err).length === 0
   }
@@ -131,21 +159,27 @@ export default function EditarIncidenciaPage() {
     setError(null)
 
     try {
+      // Con reemplazo solo enviamos fecha_hasta para no arriesgar
+      // modificar campos que afectarían la consistencia del reemplazo.
+      const body = tieneReemplazo
+        ? { fecha_hasta: form.fecha_hasta }
+        : {
+            codigarioItemId: Number(form.codigarioItemId),
+            fecha_desde:     form.fecha_desde,
+            fecha_hasta:     form.fecha_hasta,
+            observacion:     form.observacion || null,
+          }
+
       const res = await fetch(`/api/incidencias/${id}`, {
         method:  "PATCH",
         headers: authHeaders,
-        body: JSON.stringify({
-          codigarioItemId: Number(form.codigarioItemId),
-          fecha_desde:     form.fecha_desde,
-          fecha_hasta:     form.fecha_hasta,
-          observacion:     form.observacion || null,
-        }),
+        body:    JSON.stringify(body),
       })
 
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? "Error actualizando"); return }
 
-      router.push("/protected/dashboard/incidencias")
+      router.push(`/protected/dashboard/incidencias/${id}`)
     } catch {
       setError("Error de red")
     } finally {
@@ -169,7 +203,7 @@ export default function EditarIncidenciaPage() {
       {/* Header */}
       <div>
         <button
-          onClick={() => router.push("/protected/dashboard/incidencias")}
+          onClick={() => router.back()}
           style={{ border: "none", background: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0, fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", marginBottom: "var(--space-2)" }}
         >
           ← Volver
@@ -178,9 +212,20 @@ export default function EditarIncidenciaPage() {
           Editar incidencia
         </h1>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-          Solo podés modificar el tipo, las fechas y la observación
+          {tieneReemplazo
+            ? "Esta incidencia tiene un reemplazo asociado. Solo podés modificar la fecha de cierre."
+            : "Podés modificar el tipo, las fechas y la observación."
+          }
         </p>
       </div>
+
+      {/* Aviso reemplazo */}
+      {tieneReemplazo && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-warning-bg, #fefce8)", border: "1px solid var(--color-warning, #ca8a04)", fontSize: "var(--text-xs)", color: "var(--color-warning-text, #854d0e)" }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginTop: 1, flexShrink: 0 }}><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          Los campos tipo, fecha de inicio y observación están bloqueados porque existe un reemplazo registrado sobre esta incidencia.
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -195,14 +240,21 @@ export default function EditarIncidenciaPage() {
       <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
 
-          {/* Codigario */}
+          {/* Codigario — bloqueado con reemplazo */}
           <div>
-            <label style={s.label}>Tipo de incidencia <span style={{ color: "var(--color-error)" }}>*</span></label>
+            <label style={{ ...s.label, color: tieneReemplazo ? "var(--color-text-hint)" : "var(--color-text-primary)" }}>
+              Tipo de incidencia {!tieneReemplazo && <span style={{ color: "var(--color-error)" }}>*</span>}
+            </label>
             <select
               value={form.codigarioId}
               onChange={e => { campo("codigarioId", e.target.value); setForm(p => ({ ...p, codigarioItemId: "" })) }}
-              style={{ ...s.input, ...(formErrors.codigarioId ? { borderColor: "var(--color-error)" } : {}) }}
-              onFocus={focusStyle} onBlur={blurStyle(!!formErrors.codigarioId)}
+              disabled={tieneReemplazo}
+              style={{
+                ...(tieneReemplazo ? s.inputDisabled : s.input),
+                ...(formErrors.codigarioId ? { borderColor: "var(--color-error)" } : {}),
+              }}
+              onFocus={tieneReemplazo ? undefined : focusStyle}
+              onBlur={tieneReemplazo ? undefined : blurStyle(!!formErrors.codigarioId)}
             >
               <option value="">Seleccionar catálogo...</option>
               {codigarios.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -210,64 +262,97 @@ export default function EditarIncidenciaPage() {
             {formErrors.codigarioId && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.codigarioId}</span>}
           </div>
 
-          {/* Item */}
+          {/* Item — bloqueado con reemplazo */}
           <div>
-            <label style={s.label}>Código <span style={{ color: "var(--color-error)" }}>*</span></label>
+            <label style={{ ...s.label, color: tieneReemplazo ? "var(--color-text-hint)" : "var(--color-text-primary)" }}>
+              Código {!tieneReemplazo && <span style={{ color: "var(--color-error)" }}>*</span>}
+            </label>
             <select
               value={form.codigarioItemId}
               onChange={e => campo("codigarioItemId", e.target.value)}
-              disabled={!form.codigarioId || loadingItems}
+              disabled={tieneReemplazo || !form.codigarioId || loadingItems}
               style={{
-                ...s.input,
+                ...(tieneReemplazo ? s.inputDisabled : s.input),
                 ...(formErrors.codigarioItemId ? { borderColor: "var(--color-error)" } : {}),
-                opacity: (!form.codigarioId || loadingItems) ? 0.5 : 1,
+                opacity: (!tieneReemplazo && (!form.codigarioId || loadingItems)) ? 0.5 : 1,
               }}
-              onFocus={focusStyle} onBlur={blurStyle(!!formErrors.codigarioItemId)}
+              onFocus={tieneReemplazo ? undefined : focusStyle}
+              onBlur={tieneReemplazo ? undefined : blurStyle(!!formErrors.codigarioItemId)}
             >
               <option value="">
-                {loadingItems ? "Cargando..." : !form.codigarioId ? "Primero seleccioná un catálogo" : "Seleccionar código..."}
+                {tieneReemplazo
+                  ? "—"
+                  : loadingItems
+                    ? "Cargando..."
+                    : !form.codigarioId
+                      ? "Primero seleccioná un catálogo"
+                      : "Seleccionar código..."
+                }
               </option>
               {items.map(i => <option key={i.id} value={i.id}>{i.codigo} — {i.nombre}</option>)}
             </select>
             {formErrors.codigarioItemId && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.codigarioItemId}</span>}
           </div>
 
-          {/* Fecha desde */}
+          {/* Fecha desde — bloqueada con reemplazo */}
           <div>
-            <label style={s.label}>Fecha desde <span style={{ color: "var(--color-error)" }}>*</span></label>
+            <label style={{ ...s.label, color: tieneReemplazo ? "var(--color-text-hint)" : "var(--color-text-primary)" }}>
+              Fecha desde {!tieneReemplazo && <span style={{ color: "var(--color-error)" }}>*</span>}
+            </label>
             <input
-              type="date" value={form.fecha_desde}
+              type="date"
+              value={form.fecha_desde}
               onChange={e => campo("fecha_desde", e.target.value)}
-              style={{ ...s.input, ...(formErrors.fecha_desde ? { borderColor: "var(--color-error)" } : {}) }}
-              onFocus={focusStyle} onBlur={blurStyle(!!formErrors.fecha_desde)}
+              disabled={tieneReemplazo}
+              style={{
+                ...(tieneReemplazo ? s.inputDisabled : s.input),
+                ...(formErrors.fecha_desde ? { borderColor: "var(--color-error)" } : {}),
+              }}
+              onFocus={tieneReemplazo ? undefined : focusStyle}
+              onBlur={tieneReemplazo ? undefined : blurStyle(!!formErrors.fecha_desde)}
             />
             {formErrors.fecha_desde && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.fecha_desde}</span>}
           </div>
 
-          {/* Fecha hasta */}
+          {/* Fecha hasta — siempre editable */}
           <div>
-            <label style={s.label}>Fecha hasta <span style={{ color: "var(--color-error)" }}>*</span></label>
+            <label style={s.label}>
+              Fecha hasta <span style={{ color: "var(--color-error)" }}>*</span>
+              {tieneReemplazo && (
+                <span style={{ marginLeft: 6, fontWeight: 400, color: "var(--color-accent)", fontSize: "var(--text-2xs)" }}>
+                  único campo editable
+                </span>
+              )}
+            </label>
             <input
-              type="date" value={form.fecha_hasta}
+              type="date"
+              value={form.fecha_hasta}
               onChange={e => campo("fecha_hasta", e.target.value)}
               style={{ ...s.input, ...(formErrors.fecha_hasta ? { borderColor: "var(--color-error)" } : {}) }}
-              onFocus={focusStyle} onBlur={blurStyle(!!formErrors.fecha_hasta)}
+              onFocus={focusStyle}
+              onBlur={blurStyle(!!formErrors.fecha_hasta)}
             />
             {formErrors.fecha_hasta && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.fecha_hasta}</span>}
           </div>
 
-          {/* Observación */}
+          {/* Observación — bloqueada con reemplazo */}
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={s.label}>
-              Observación <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>
+            <label style={{ ...s.label, color: tieneReemplazo ? "var(--color-text-hint)" : "var(--color-text-primary)" }}>
+              Observación{" "}
+              {!tieneReemplazo && <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>}
             </label>
             <textarea
               value={form.observacion}
               onChange={e => setForm(p => ({ ...p, observacion: e.target.value }))}
+              disabled={tieneReemplazo}
               rows={3}
-              style={{ ...s.input, resize: "vertical" }}
-              onFocus={focusStyle} onBlur={blurStyle(false)}
-              placeholder="Ej: Certificado médico presentado"
+              style={{
+                ...(tieneReemplazo ? s.inputDisabled : s.input),
+                resize: "vertical",
+              }}
+              onFocus={tieneReemplazo ? undefined : focusStyle}
+              onBlur={tieneReemplazo ? undefined : blurStyle(false)}
+              placeholder={tieneReemplazo ? "" : "Ej: Certificado médico presentado"}
             />
           </div>
 
@@ -275,7 +360,7 @@ export default function EditarIncidenciaPage() {
 
         <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
           <button
-            onClick={() => router.push("/protected/dashboard/incidencias")}
+            onClick={() => router.back()}
             style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
           >
             Cancelar

@@ -7,7 +7,11 @@ const incidenciaInclude = {
   hijos: true,
   asignacion: {
     include: {
-      agente: true,
+      titularidades: {
+        where: { activo: true, fecha_hasta: null },
+        include: { agente: true },
+        take: 1,
+      },
       unidad: true,
     },
   },

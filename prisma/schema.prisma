@@ -46,7 +46,7 @@ model Usuario {
   email        String   @unique
   passwordHash String
   nombre       String?
-  esSuperAdmin Boolean  @default(false)  // 👈 agregás esta línea
+  esSuperAdmin Boolean  @default(false)
   estado       Estado   @default(ACTIVO)
   activo       Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -82,7 +82,7 @@ model UsuarioRol {
 model Sesion {
   id            Int      @id @default(autoincrement())
   usuarioId     Int
-  institucionId Int      // Tenant activo en esta sesión
+  institucionId Int
   token         String   @unique
   ip            String?
   userAgent     String?
@@ -113,14 +113,13 @@ model Institucion {
 
   unidades      UnidadOrganizativa[]
   modulos       ModuloHorario[]
-  agentes       AgenteInstitucion[]
+  agentes       Agente[]
   asignaciones  Asignacion[]
   usuariosRoles UsuarioRol[]
   codigarios    Codigario[]
   materias      Materia[]
   sesiones      Sesion[]
 
-  // Nuevos
   turnos     Turno[]
   cursos     Curso[]
   comisiones Comision[]
@@ -129,6 +128,7 @@ model Institucion {
   horariosAsignados      HorarioAsignado[]     @relation("HorarioAsignado_Institucion")
   ClaseProgramada        ClaseProgramada[]
   CalendarioEscolar      CalendarioEscolar[]
+  titularidades          TitularAsignacion[]
 
   @@index([estado])
   @@index([activo])
@@ -137,42 +137,28 @@ model Institucion {
 }
 
 model Agente {
-  id        Int       @id @default(autoincrement())
-  nombre    String
-  apellido  String
-  documento String
-  email     String?
-  telefono  String?
-  domicilio String?
-  estado    Estado    @default(ACTIVO)
-  activo    Boolean   @default(true)
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  asignaciones      Asignacion[]
-  instituciones     AgenteInstitucion[]
-  horariosAsignados HorarioAsignado[]   @relation("HorarioAsignado_Agente")
-
-  @@index([documento])
-  @@index([activo])
-  @@index([deletedAt])
-}
-
-model AgenteInstitucion {
-  agenteId      Int
+  id            Int       @id @default(autoincrement())
   institucionId Int
+  nombre        String
+  apellido      String
   documento     String
-  estado        Estado   @default(ACTIVO)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  email         String?
+  telefono      String?
+  domicilio     String?
+  estado        Estado    @default(ACTIVO)
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  agente      Agente      @relation(fields: [agenteId], references: [id], onDelete: Cascade)
-  institucion Institucion @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  institucion       Institucion         @relation(fields: [institucionId], references: [id])
+  horariosAsignados HorarioAsignado[]   @relation("HorarioAsignado_Agente")
+  titularidades     TitularAsignacion[]
 
-  @@id([agenteId, institucionId])
   @@unique([institucionId, documento])
   @@index([institucionId])
+  @@index([activo])
+  @@index([deletedAt])
 }
 
 model UnidadOrganizativa {
@@ -190,9 +176,7 @@ model UnidadOrganizativa {
   asignaciones    Asignacion[]
   institucion     Institucion       @relation(fields: [institucionId], references: [id])
   ClaseProgramada ClaseProgramada[]
-
-  // Una comisión puede estar fija en esta unidad (opcional para contextos no escolares)
-  comisiones Comision[]
+  comisiones      Comision[]
 
   @@unique([institucionId, codigoUnidad])
   @@index([institucionId])
@@ -201,8 +185,7 @@ model UnidadOrganizativa {
 }
 
 /// TURNO
-/// Genérico: "Mañana", "Tarde", "Noche" en escuelas/sanatorios/fábricas.
-/// horaInicio y horaFin como minutos desde medianoche (0-1439) para consistencia con ModuloHorario.
+/// horaInicio y horaFin como minutos desde medianoche (0-1439).
 
 model Turno {
   id            Int       @id @default(autoincrement())
@@ -215,23 +198,16 @@ model Turno {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  institucion Institucion @relation(fields: [institucionId], references: [id])
-
-  // Relaciones opcionales
-  modulos    ModuloHorario[]
+  institucion  Institucion     @relation(fields: [institucionId], references: [id])
+  modulos      ModuloHorario[]
   asignaciones Asignacion[]
-
-  // Relación obligatoria con Comision
-  comisiones Comision[]
+  comisiones   Comision[]
 
   @@unique([institucionId, nombre])
   @@index([institucionId])
   @@index([activo])
   @@index([deletedAt])
 }
-
-/// CURSO
-/// Genérico: "1° año", "Sector UTI", "Línea A de producción".
 
 model Curso {
   id            Int       @id @default(autoincrement())
@@ -245,8 +221,7 @@ model Curso {
 
   institucion Institucion @relation(fields: [institucionId], references: [id])
   comisiones  Comision[]
-  asignaciones Asignacion[]
-  materias Materia[]
+  materias    Materia[]
 
   @@unique([institucionId, nombre])
   @@index([institucionId])
@@ -254,17 +229,12 @@ model Curso {
   @@index([deletedAt])
 }
 
-/// COMISION
-/// Genérico: "1°A", "Guardia Mañana UTI", "Turno Noche Línea A".
-/// unidadId es opcional: en escuelas la comisión está fija en un aula;
-/// en otros contextos puede no tener unidad física asignada.
-
 model Comision {
   id            Int       @id @default(autoincrement())
   institucionId Int
   cursoId       Int
   turnoId       Int
-  unidadId      Int?      // Opcional: fija en un aula en escuelas, null en otros contextos
+  unidadId      Int?
   nombre        String
   descripcion   String?
   activo        Boolean   @default(true)
@@ -292,7 +262,8 @@ model Comision {
 model Asignacion {
   id                       Int       @id @default(autoincrement())
   institucionId            Int
-  agenteId                 Int
+  // agenteId eliminado: el titular vigente vive exclusivamente en TitularAsignacion.
+  // Un cargo puede estar vacante (sin ningún TitularAsignacion asociado).
   unidadId                 Int
   identificadorEstructural String
   fecha_inicio             DateTime
@@ -303,37 +274,67 @@ model Asignacion {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  // Nuevos campos opcionales (contexto escolar y otros)
-  materiaId   Int?
-  cursoId     Int?
-  comisionId  Int?
-  turnoId     Int?
+  materiaId  Int?
+  comisionId Int?
+  turnoId    Int
 
   institucion Institucion        @relation(fields: [institucionId], references: [id])
-  agente      Agente             @relation(fields: [agenteId], references: [id])
   unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
   materia     Materia?           @relation(fields: [materiaId], references: [id])
-  curso       Curso?             @relation(fields: [cursoId], references: [id])
   comision    Comision?          @relation(fields: [comisionId], references: [id])
-  turno       Turno?             @relation(fields: [turnoId], references: [id])
+  turno       Turno              @relation(fields: [turnoId], references: [id])
+
   distribuciones    DistribucionHoraria[]
   incidencias       Incidencia[]
   horariosAsignados HorarioAsignado[]     @relation("HorarioAsignado_Asignacion")
 
-  reemplazosTitular  Reemplazo[]     @relation("TitularReemplazo")
-  reemplazosSuplente Reemplazo[]     @relation("SuplenteReemplazo")
+  reemplazosTitular  Reemplazo[]         @relation("TitularReemplazo")
+  reemplazosSuplente Reemplazo[]         @relation("SuplenteReemplazo")
   ClaseProgramada    ClaseProgramada[]
+  titularidades      TitularAsignacion[]
 
-  // Se eliminó @@unique([agenteId, unidadId, institucionId]) para permitir
-  // múltiples cargos del mismo agente en la misma unidad (ej: profesor + director).
-  // El identificadorEstructural único por institución es la clave de negocio.
   @@unique([institucionId, identificadorEstructural])
-  @@index([institucionId, agenteId])
+  @@index([institucionId])
   @@index([institucionId, unidadId, fecha_inicio, fecha_fin])
-  @@index([agenteId, comisionId])
-  @@index([agenteId, turnoId])
+  // Los índices que incluían agenteId se eliminan junto con el campo.
+  // Las queries "cargos de un agente" ahora pasan por TitularAsignacion.
+  @@index([comisionId])
+  @@index([turnoId])
   @@index([activo])
   @@index([deletedAt])
+}
+
+/// TitularAsignacion
+/// Historial de personas que ocuparon un cargo (Asignacion).
+/// El titular vigente es el registro con activo = true y fecha_hasta = null.
+/// Un cargo sin ningún registro es un cargo vacante.
+
+model TitularAsignacion {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+  asignacionId  Int
+  agenteId      Int
+  fecha_desde   DateTime
+  fecha_hasta   DateTime?
+  activo        Boolean   @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion Institucion @relation(fields: [institucionId], references: [id])
+  asignacion  Asignacion  @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  agente      Agente      @relation(fields: [agenteId], references: [id])
+
+  @@index([institucionId])
+  @@index([asignacionId])
+  @@index([agenteId])
+  @@index([institucionId, asignacionId])
+  @@index([institucionId, agenteId])
+  @@index([activo])
+  @@index([deletedAt])
+  @@index([asignacionId, fecha_desde, fecha_hasta])
+  // Índice clave para resolver "titular vigente de un cargo" eficientemente
+  @@index([asignacionId, activo, fecha_hasta])
 }
 
 model ModuloHorario {
@@ -342,7 +343,7 @@ model ModuloHorario {
   dia_semana    Dias
   hora_desde    Int
   hora_hasta    Int
-  turnoId       Int?      // Opcional: permite agrupar módulos por turno
+  turnoId       Int?
   activo        Boolean   @default(true)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
@@ -417,10 +418,11 @@ model Incidencia {
   padre             Incidencia?  @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
   hijos             Incidencia[] @relation("incidenciaPadre")
 
-  asignacion      Asignacion      @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
-  codigarioItem   CodigarioItem   @relation(fields: [codigarioItemId], references: [id])
+  asignacion      Asignacion        @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  codigarioItem   CodigarioItem     @relation(fields: [codigarioItemId], references: [id])
   ClaseProgramada ClaseProgramada[]
 
+  @@unique([asignacionId, fecha_desde], name: "asignacionId_fecha_desde")
   @@index([asignacionId])
   @@index([codigarioItemId, fecha_desde])
   @@index([fecha_desde, fecha_hasta])
@@ -429,10 +431,15 @@ model Incidencia {
   @@index([deletedAt])
 }
 
+/// HorarioAsignado
+/// agenteId es un snapshot del titular al momento de crear el horario.
+/// No se actualiza si cambia el titular; sirve para trazabilidad histórica.
+/// Para saber quién cubre un módulo hoy, combinar con TitularAsignacion.
+
 model HorarioAsignado {
   id                    Int      @id @default(autoincrement())
   institucionId         Int
-  agenteId              Int
+  agenteId              Int // snapshot: titular vigente al momento de asignar
   asignacionId          Int
   distribucionHorariaId Int
   moduloHorarioId       Int
@@ -458,7 +465,7 @@ model ClaseProgramada {
   asignacionId  Int
   moduloId      Int
   unidadId      Int
-  comisionId    Int?        // Opcional: directo para queries frecuentes ("clases de 1°A hoy")
+  comisionId    Int?
   fecha         DateTime
   estado        EstadoClase @default(PROGRAMADA)
   incidenciaId  Int?
@@ -474,6 +481,7 @@ model ClaseProgramada {
 
   reemplazos Reemplazo[]
 
+  @@unique([asignacionId, moduloId, fecha], name: "asignacionId_moduloId_fecha")
   @@index([fecha])
   @@index([institucionId, fecha])
   @@index([asignacionId])
@@ -495,6 +503,7 @@ model Reemplazo {
   asignacionTitular  Asignacion      @relation("TitularReemplazo", fields: [asignacionTitularId], references: [id])
   asignacionSuplente Asignacion      @relation("SuplenteReemplazo", fields: [asignacionSuplenteId], references: [id])
 
+  @@unique([claseId, asignacionSuplenteId], name: "claseId_asignacionSuplenteId")
   @@index([claseId])
   @@index([asignacionTitularId])
   @@index([asignacionSuplenteId])
@@ -503,13 +512,13 @@ model Reemplazo {
 }
 
 model CalendarioEscolar {
-  id            Int      @id @default(autoincrement())
-  institucionId Int
-  fecha         DateTime
-  descripcion   String
-  esFeriado     Boolean  @default(false)
-  suspendeClases Boolean @default(false)
-  createdAt     DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  institucionId  Int
+  fecha          DateTime
+  descripcion    String
+  esFeriado      Boolean  @default(false)
+  suspendeClases Boolean  @default(false)
+  createdAt      DateTime @default(now())
 
   institucion Institucion @relation(fields: [institucionId], references: [id])
 
@@ -555,10 +564,6 @@ model CodigarioItem {
   @@index([deletedAt])
 }
 
-/// MATERIA
-/// Opcional en Asignacion. Relevante para contexto escolar.
-/// La FK vive en Asignacion (materiaId Int?).
-
 model Materia {
   id            Int       @id @default(autoincrement())
   institucionId Int
@@ -569,14 +574,11 @@ model Materia {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  institucion Institucion @relation(fields: [institucionId], references: [id])
-  curso       Curso?       @relation(fields: [cursoId], references: [id])
-
+  institucion  Institucion  @relation(fields: [institucionId], references: [id])
+  curso        Curso?       @relation(fields: [cursoId], references: [id])
   asignaciones Asignacion[]
 
   @@unique([cursoId, nombre])
   @@index([institucionId])
   @@index([cursoId])
 }
-
-

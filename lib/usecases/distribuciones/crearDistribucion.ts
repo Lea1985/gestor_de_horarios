@@ -1,4 +1,4 @@
-//lib/usecases/distribuciones/crearDistribucion.ts
+// lib/usecases/distribuciones/crearDistribucion.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 
 export class DatosDistribucionInvalidosError extends Error {
@@ -43,7 +43,6 @@ export async function crearDistribucion(tenantId: number, body: {
   const hasta = distribucionRepository.parseDate(fecha_vigencia_hasta) ?? new Date("9999-12-31")
   if (desde > hasta) throw new RangoFechasInvalidoError()
 
-  // Verificar asignación pertenece al tenant
   const { default: prisma } = await import("@/lib/prisma")
   const asignacion = await prisma.asignacion.findFirst({
     where: { id: asignacionId, institucionId: tenantId, deletedAt: null },
@@ -51,8 +50,15 @@ export async function crearDistribucion(tenantId: number, body: {
   })
   if (!asignacion) throw new AsignacionNoEncontradaError()
 
-  const conflicto = await distribucionRepository.verificarSolapamiento(asignacionId, version, desde, hasta)
-  if (conflicto?.tipo === "version") throw new VersionDuplicadaError()
+  // ✅ FIX: tenantId va primero, coincidiendo con la firma del repositorio
+  const conflicto = await distribucionRepository.verificarSolapamiento(
+    tenantId,
+    asignacionId,
+    version,
+    desde,
+    hasta
+  )
+  if (conflicto?.tipo === "version")      throw new VersionDuplicadaError()
   if (conflicto?.tipo === "solapamiento") throw new SolapamientoError()
 
   return distribucionRepository.crear({

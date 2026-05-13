@@ -1,20 +1,20 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
 // ── Tipos ────────────────────────────────────────────────────
 type Agente = {
-  agenteId: number
-  agente: {
-    id:        number
-    nombre:    string
-    apellido:  string
-    documento: string
-    email:     string | null
-    telefono:  string | null
-    domicilio: string | null
-  }
+  id: number
+  nombre: string
+  apellido: string
+  documento: string
+  email: string | null
+  telefono: string | null
+  domicilio: string | null
+  estado: string
+  activo: boolean
+  deletedAt: string | null
 }
 
 type FormData = {
@@ -27,7 +27,6 @@ type FormData = {
 }
 
 // ── Configuración de campos ──────────────────────────────────
-// Array explícito — orden garantizado, labels legibles
 const CAMPOS: { key: keyof FormData; label: string; required?: boolean }[] = [
   { key: "nombre",    label: "Nombre",    required: true },
   { key: "apellido",  label: "Apellido",  required: true },
@@ -187,11 +186,28 @@ export default function AgentesPage() {
   const [error,        setError]        = useState<string | null>(null)
   const [guardando,    setGuardando]    = useState(false)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
+  // ── NUEVO ──────────────────────────────────────────────────
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  // ── Filtro client-side (búsqueda sobre lo que ya trajo la API) ─
+  const agentesFiltrados = useMemo(() => {
+    if (!busqueda.trim()) return agentes
+    const q = busqueda.toLowerCase()
+    return agentes.filter(a =>
+      a.nombre.toLowerCase().includes(q)    ||
+      a.apellido.toLowerCase().includes(q)  ||
+      a.documento.toLowerCase().includes(q) ||
+      (a.email?.toLowerCase().includes(q) ?? false)
+    )
+  }, [agentes, busqueda])
 
   // ── Carga ──────────────────────────────────────────────────
   async function cargarAgentes() {
     try {
-      const res = await fetch("/api/agentes", { headers: authHeaders })
+      // Pasa el flag igual que en asignaciones
+      const url = `/api/agentes?inactivos=${String(verInactivos)}`      
+      const res = await fetch(url, {headers: authHeaders,cache: "no-store",})
       if (!res.ok) throw new Error()
       setAgentes(await res.json())
     } catch {
@@ -203,7 +219,7 @@ export default function AgentesPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargarAgentes()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos]) // <── se re-ejecuta al cambiar el toggle
 
   // ── Form ───────────────────────────────────────────────────
   function abrirCrear() {
@@ -216,15 +232,15 @@ export default function AgentesPage() {
 
   function abrirEditar(a: Agente) {
     setForm({
-      nombre:    a.agente.nombre,
-      apellido:  a.agente.apellido,
-      documento: a.agente.documento,
-      email:     a.agente.email     ?? "",
-      telefono:  a.agente.telefono  ?? "",
-      domicilio: a.agente.domicilio ?? "",
+      nombre:    a.nombre,
+      apellido:  a.apellido,
+      documento: a.documento,
+      email:     a.email    ?? "",
+      telefono:  a.telefono ?? "",
+      domicilio: a.domicilio ?? "",
     })
     setFormErrors({})
-    setEditando(a.agente.id)
+    setEditando(a.id)
     setMostrarForm(true)
     setError(null)
   }
@@ -250,26 +266,21 @@ export default function AgentesPage() {
   // ── Guardar ────────────────────────────────────────────────
   async function guardar() {
     if (!validar()) return
-
     setGuardando(true)
     setError(null)
-
     try {
       const url    = editando ? `/api/agentes/${editando}` : "/api/agentes"
       const method = editando ? "PATCH" : "POST"
-
       const res = await fetch(url, {
         method,
         headers: authHeaders,
         body:    JSON.stringify(form),
       })
-
       if (!res.ok) {
         const data = await res.json()
         setError(data.error ?? "Error guardando agente")
         return
       }
-
       await cargarAgentes()
       cancelar()
     } catch {
@@ -286,13 +297,11 @@ export default function AgentesPage() {
         method:  "DELETE",
         headers: authHeaders,
       })
-
       if (!res.ok) {
         const data = await res.json()
         setError(data.error ?? "Error eliminando")
         return
       }
-
       await cargarAgentes()
     } catch {
       setError("Error de red")
@@ -301,6 +310,29 @@ export default function AgentesPage() {
     }
   }
 
+
+  // ── Reactivar ──────────────────────────────────────────────
+async function reactivar(id: number) {
+  try {
+    const res = await fetch(`/api/agentes/${id}/reactivar`, {
+      method:  "POST",
+      headers: authHeaders,
+    })
+    if (!res.ok) {
+      const data = await res.json()
+      setError(data.error ?? "Error reactivando agente")
+      return
+    }
+    // Actualiza solo el agente reactivado en el estado local
+    setAgentes(prev => prev.map(a =>
+      a.id === id
+        ? { ...a, activo: true, deletedAt: null, estado: "ACTIVO" }
+        : a
+    ))
+  } catch {
+    setError("Error de red")
+  }
+}
   // ── Loading ────────────────────────────────────────────────
   if (loading) {
     return (
@@ -322,7 +354,6 @@ export default function AgentesPage() {
   // ── Render ─────────────────────────────────────────────────
   return (
     <>
-      {/* Modal confirmación eliminar */}
       {confirmarId !== null && (
         <ModalConfirmar
           mensaje="¿Eliminar este agente? Esta acción no se puede deshacer."
@@ -341,31 +372,14 @@ export default function AgentesPage() {
       >
 
         {/* Header */}
-        <div
-          style={{
-            display:        "flex",
-            alignItems:     "center",
-            justifyContent: "space-between",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h1
-              style={{
-                fontSize:   "var(--text-xl)",
-                fontWeight: "var(--font-medium)",
-                color:      "var(--color-text-primary)",
-              }}
-            >
+            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
               Agentes
             </h1>
-            <p
-              style={{
-                fontSize:  "var(--text-sm)",
-                color:     "var(--color-text-secondary)",
-                marginTop: "var(--space-1)",
-              }}
-            >
-              {agentes.length} agente{agentes.length !== 1 ? "s" : ""} registrado{agentes.length !== 1 ? "s" : ""}
+            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
+              {agentesFiltrados.length} agente{agentesFiltrados.length !== 1 ? "s" : ""}
+              {!verInactivos && (" activo" + (agentesFiltrados.length !== 1 ? "s" : ""))}
             </p>
           </div>
 
@@ -414,15 +428,7 @@ export default function AgentesPage() {
             {error}
             <button
               onClick={() => setError(null)}
-              style={{
-                marginLeft: "auto",
-                background: "none",
-                border:     "none",
-                cursor:     "pointer",
-                color:      "var(--color-error)",
-                fontSize:   "var(--text-base)",
-                lineHeight: 1,
-              }}
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}
               aria-label="Cerrar"
             >
               ×
@@ -452,61 +458,33 @@ export default function AgentesPage() {
               {editando ? "Editar agente" : "Nuevo agente"}
             </h2>
 
-            <div
-              style={{
-                display:             "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap:                 "var(--space-4)",
-              }}
-            >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
               {CAMPOS.map(({ key, label, required }) => (
-                <div
-                  key={key}
-                  style={{
-                    // domicilio ocupa el ancho completo
-                    gridColumn: key === "domicilio" ? "1 / -1" : undefined,
-                  }}
-                >
+                <div key={key} style={{ gridColumn: key === "domicilio" ? "1 / -1" : undefined }}>
                   <label htmlFor={`field-${key}`} style={s.label}>
                     {label}
-                    {required && (
-                      <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>
-                    )}
+                    {required && <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>}
                   </label>
                   <input
                     id={`field-${key}`}
                     value={form[key]}
                     onChange={e => {
                       setForm(prev => ({ ...prev, [key]: e.target.value }))
-                      if (formErrors[key]) {
-                        setFormErrors(prev => ({ ...prev, [key]: undefined }))
-                      }
+                      if (formErrors[key]) setFormErrors(prev => ({ ...prev, [key]: undefined }))
                     }}
-                    style={{
-                      ...s.input,
-                      ...(formErrors[key] ? s.inputError : {}),
-                    }}
+                    style={{ ...s.input, ...(formErrors[key] ? s.inputError : {}) }}
                     onFocus={e => {
                       e.target.style.borderColor = "var(--color-accent)"
                       e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
                     }}
                     onBlur={e => {
-                      e.target.style.borderColor = formErrors[key]
-                        ? "var(--color-error)"
-                        : "var(--color-border)"
-                      e.target.style.boxShadow = "none"
+                      e.target.style.borderColor = formErrors[key] ? "var(--color-error)" : "var(--color-border)"
+                      e.target.style.boxShadow   = "none"
                     }}
                     aria-invalid={!!formErrors[key]}
                   />
                   {formErrors[key] && (
-                    <span
-                      style={{
-                        fontSize:  "var(--text-xs)",
-                        color:     "var(--color-error)",
-                        marginTop: "var(--space-1)",
-                        display:   "block",
-                      }}
-                    >
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>
                       {formErrors[key]}
                     </span>
                   )}
@@ -514,43 +492,17 @@ export default function AgentesPage() {
               ))}
             </div>
 
-            <div
-              style={{
-                display:    "flex",
-                gap:        "var(--space-2)",
-                marginTop:  "var(--space-6)",
-                justifyContent: "flex-end",
-              }}
-            >
+            <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
               <button
                 onClick={cancelar}
-                style={{
-                  padding:      "8px 16px",
-                  borderRadius: "var(--radius-lg)",
-                  border:       "1px solid var(--color-border-strong)",
-                  background:   "transparent",
-                  fontSize:     "var(--text-sm)",
-                  fontWeight:   "var(--font-medium)",
-                  color:        "var(--color-text-primary)",
-                  cursor:       "pointer",
-                }}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
               >
                 Cancelar
               </button>
               <button
                 onClick={guardar}
                 disabled={guardando}
-                style={{
-                  padding:      "8px 16px",
-                  borderRadius: "var(--radius-lg)",
-                  border:       "none",
-                  background:   "var(--color-primary)",
-                  fontSize:     "var(--text-sm)",
-                  fontWeight:   "var(--font-medium)",
-                  color:        "white",
-                  cursor:       guardando ? "not-allowed" : "pointer",
-                  opacity:      guardando ? 0.6 : 1,
-                }}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
                 aria-busy={guardando}
               >
                 {guardando ? "Guardando..." : editando ? "Guardar cambios" : "Crear agente"}
@@ -559,13 +511,42 @@ export default function AgentesPage() {
           </div>
         )}
 
+        {/* ── NUEVO: Buscador + toggle inactivos ── */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre, apellido, documento o email..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={e => {
+                e.target.style.borderColor = "var(--color-accent)"
+                e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = "var(--color-border)"
+                e.target.style.boxShadow   = "none"
+              }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input
+                type="checkbox"
+                checked={verInactivos}
+                onChange={e => setVerInactivos(e.target.checked)}
+                style={{ cursor: "pointer" }}
+              />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
         {/* Tabla */}
         <div
           style={{
-            background:    "var(--color-surface)",
-            border:        "1px solid var(--color-border)",
-            borderRadius:  "var(--radius-xl)",
-            overflow:      "hidden",
+            background:   "var(--color-surface)",
+            border:       "1px solid var(--color-border)",
+            borderRadius: "var(--radius-xl)",
+            overflow:     "hidden",
           }}
         >
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -577,80 +558,69 @@ export default function AgentesPage() {
               </tr>
             </thead>
 
-            <tbody>
-              {agentes.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    style={{
-                      textAlign: "center",
-                      padding:   "var(--space-12)",
-                      fontSize:  "var(--text-sm)",
-                      color:     "var(--color-text-hint)",
-                    }}
-                  >
-                    No hay agentes registrados
-                  </td>
-                </tr>
-              ) : (
-                agentes.map(a => (
-                  <tr
-                    key={a.agenteId}
-                    style={{ transition: "background 0.1s" }}
-                    onMouseEnter={e =>
-                      (e.currentTarget.style.background = "var(--color-surface-raised)")
-                    }
-                    onMouseLeave={e =>
-                      (e.currentTarget.style.background = "transparent")
-                    }
-                  >
-                    <td style={s.td}>{a.agente.nombre}</td>
-                    <td style={s.td}>{a.agente.apellido}</td>
-                    <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-                      {a.agente.documento}
-                    </td>
-                    <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>
-                      {a.agente.email ?? "—"}
-                    </td>
-                    <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>
-                      {a.agente.telefono ?? "—"}
-                    </td>
-                    <td style={{ ...s.td, borderBottom: s.td.borderBottom }}>
-                      <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                        <button
-                          onClick={() => abrirEditar(a)}
-                          style={{
-                            background: "none",
-                            border:     "none",
-                            fontSize:   "var(--text-xs)",
-                            fontWeight: "var(--font-medium)",
-                            color:      "var(--color-accent)",
-                            cursor:     "pointer",
-                            padding:    0,
-                          }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setConfirmarId(a.agente.id)}
-                          style={{
-                            background: "none",
-                            border:     "none",
-                            fontSize:   "var(--text-xs)",
-                            fontWeight: "var(--font-medium)",
-                            color:      "var(--color-error)",
-                            cursor:     "pointer",
-                            padding:    0,
-                          }}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
+<tbody>
+  {agentesFiltrados.length === 0 ? (
+    <tr>
+      <td colSpan={6} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+        No hay agentes{!verInactivos ? " activos" : ""} registrados
+      </td>
+    </tr>
+  ) : agentesFiltrados.map(a => (
+    <tr
+      key={a.id}
+      style={{ transition: "background 0.1s" }}
+      onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+    >
+      <td style={s.td}>
+        {a.apellido}, {a.nombre}
+        {!a.activo && (
+          <span style={{
+            marginLeft: 6,
+            fontSize: "var(--text-2xs)",
+            padding: "2px 6px",
+            borderRadius: "var(--radius-full)",
+            background: "var(--color-surface-raised)",
+            color: "var(--color-text-hint)",
+            border: "1px solid var(--color-border)",
+          }}>
+            Inactivo
+          </span>
+        )}
+      </td>
+      <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{a.documento}</td>
+      <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{a.email ?? "—"}</td>
+      <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{a.telefono ?? "—"}</td>
+      <td style={s.td}>
+        <div style={{ display: "flex", gap: "var(--space-3)" }}>
+          {a.activo ? (
+            <>
+              <button
+                onClick={() => abrirEditar(a)}
+                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => setConfirmarId(a.id)}
+                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
+              >
+                Eliminar
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => reactivar(a.id)}
+              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+            >
+              Reactivar
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  ))}
+</tbody>
           </table>
         </div>
 
