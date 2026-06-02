@@ -11,13 +11,16 @@ const PAGE_TITLES: Record<string, string> = {
   "/protected/dashboard/turnos":       "Turnos",
   "/protected/dashboard/cursos":       "Cursos",
   "/protected/dashboard/comisiones":    "Comisiones",
-  "/protected/dashboard/materias":     "Materias",
   "/protected/dashboard/distribuciones": "Distribuciones",
   "/protected/dashboard/codigarios":   "Codigarios",
   "/protected/dashboard/modulosHorarios": "Módulos de Horarios",
   "/protected/dashboard/asignaciones": "Asignaciones",
   "/protected/dashboard/incidencias":  "Incidencias",
-
+  "/protected/dashboard/calendario":   "Calendario Escolar",
+  "/protected/dashboard/periodos-operativos": "Períodos Operativos",
+  "/protected/dashboard/reportes/reemplazos":    "Reporte de Reemplazos",
+  "/protected/dashboard/reportes/agente":        "Reporte por Agente",
+  "/protected/dashboard/reportes/unidad":        "Reporte por Unidad",
 }
 
 interface TopbarProps {

@@ -11,17 +11,17 @@ export const codigarioRepository = {
     })
   },
 
-  obtenerPorId(id: number, tenantId: number) {
-    return prisma.codigario.findFirst({
-      where: { id, institucionId: tenantId, deletedAt: null },
-      include: {
-        items: {
-          where: { deletedAt: null },
-          orderBy: { createdAt: "asc" },
-        },
+obtenerPorId(id: number, tenantId: number, incluirInactivos = false) {
+  return prisma.codigario.findFirst({
+    where: { id, institucionId: tenantId, deletedAt: null },
+    include: {
+      items: {
+        where: incluirInactivos ? {} : { deletedAt: null },
+        orderBy: { createdAt: "asc" },
       },
-    })
-  },
+    },
+  })
+},
 
   existeEnTenant(id: number, tenantId: number) {
     return prisma.codigario.findFirst({
@@ -120,67 +120,48 @@ export const codigarioRepository = {
     })
   },
 
-  crearItem(
-    codigarioId: number,
-    tenantId: number,
-    data: {
-      codigo: string
-      nombre: string
-      descripcion?: string
-    }
-  ) {
-    return prisma.codigarioItem
-      .findFirst({
-        where: {
-          codigarioId,
-          codigo: data.codigo,
-          codigario: { institucionId: tenantId },
-        },
-      })
-      .then(async (existente) => {
-        // no existe -> crear
-        if (!existente) {
-          const codigario = await prisma.codigario.findFirst({
-            where: {
-              id: codigarioId,
-              institucionId: tenantId,
-              deletedAt: null,
-            },
-            select: { id: true },
-          })
+async crearItem(
+  codigarioId: number,
+  tenantId: number,
+  data: {
+    codigo: string
+    nombre: string
+    descripcion?: string
+  }
+) {
+  const existente = await prisma.codigarioItem.findFirst({
+    where: {
+      codigarioId,
+      codigo: data.codigo,
+      codigario: { institucionId: tenantId },
+    },
+  })
 
-          if (!codigario) {
-            throw new Error("Codigario no encontrado")
-          }
+  // no existe -> crear
+  if (!existente) {
+    const codigario = await prisma.codigario.findFirst({
+      where: { id: codigarioId, institucionId: tenantId, deletedAt: null },
+      select: { id: true },
+    })
 
-          return prisma.codigarioItem.create({
-            data: {
-              codigarioId,
-              ...data,
-              activo: true,
-              deletedAt: null,
-            },
-          })
-        }
+    if (!codigario) throw new Error("Codigario no encontrado")
 
-        // existe activo -> error
-        if (!existente.deletedAt && existente.activo) {
-          throw new Error("Ya existe un item con ese código")
-        }
+    return prisma.codigarioItem.create({
+      data: { codigarioId, ...data, activo: true, deletedAt: null },
+    })
+  }
 
-        // existe borrado lógico -> reactivar
-        return prisma.codigarioItem.update({
-          where: { id: existente.id },
-          data: {
-            codigo: data.codigo,
-            nombre: data.nombre,
-            descripcion: data.descripcion,
-            activo: true,
-            deletedAt: null,
-          },
-        })
-      })
-  },
+  // existe activo -> error
+  if (!existente.deletedAt && existente.activo) {
+    throw new Error("Ya existe un item con ese código")
+  }
+
+  // existe borrado lógico -> reactivar
+  return prisma.codigarioItem.update({
+    where: { id: existente.id },
+    data: { ...data, activo: true, deletedAt: null },
+  })
+},
 
   async actualizarItem(
     itemId: number,
@@ -232,4 +213,24 @@ export const codigarioRepository = {
 
     return { ok: true, deleted: true }
   },
+
+  async reactivarItem(itemId: number, tenantId: number) {
+  const existente = await prisma.codigarioItem.findFirst({
+    where: {
+      id: itemId,
+      codigario: { institucionId: tenantId },
+    },
+    select: { id: true, deletedAt: true },
+  })
+
+  if (!existente || !existente.deletedAt) return null
+
+  return prisma.codigarioItem.update({
+    where: { id: existente.id },
+    data: {
+      activo: true,
+      deletedAt: null,
+    },
+  })
+},
 }

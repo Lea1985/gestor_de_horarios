@@ -1,39 +1,24 @@
 // lib/usecases/incidencias/crearIncidencia.ts
-
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 
 export class DatosIncidenciaInvalidosError extends Error {
-  constructor() {
-    super(
-      "asignacionId, fecha_desde, fecha_hasta y codigarioItemId son requeridos"
-    )
-  }
+  constructor() { super("asignacionId, fecha_desde, fecha_hasta y codigarioItemId son requeridos") }
 }
-
 export class RangoFechasInvalidoError extends Error {
-  constructor() {
-    super("Rango de fechas inválido")
-  }
+  constructor() { super("Rango de fechas inválido") }
 }
-
 export class AsignacionNoValidaError extends Error {
-  constructor() {
-    super("Asignación no válida")
-  }
+  constructor() { super("Asignación no válida") }
 }
-
 export class CodigarioItemNoValidoError extends Error {
-  constructor() {
-    super("Código de incidencia no válido para esta institución")
-  }
+  constructor() { super("Código de incidencia no válido para esta institución") }
 }
-
 export class IncidenciaPadreNoValidaError extends Error {
-  constructor() {
-    super("Incidencia padre no válida")
-  }
+  constructor() { super("Incidencia padre no válida o se encuentra eliminada") }
 }
-
+export class FechaFueraDePadreError extends Error {
+  constructor() { super("El rango de la incidencia no puede exceder el de la incidencia padre") }
+}
 export class SuperposicionError extends Error {
   constructor(
     public readonly conflicto: {
@@ -49,22 +34,15 @@ export class SuperposicionError extends Error {
 export async function crearIncidencia(
   tenantId: number,
   body: {
-    asignacionId?: number
-    fecha_desde?: string
-    fecha_hasta?: string
-    codigarioItemId?: number
+    asignacionId?:      number
+    fecha_desde?:       string
+    fecha_hasta?:       string
+    codigarioItemId?:   number
     incidenciaPadreId?: number | null
-    observacion?: string
+    observacion?:       string
   }
 ) {
-  const {
-    asignacionId,
-    fecha_desde,
-    fecha_hasta,
-    codigarioItemId,
-    incidenciaPadreId,
-    observacion,
-  } = body
+  const { asignacionId, fecha_desde, fecha_hasta, codigarioItemId, incidenciaPadreId, observacion } = body
 
   if (!asignacionId || !fecha_desde || !fecha_hasta || !codigarioItemId) {
     throw new DatosIncidenciaInvalidosError()
@@ -81,51 +59,34 @@ export async function crearIncidencia(
     throw new RangoFechasInvalidoError()
   }
 
-  const asignacion = await incidenciaRepository.verificarAsignacion(
-    asignacionId,
-    tenantId
-  )
+  // Verifica que la asignación exista y esté activa
+  const asignacion = await incidenciaRepository.verificarAsignacion(asignacionId, tenantId)
+  if (!asignacion) throw new AsignacionNoValidaError()
 
-  if (!asignacion) {
-    throw new AsignacionNoValidaError()
-  }
-
-  const codigario = await incidenciaRepository.verificarCodigarioItem(
-    codigarioItemId,
-    tenantId
-  )
-
-  if (!codigario) {
-    throw new CodigarioItemNoValidoError()
-  }
+  const codigario = await incidenciaRepository.verificarCodigarioItem(codigarioItemId, tenantId)
+  if (!codigario) throw new CodigarioItemNoValidoError()
 
   if (incidenciaPadreId) {
-    const padre = await incidenciaRepository.verificarPadre(
-      incidenciaPadreId,
-      asignacionId,
-      tenantId
-    )
-
-    if (!padre) {
-      throw new IncidenciaPadreNoValidaError()
-    }
+    // Verifica que la padre exista, pertenezca a la misma asignación y esté activa
+    const padre = await incidenciaRepository.verificarPadre(incidenciaPadreId, asignacionId, tenantId)
+    if (!padre) throw new IncidenciaPadreNoValidaError()
+    if (fechaHasta > padre.fecha_hasta) throw new FechaFueraDePadreError()
   }
 
   const conflicto = await incidenciaRepository.verificarSuperposicion(
     asignacionId,
     fechaDesde,
     fechaHasta,
-    tenantId
+    tenantId,
+    undefined,
+    incidenciaPadreId
   )
-
-  if (conflicto) {
-    throw new SuperposicionError(conflicto)
-  }
+  if (conflicto) throw new SuperposicionError(conflicto)
 
   return incidenciaRepository.crear({
     asignacionId,
-    fecha_desde: fechaDesde,
-    fecha_hasta: fechaHasta,
+    fecha_desde:      fechaDesde,
+    fecha_hasta:      fechaHasta,
     codigarioItemId,
     incidenciaPadreId,
     observacion,

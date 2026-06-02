@@ -1,58 +1,67 @@
+// lib/usecases/reemplazos/crearReemplazo.ts
 import { reemplazoRepository } from "@/lib/repositories/reemplazoRepository"
+import { validarSuperposicionSuplente } from "./validarSuperposicion"
 
 export class DatosReemplazoInvalidosError extends Error {
-  constructor() { super("claseId, asignacionTitularId y asignacionSuplenteId son obligatorios") }
+  constructor() { super("claseId y asignacionTitularId son obligatorios") }
 }
-
-export class MismaAsignacionError extends Error {
-  constructor() { super("La asignación titular y suplente no pueden ser la misma") }
+export class SuplenteRequeridoError extends Error {
+  constructor() { super("Debe indicar agenteSuplenteId") }
 }
-
 export class ClaseNoEncontradaError extends Error {
-  constructor() { super("Clase no encontrada") }
+  constructor() { super("Clase no encontrada o su incidencia está eliminada") }
 }
-
 export class AsignacionTitularNoEncontradaError extends Error {
   constructor() { super("Asignación titular no encontrada") }
 }
-
-export class AsignacionSuplenteNoEncontradaError extends Error {
-  constructor() { super("Asignación suplente no encontrada") }
+export class AgenteSuplenteNoEncontradoError extends Error {
+  constructor() { super("Agente suplente no encontrado") }
 }
-
 export class ReemplazoActivoExistenteError extends Error {
   constructor() { super("Ya existe un reemplazo activo para esta clase") }
 }
+export class SuperposicionSuplenteError extends Error {
+  constructor() { super("El suplente ya tiene una clase programada en ese módulo y fecha") }
+}
 
-export async function crearReemplazo(tenantId: number, body: {
-  claseId?:              number
-  asignacionTitularId?:  number
-  asignacionSuplenteId?: number
-  observacion?:          string
-}) {
-  const { claseId, asignacionTitularId, asignacionSuplenteId, observacion } = body
-
-  if (!claseId || !asignacionTitularId || !asignacionSuplenteId) {
-    throw new DatosReemplazoInvalidosError()
+export async function crearReemplazo(
+  tenantId: number,
+  body: {
+    claseId?:             number
+    asignacionTitularId?: number
+    agenteSuplenteId?:    number
+    observacion?:         string
   }
+) {
+  const { claseId, asignacionTitularId, agenteSuplenteId, observacion } = body
 
-  if (asignacionTitularId === asignacionSuplenteId) throw new MismaAsignacionError()
+  if (!claseId || !asignacionTitularId) throw new DatosReemplazoInvalidosError()
+  if (!agenteSuplenteId) throw new SuplenteRequeridoError()
 
   if (!await reemplazoRepository.verificarClase(claseId, tenantId)) {
     throw new ClaseNoEncontradaError()
   }
 
-  const [titular, suplente] = await Promise.all([
-    reemplazoRepository.verificarAsignacion(asignacionTitularId, tenantId),
-    reemplazoRepository.verificarAsignacion(asignacionSuplenteId, tenantId),
-  ])
+  if (!await reemplazoRepository.verificarAsignacion(asignacionTitularId, tenantId)) {
+    throw new AsignacionTitularNoEncontradaError()
+  }
 
-  if (!titular)  throw new AsignacionTitularNoEncontradaError()
-  if (!suplente) throw new AsignacionSuplenteNoEncontradaError()
+  if (!await reemplazoRepository.verificarAgente(agenteSuplenteId, tenantId)) {
+    throw new AgenteSuplenteNoEncontradoError()
+  }
 
-  if (await reemplazoRepository.verificarReemplazoActivo(claseId)) {
+  if (await validarSuperposicionSuplente(claseId, agenteSuplenteId, tenantId)) {
+    throw new SuperposicionSuplenteError()
+  }
+
+  if (await reemplazoRepository.verificarReemplazoActivo(claseId, tenantId)) {
     throw new ReemplazoActivoExistenteError()
   }
 
-  return reemplazoRepository.crear({ claseId, asignacionTitularId, asignacionSuplenteId, observacion })
+  return reemplazoRepository.crear(tenantId, {
+    claseId,
+    asignacionTitularId,
+    agenteSuplenteId,
+    observacion,
+  })
 }

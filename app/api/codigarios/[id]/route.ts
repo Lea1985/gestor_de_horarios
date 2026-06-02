@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client"
 import { obtenerCodigario, CodigarioNoEncontradoError as ObtenerNotFound } from "@/lib/usecases/codigarios/obtenerCodigario"
 import { actualizarCodigario, CodigarioNoEncontradoError as ActualizarNotFound, SinCamposError } from "@/lib/usecases/codigarios/actualizarCodigario"
 import { eliminarCodigario, CodigarioNoEncontradoError as EliminarNotFound } from "@/lib/usecases/codigarios/eliminarCodigario"
+import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
 
 function parseId(id: string) {
   const n = Number(id)
@@ -17,8 +18,10 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
   if (!codigarioId) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async ({ tenantId }) => {
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
     try {
-      return Response.json(await obtenerCodigario(codigarioId, tenantId))
+      return Response.json(await obtenerCodigario(codigarioId, tenantId, incluirInactivos))
     } catch (error) {
       if (error instanceof ObtenerNotFound) return Response.json({ error: error.message }, { status: 404 })
       return Response.json({ error: "Error obteniendo codigario" }, { status: 500 })

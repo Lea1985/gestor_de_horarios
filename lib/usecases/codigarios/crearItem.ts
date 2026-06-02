@@ -15,7 +15,7 @@ export async function crearItem(codigarioId: number, tenantId: number, body: { c
   const codigario = await codigarioRepository.existeEnTenant(codigarioId, tenantId)
   if (!codigario) throw new CodigarioNoEncontradoError()
 
-  return codigarioRepository.crearItem(codigarioId, {
+  return codigarioRepository.crearItem(codigarioId, tenantId, {
     codigo: body.codigo,
     nombre: body.nombre,
     descripcion: body.descripcion,

@@ -24,5 +24,5 @@ export async function actualizarDistribucion(id: number, tenantId: number, body:
 
   if (Object.keys(data).length === 0) throw new SinCamposError()
 
-  return distribucionRepository.actualizar(id, data)
+  return distribucionRepository.actualizar(id,tenantId, data)
 }

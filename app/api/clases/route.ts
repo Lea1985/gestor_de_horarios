@@ -7,15 +7,33 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
 
     try {
-      const clases = await listarClases(tenantId, {
-        asignacionId: searchParams.get("asignacionId"),
-        moduloId:     searchParams.get("moduloId"),
-        unidadId:     searchParams.get("unidadId"),
-        comisionId:   searchParams.get("comisionId"),
-        estado:       searchParams.get("estado"),
-        fecha_desde:  searchParams.get("fecha_desde"),
-        fecha_hasta:  searchParams.get("fecha_hasta"),
-      })
+            const hoy = searchParams.get("hoy")
+
+            const ahora = new Date()
+
+            const inicioHoy = new Date(ahora)
+            inicioHoy.setHours(0, 0, 0, 0)
+
+            const finHoy = new Date(ahora)
+            finHoy.setHours(23, 59, 59, 999)
+
+            const clases = await listarClases(tenantId, {
+              asignacionId: searchParams.get("asignacionId"),
+              moduloId:     searchParams.get("moduloId"),
+              unidadId:     searchParams.get("unidadId"),
+              comisionId:   searchParams.get("comisionId"),
+              estado:       searchParams.get("estado"),
+
+              fecha_desde:
+                hoy === "true"
+                  ? inicioHoy.toISOString()
+                  : searchParams.get("fecha_desde"),
+
+              fecha_hasta:
+                hoy === "true"
+                  ? finHoy.toISOString()
+                  : searchParams.get("fecha_hasta"),
+            })
       return Response.json(clases)
     } catch (error) {
       if (error instanceof FiltrosInsuficientesError || error instanceof EstadoInvalidoError) {

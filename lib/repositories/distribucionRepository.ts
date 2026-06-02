@@ -1,3 +1,4 @@
+//lib/repositories/distribucionRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
@@ -14,8 +15,7 @@ function solapa(inicioA: Date, finA: Date, inicioB: Date, finB: Date) {
 // Include completo para la lista — incluye agente, curso y turno
 // que la page necesita para mostrar y filtrar
 const asignacionInclude = {
-  agente: true,
- turno: true,
+  turno: true,
   unidad: true,
   materia: true,
   comision: {
@@ -28,22 +28,32 @@ const asignacionInclude = {
 } satisfies Prisma.AsignacionInclude
 
 export const distribucionRepository = {
-  listar(tenantId: number) {
-    return prisma.distribucionHoraria.findMany({
-      where: {
-        institucionId: tenantId,
-        deletedAt: null,
+listar(tenantId: number) {
+  return prisma.distribucionHoraria.findMany({
+    where: {
+      institucionId: tenantId,
+      deletedAt: null,
+    },
+    include: {
+      asignacion: {
+        include: asignacionInclude,
       },
-      include: {
-        asignacion: {
-          include: asignacionInclude,
+      _count: {
+        select: { distribucionModulos: true },
+      },
+      distribucionModulos: {
+        include: {
+          moduloHorario: {
+            select: { dia_semana: true },
+          },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
-    })
-  },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  })
+},
 
   obtenerPorId(id: number, tenantId: number) {
     return prisma.distribucionHoraria.findFirst({

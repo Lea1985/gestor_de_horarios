@@ -17,8 +17,12 @@ const ACADEMIC_ITEMS = [
   { label: "Turnos", href: "/protected/dashboard/turnos" },
   { label: "Cursos", href: "/protected/dashboard/cursos" },
   { label: "Comisiones", href: "/protected/dashboard/comisiones" },
-  { label: "Materias", href: "/protected/dashboard/materias" },
+]
 
+const REPORT_ITEMS = [
+  { label: "Reemplazos", href: "/protected/dashboard/reportes/reemplazos" },
+  { label: "Por agente", href: "/protected/dashboard/reportes/agente" },
+  { label: "Por unidad", href: "/protected/dashboard/reportes/unidad" },
 ]
 
 const CONFIG_ITEMS = [
@@ -33,6 +37,14 @@ const CONFIG_ITEMS = [
   {
     label: "Codigarios",
     href: "/protected/dashboard/codigarios",
+  },
+  {
+    label: "Calendario Escolar",
+    href: "/protected/dashboard/calendario",
+  },
+  {
+    label: "Períodos Operativos",
+    href: "/protected/dashboard/periodos-operativos",
   },
 ]
 
@@ -160,6 +172,7 @@ export function Sidebar() {
   const pathname = usePathname()
 
   const [academicOpen, setAcademicOpen] = useState(true)
+  const [reportesOpen, setReportesOpen] = useState(true)  // ← NUEVO
   const [configOpen, setConfigOpen] = useState(false)
 
   return (
@@ -256,6 +269,22 @@ export function Sidebar() {
           setOpen={setAcademicOpen}
         >
           {ACADEMIC_ITEMS.map((item) => (
+            <NavLink
+              key={item.href}
+              {...item}
+              pathname={pathname}
+              nested
+            />
+          ))}
+        </Section>
+
+        {/* NUEVA SECCIÓN REPORTES */}
+        <Section
+          title="Reportes"
+          open={reportesOpen}
+          setOpen={setReportesOpen}
+        >
+          {REPORT_ITEMS.map((item) => (
             <NavLink
               key={item.href}
               {...item}

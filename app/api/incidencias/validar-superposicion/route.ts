@@ -27,12 +27,13 @@ export async function POST(req: Request) {
       return Response.json({ error: "Asignación no encontrada" }, { status: 404 })
     }
 
-    const conflicto = await incidenciaRepository.verificarSuperposicion(
-      Number(asignacionId),
-      new Date(fecha_desde),
-      new Date(fecha_hasta),
-      excludeId ? Number(excludeId) : undefined
-    )
+const conflicto = await incidenciaRepository.verificarSuperposicion(
+  Number(asignacionId),
+  new Date(fecha_desde),
+  new Date(fecha_hasta),
+  tenantId,
+  excludeId ? Number(excludeId) : undefined
+  )
 
     return Response.json({
       tieneSuperposicion: !!conflicto,

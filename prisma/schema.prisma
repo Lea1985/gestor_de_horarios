@@ -119,10 +119,10 @@ model Institucion {
   codigarios    Codigario[]
   materias      Materia[]
   sesiones      Sesion[]
-
   turnos     Turno[]
   cursos     Curso[]
   comisiones Comision[]
+  periodosOperativos PeriodoOperativo[]
 
   distribucionesHorarias DistribucionHoraria[] @relation("DistribucionHoraria_Institucion")
   horariosAsignados      HorarioAsignado[]     @relation("HorarioAsignado_Institucion")
@@ -151,9 +151,10 @@ model Agente {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  institucion       Institucion         @relation(fields: [institucionId], references: [id])
-  horariosAsignados HorarioAsignado[]   @relation("HorarioAsignado_Agente")
-  titularidades     TitularAsignacion[]
+  institucion            Institucion         @relation(fields: [institucionId], references: [id])
+  horariosAsignados      HorarioAsignado[]   @relation("HorarioAsignado_Agente")
+  reemplazosComoSuplente Reemplazo[]         @relation("ReemplazoSuplente")
+  titularidades          TitularAsignacion[]
 
   @@unique([institucionId, documento])
   @@index([institucionId])
@@ -289,7 +290,6 @@ model Asignacion {
   horariosAsignados HorarioAsignado[]     @relation("HorarioAsignado_Asignacion")
 
   reemplazosTitular  Reemplazo[]         @relation("TitularReemplazo")
-  reemplazosSuplente Reemplazo[]         @relation("SuplenteReemplazo")
   ClaseProgramada    ClaseProgramada[]
   titularidades      TitularAsignacion[]
 
@@ -463,7 +463,7 @@ model ClaseProgramada {
   id            Int         @id @default(autoincrement())
   institucionId Int
   asignacionId  Int
-  moduloId      Int
+  moduloId      Int?
   unidadId      Int
   comisionId    Int?
   fecha         DateTime
@@ -474,14 +474,12 @@ model ClaseProgramada {
 
   institucion Institucion        @relation(fields: [institucionId], references: [id])
   asignacion  Asignacion         @relation(fields: [asignacionId], references: [id])
-  modulo      ModuloHorario      @relation(fields: [moduloId], references: [id])
+  modulo      ModuloHorario?      @relation(fields: [moduloId], references: [id])
   unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
   comision    Comision?          @relation(fields: [comisionId], references: [id])
   incidencia  Incidencia?        @relation(fields: [incidenciaId], references: [id])
+  reemplazos Reemplazo[] @relation("ClaseProgramadaReemplazos")
 
-  reemplazos Reemplazo[]
-
-  @@unique([asignacionId, moduloId, fecha], name: "asignacionId_moduloId_fecha")
   @@index([fecha])
   @@index([institucionId, fecha])
   @@index([asignacionId])
@@ -490,23 +488,22 @@ model ClaseProgramada {
 }
 
 model Reemplazo {
-  id                   Int       @id @default(autoincrement())
-  claseId              Int
-  asignacionTitularId  Int
-  asignacionSuplenteId Int
-  observacion          String?
-  activo               Boolean   @default(true)
-  deletedAt            DateTime?
-  createdAt            DateTime  @default(now())
+  id                  Int       @id @default(autoincrement())
+  claseId             Int
+  asignacionTitularId Int
+  agenteSuplenteId    Int
+  observacion         String?
+  activo              Boolean   @default(true)
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
 
-  clase              ClaseProgramada @relation(fields: [claseId], references: [id])
-  asignacionTitular  Asignacion      @relation("TitularReemplazo", fields: [asignacionTitularId], references: [id])
-  asignacionSuplente Asignacion      @relation("SuplenteReemplazo", fields: [asignacionSuplenteId], references: [id])
+  asignacionTitular Asignacion      @relation("TitularReemplazo", fields: [asignacionTitularId], references: [id])
+  agenteSuplente    Agente          @relation("ReemplazoSuplente", fields: [agenteSuplenteId], references: [id])
+  clase             ClaseProgramada @relation("ClaseProgramadaReemplazos", fields: [claseId], references: [id])
 
-  @@unique([claseId, asignacionSuplenteId], name: "claseId_asignacionSuplenteId")
   @@index([claseId])
   @@index([asignacionTitularId])
-  @@index([asignacionSuplenteId])
+  @@index([agenteSuplenteId])
   @@index([activo])
   @@index([deletedAt])
 }
@@ -514,15 +511,63 @@ model Reemplazo {
 model CalendarioEscolar {
   id             Int      @id @default(autoincrement())
   institucionId  Int
+  periodoOperativoId Int
+
   fecha          DateTime
   descripcion    String
+
   esFeriado      Boolean  @default(false)
   suspendeClases Boolean  @default(false)
+
+  activo         Boolean  @default(true)
+  deletedAt      DateTime?
+
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   institucion Institucion @relation(fields: [institucionId], references: [id])
+  periodoOperativo   PeriodoOperativo @relation(fields: [periodoOperativoId], references: [id])
+
 
   @@index([institucionId, fecha])
+  @@index([periodoOperativoId])
+  @@index([activo])
+  @@index([deletedAt])
+}
+
+
+model PeriodoOperativo {
+  id            Int       @id @default(autoincrement())
+  institucionId Int
+
+  nombre        String
+
+  fecha_desde   DateTime
+  fecha_hasta   DateTime
+
+  // Solo un período puede estar vigente por institución.
+  // Los períodos históricos quedan con vigente = false.
+  vigente       Boolean   @default(false)
+
+  // Soft delete lógico
+  deletedAt     DateTime?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institucion       Institucion         @relation(fields: [institucionId], references: [id])
+  calendarioEscolar CalendarioEscolar[]
+
+  @@unique([institucionId, nombre])
+
+  @@index([institucionId])
+
+  // Búsqueda rápida del período vigente
+  @@index([institucionId, vigente])
+
+  @@index([fecha_desde, fecha_hasta])
+
+  @@index([deletedAt])
 }
 
 model Codigario {

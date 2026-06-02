@@ -1,3 +1,4 @@
+// lib/repositories/reemplazoRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
@@ -8,26 +9,31 @@ const reemplazoIncludeFull = {
       unidad: true,
     },
   },
+
   asignacionTitular: {
     include: {
-      agente: {
-        select: {
-          nombre: true,
-          apellido: true,
-          documento: true,
+      titularidades: {
+        where: { activo: true, fecha_hasta: null },
+        include: {
+          agente: {
+            select: {
+              nombre: true,
+              apellido: true,
+              documento: true,
+            },
+          },
         },
+        take: 1,
       },
     },
   },
-  asignacionSuplente: {
-    include: {
-      agente: {
-        select: {
-          nombre: true,
-          apellido: true,
-          documento: true,
-        },
-      },
+
+  agenteSuplente: {
+    select: {
+      id: true,
+      nombre: true,
+      apellido: true,
+      documento: true,
     },
   },
 }
@@ -37,6 +43,7 @@ const reemplazoIncludeList = {
     select: {
       fecha: true,
       estado: true,
+
       modulo: {
         select: {
           dia_semana: true,
@@ -44,6 +51,7 @@ const reemplazoIncludeList = {
           hora_hasta: true,
         },
       },
+
       unidad: {
         select: {
           nombre: true,
@@ -51,16 +59,36 @@ const reemplazoIncludeList = {
       },
     },
   },
+
   asignacionTitular: {
     select: {
       identificadorEstructural: true,
-      agenteId: true,
+
+      titularidades: {
+        where: {
+          activo: true,
+          fecha_hasta: null,
+        },
+
+        select: {
+          agente: {
+            select: {
+              nombre: true,
+              apellido: true,
+            },
+          },
+        },
+
+        take: 1,
+      },
     },
   },
-  asignacionSuplente: {
+
+  agenteSuplente: {
     select: {
-      identificadorEstructural: true,
-      agenteId: true,
+      id: true,
+      nombre: true,
+      apellido: true,
     },
   },
 }
@@ -71,7 +99,6 @@ export const reemplazoRepository = {
     filtros: {
       claseId?: number
       asignacionTitularId?: number
-      asignacionSuplenteId?: number
       fecha_desde?: string | null
       fecha_hasta?: string | null
     }
@@ -91,17 +118,15 @@ export const reemplazoRepository = {
       where.asignacionTitularId = filtros.asignacionTitularId
     }
 
-    if (filtros.asignacionSuplenteId) {
-      where.asignacionSuplenteId = filtros.asignacionSuplenteId
-    }
-
     if (filtros.fecha_desde || filtros.fecha_hasta) {
       where.clase = {
         institucionId: tenantId,
+
         fecha: {
           ...(filtros.fecha_desde
             ? { gte: new Date(filtros.fecha_desde) }
             : {}),
+
           ...(filtros.fecha_hasta
             ? { lte: new Date(filtros.fecha_hasta) }
             : {}),
@@ -127,6 +152,7 @@ export const reemplazoRepository = {
           institucionId: tenantId,
         },
       },
+
       include: reemplazoIncludeFull,
     })
   },
@@ -140,6 +166,7 @@ export const reemplazoRepository = {
           institucionId: tenantId,
         },
       },
+
       select: {
         id: true,
         claseId: true,
@@ -147,17 +174,7 @@ export const reemplazoRepository = {
     })
   },
 
-  verificarClase(claseId: number, tenantId: number) {
-    return prisma.claseProgramada.findFirst({
-      where: {
-        id: claseId,
-        institucionId: tenantId,
-      },
-      select: {
-        id: true,
-      },
-    })
-  },
+
 
   verificarAsignacion(asignacionId: number, tenantId: number) {
     return prisma.asignacion.findFirst({
@@ -165,6 +182,22 @@ export const reemplazoRepository = {
         id: asignacionId,
         institucionId: tenantId,
       },
+
+      select: {
+        id: true,
+      },
+    })
+  },
+
+  verificarAgente(agenteId: number, tenantId: number) {
+    return prisma.agente.findFirst({
+      where: {
+        id: agenteId,
+        institucionId: tenantId,
+        activo: true,
+        deletedAt: null,
+      },
+
       select: {
         id: true,
       },
@@ -176,54 +209,63 @@ export const reemplazoRepository = {
       where: {
         claseId,
         activo: true,
+
         clase: {
           institucionId: tenantId,
         },
       },
+
       select: {
         id: true,
       },
     })
   },
 
+  verificarClase(claseId: number, tenantId: number) {
+    return prisma.claseProgramada.findFirst({
+      where: {
+        id:            claseId,
+        institucionId: tenantId,
+        incidencia: {
+          is: {
+            activo:    true,
+            deletedAt: null,
+          },
+        },
+      },
+      select: { id: true },
+    })
+  },
+
   async crear(
     tenantId: number,
     data: {
-      claseId: number
+      claseId:             number
       asignacionTitularId: number
-      asignacionSuplenteId: number
-      observacion?: string
+      agenteSuplenteId:    number  // ← requerido
+      observacion?:        string
     }
   ) {
     return prisma.$transaction(async (tx) => {
       const clase = await tx.claseProgramada.findFirst({
-        where: {
-          id: data.claseId,
-          institucionId: tenantId,
-        },
-        select: {
-          id: true,
-        },
+        where:  { id: data.claseId, institucionId: tenantId },
+        select: { id: true },
       })
-
-      if (!clase) {
-        return null
-      }
+      if (!clase) return null
 
       const [reemplazo] = await Promise.all([
         tx.reemplazo.create({
           data: {
-            ...data,
-            activo: true,
+            claseId:             data.claseId,
+            asignacionTitularId: data.asignacionTitularId,
+            agenteSuplenteId:    data.agenteSuplenteId,
+            observacion:         data.observacion,
+            activo:              true,
           },
         }),
         tx.claseProgramada.update({
-          where: {
-            id: data.claseId,
-          },
-          data: {
-            estado: "REEMPLAZADA",
-          },
+          where: { id: data.claseId },
+          data:  { estado: "REEMPLAZADA" },
         }),
       ])
 
@@ -238,33 +280,36 @@ export const reemplazoRepository = {
           id,
           claseId,
           activo: true,
+
           clase: {
             institucionId: tenantId,
           },
         },
+
         select: {
           id: true,
         },
       })
 
-      if (!reemplazo) {
-        return null
-      }
+      if (!reemplazo) return null
 
       return Promise.all([
         tx.reemplazo.update({
           where: {
             id,
           },
+
           data: {
             activo: false,
             deletedAt: new Date(),
           },
         }),
+
         tx.claseProgramada.update({
           where: {
             id: claseId,
           },
+
           data: {
             estado: "PROGRAMADA",
           },
@@ -272,4 +317,5 @@ export const reemplazoRepository = {
       ])
     })
   },
+
 }

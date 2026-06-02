@@ -131,6 +131,17 @@ export const asignacionRepository = {
     })
   },
 
+  verificarIdentificador(identificador: string, tenantId: number, excludeId?: number) {
+  return prisma.asignacion.findFirst({
+    where: {
+      identificadorEstructural: identificador,
+      institucionId: tenantId,
+      deletedAt: null,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { id: true },
+  })
+},
   async actualizar(
     id: number,
     tenantId: number,
@@ -270,14 +281,39 @@ export const asignacionRepository = {
     })
   },
 
-  reactivar(id: number, tenantId: number) {
-    return prisma.asignacion.update({
-      where: { id },
-      data: {
-        activo: true,
-        deletedAt: null,
-        estado: "ACTIVO",
-      },
+  // Reemplazar el método reactivar en asignacionRepository.ts
+
+  async reactivar(id: number, tenantId: number) {
+    return prisma.$transaction(async (tx) => {
+      // Reactivar la asignación
+      await tx.asignacion.update({
+        where: { id },
+        data: {
+          activo:    true,
+          deletedAt: null,
+          estado:    "ACTIVO",
+        },
+      })
+
+      // Reabrir la última titularidad cerrada
+      const ultimaTitularidad = await tx.titularAsignacion.findFirst({
+        where: {
+          asignacionId: id,
+          activo:       false,
+          fecha_hasta:  { not: null },
+        },
+        orderBy: { fecha_desde: "desc" },
+      })
+
+      if (ultimaTitularidad) {
+        await tx.titularAsignacion.update({
+          where: { id: ultimaTitularidad.id },
+          data: {
+            activo:      true,
+            fecha_hasta: null,
+          },
+        })
+      }
     })
   },
 }

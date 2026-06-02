@@ -1,5 +1,7 @@
+// lib/usecases/reportes/obtenerReporteReemplazos.ts
 import { reporteRepository } from "@/lib/repositories/reporteRepository"
 import { RequestContext } from "@/lib/types/context"
+import { agruparReemplazosPorSuplente } from "@/lib/reporting/transformers/agruparReemplazosPorSuplente"
 
 export class ReporteReemplazosInvalidoError extends Error {
   constructor() {
@@ -19,37 +21,14 @@ export async function obtenerReporteReemplazos(
   const desde = new Date(fechaDesde)
   const hasta = new Date(fechaHasta)
 
-  const reemplazos = await reporteRepository.listarReemplazos(
-    ctx.tenantId,
-    desde,
-    hasta
-  )
+  const reemplazos = await reporteRepository.listarReemplazos(ctx.tenantId, desde, hasta)
 
-  // 🔥 lógica de negocio: agrupación
-  const porSuplente: Record<
-    number,
-    { agente: unknown; cantidad: number }
-  > = {}
-
-  for (const r of reemplazos) {
-    const id = r.asignacionSuplenteId
-
-    if (!porSuplente[id]) {
-      porSuplente[id] = {
-        agente: r.asignacionSuplente.agente,
-        cantidad: 0,
-      }
-    }
-
-    porSuplente[id].cantidad++
-  }
+  const porSuplente = agruparReemplazosPorSuplente(reemplazos)
 
   return {
     periodo: { desde: fechaDesde, hasta: fechaHasta },
     total: reemplazos.length,
-    porSuplente: Object.values(porSuplente).sort(
-      (a, b) => b.cantidad - a.cantidad
-    ),
+    porSuplente,
     reemplazos,
   }
 }

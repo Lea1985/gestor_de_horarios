@@ -1,5 +1,5 @@
 // lib/usecases/clases/listarClases.ts
-import { claseRepository } from "@/lib/repositories/claseRepository"
+import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
 import { EstadoClase } from "@prisma/client"
 
 export class FiltrosInsuficientesError extends Error {
@@ -41,7 +41,7 @@ export async function listarClases(tenantId: number, params: {
 
   const { gte, lte } = normalizarRango(fecha_desde, fecha_hasta)
 
-  return claseRepository.listar(tenantId, {
+  return claseProgramadaRepository.listar(tenantId, {
     asignacionId: asignacionId ? parseInt(asignacionId) : undefined,
     moduloId:     moduloId     ? parseInt(moduloId)     : undefined,
     unidadId:     unidadId     ? parseInt(unidadId)     : undefined,

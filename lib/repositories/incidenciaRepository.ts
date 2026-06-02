@@ -8,36 +8,38 @@ const incidenciaInclude = {
   asignacion: {
     include: {
       titularidades: {
-        where: { activo: true, fecha_hasta: null },
+        orderBy: { fecha_desde: "desc" as const },
         include: { agente: true },
         take: 1,
       },
-      unidad: true,
+      unidad:   true,
+      materia:  true,
+      comision: { include: { curso: true, turno: true } },
+      turno:    true,
     },
   },
 }
 
 export const incidenciaRepository = {
-  listar(tenantId: number, asignacionId?: number) {
-    return prisma.incidencia.findMany({
-      where: {
-        activo: true,
-        deletedAt: null,
-        asignacion: {
-          institucionId: tenantId,
-          ...(asignacionId ? { id: asignacionId } : {}),
-        },
+  
+listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
+  return prisma.incidencia.findMany({
+    where: {
+      asignacion: {
+        institucionId: tenantId,
+        ...(asignacionId ? { id: asignacionId } : {}),
       },
-      include: incidenciaInclude,
-      orderBy: { fecha_desde: "desc" },
-    })
-  },
+      ...(incluirEliminadas ? {} : { activo: true, deletedAt: null }),
+    },
+    include: incidenciaInclude,
+    orderBy: { fecha_desde: "desc" },
+  })
+},
 
   obtenerPorId(id: number, tenantId: number) {
     return prisma.incidencia.findFirst({
       where: {
         id,
-        deletedAt: null,
         asignacion: {
           institucionId: tenantId,
         },
@@ -104,44 +106,75 @@ export const incidenciaRepository = {
   ) {
     return prisma.incidencia.findFirst({
       where: {
-        id: incidenciaPadreId,
+        id:          incidenciaPadreId,
         asignacionId,
-        deletedAt: null,
+        activo:      true,        // ← agregar
+        deletedAt:   null,
         asignacion: {
           institucionId: tenantId,
         },
       },
-      select: { id: true },
+      select: { id: true, fecha_hasta: true },
     })
   },
 
   verificarSuperposicion(
-    asignacionId: number,
-    fechaDesde: Date,
-    fechaHasta: Date,
-    tenantId: number,
-    excludeId?: number
-  ) {
-    return prisma.incidencia.findFirst({
-      where: {
-        asignacionId,
-        activo: true,
-        deletedAt: null,
-        asignacion: {
-          institucionId: tenantId,
+  asignacionId: number,
+  fechaDesde: Date,
+  fechaHasta: Date,
+  tenantId: number,
+  excludeId?: number,
+  incidenciaPadreId?: number | null
+) {
+  return prisma.incidencia.findFirst({
+    where: {
+      asignacionId,
+      activo: true,
+      deletedAt: null,
+
+      asignacion: {
+        institucionId: tenantId,
+      },
+
+      ...(excludeId
+        ? {
+            id: {
+              not: excludeId,
+            },
+          }
+        : {}),
+
+      // Permitir superposición dentro
+      // de la misma cadena de incidencias
+      ...(incidenciaPadreId
+        ? {
+            NOT: [
+              { id: incidenciaPadreId },
+              { incidenciaPadreId },
+            ],
+          }
+        : {}),
+
+      AND: [
+        {
+          fecha_desde: {
+            lte: fechaHasta,
+          },
         },
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-        AND: [
-          { fecha_desde: { lte: fechaHasta } },
-          { fecha_hasta: { gte: fechaDesde } },
-        ],
-      },
-      select: {
-        id: true,
-        fecha_desde: true,
-        fecha_hasta: true,
-      },
-    })
+        {
+          fecha_hasta: {
+            gte: fechaDesde,
+          },
+        },
+      ],
+    },
+
+    select: {
+      id: true,
+      fecha_desde: true,
+      fecha_hasta: true,
+    },
+  })
   },
 
   crear(data: {
@@ -275,5 +308,26 @@ export const incidenciaRepository = {
         SELECT * FROM hijos
       ) t
     `
+  },
+
+  existeEliminada(id: number, tenantId: number) {
+    return prisma.incidencia.findFirst({
+      where: {
+        id,
+        activo: false,
+        asignacion: { institucionId: tenantId },
+      },
+      select: { id: true, asignacionId: true, fecha_desde: true, fecha_hasta: true },
+    })
+  },
+
+  reactivar(id: number) {
+    return prisma.incidencia.update({
+      where: { id },
+      data: {
+        activo: true,
+        deletedAt: null,
+      },
+    })
   },
 }

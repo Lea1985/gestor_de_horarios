@@ -3,7 +3,7 @@ import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerAgente, AgenteNoEncontradoError as ObtenerNotFound } from "@/lib/usecases/agentes/obtenerAgente"
 import { actualizarAgente, AgenteNoEncontradoError as ActualizarNotFound, SinCamposParaActualizarError } from "@/lib/usecases/agentes/actualizarAgente"
-import { eliminarAgente, AgenteNoEncontradoError as EliminarNotFound } from "@/lib/usecases/agentes/eliminarAgente"
+import { eliminarAgente, AgenteNoEncontradoError as EliminarNotFound, TieneAsignacionesActivasError } from "@/lib/usecases/agentes/eliminarAgente"
 
 function parseId(id: string) {
   const n = Number(id)
@@ -20,13 +20,11 @@ export async function GET(
 
   return withContext(req, async ({ tenantId }) => {
     try {
-      const agente = await obtenerAgente(agenteId, tenantId)
-      return Response.json(agente)
+      return Response.json(await obtenerAgente(agenteId, tenantId))
     } catch (error) {
       if (error instanceof ObtenerNotFound) {
         return Response.json({ error: error.message }, { status: 404 })
       }
-      console.error("Error obteniendo agente:", error)
       return Response.json({ error: "Error obteniendo agente" }, { status: 500 })
     }
   })
@@ -49,8 +47,7 @@ export async function PATCH(
     }
 
     try {
-      const agente = await actualizarAgente(agenteId, tenantId, body)
-      return Response.json(agente)
+      return Response.json(await actualizarAgente(agenteId, tenantId, body))
     } catch (error) {
       if (error instanceof ActualizarNotFound) {
         return Response.json({ error: error.message }, { status: 404 })
@@ -62,12 +59,8 @@ export async function PATCH(
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        return Response.json(
-          { error: "El documento ya está en uso en esta institución" },
-          { status: 409 }
-        )
+        return Response.json({ error: "El documento ya está en uso en esta institución" }, { status: 409 })
       }
-      console.error("Error actualizando agente:", error)
       return Response.json({ error: "Error actualizando agente" }, { status: 500 })
     }
   })
@@ -83,13 +76,14 @@ export async function DELETE(
 
   return withContext(req, async ({ tenantId }) => {
     try {
-      const result = await eliminarAgente(agenteId, tenantId)
-      return Response.json(result)
+      return Response.json(await eliminarAgente(agenteId, tenantId))
     } catch (error) {
       if (error instanceof EliminarNotFound) {
         return Response.json({ error: error.message }, { status: 404 })
       }
-      console.error("Error eliminando agente:", error)
+      if (error instanceof TieneAsignacionesActivasError) {
+        return Response.json({ error: error.message }, { status: 409 })
+      }
       return Response.json({ error: "Error eliminando agente" }, { status: 500 })
     }
   })

@@ -1,20 +1,21 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
 // ── Tipos ────────────────────────────────────────────────────
 type Agente = {
-  id: number
-  nombre: string
-  apellido: string
-  documento: string
-  email: string | null
-  telefono: string | null
-  domicilio: string | null
-  estado: string
-  activo: boolean
-  deletedAt: string | null
+  id:                      number
+  nombre:                  string
+  apellido:                string
+  documento:               string
+  email:                   string | null
+  telefono:                string | null
+  domicilio:               string | null
+  estado:                  string
+  activo:                  boolean
+  deletedAt:               string | null
+  tieneAsignacionesActivas: boolean
 }
 
 type FormData = {
@@ -26,7 +27,6 @@ type FormData = {
   domicilio: string
 }
 
-// ── Configuración de campos ──────────────────────────────────
 const CAMPOS: { key: keyof FormData; label: string; required?: boolean }[] = [
   { key: "nombre",    label: "Nombre",    required: true },
   { key: "apellido",  label: "Apellido",  required: true },
@@ -41,13 +41,12 @@ const FORM_VACIO: FormData = {
   email: "", telefono: "", domicilio: "",
 }
 
-// ── Estilos compartidos ──────────────────────────────────────
 const s = {
   label: {
-    fontSize:    "var(--text-xs)",
-    fontWeight:  "var(--font-medium)" as const,
-    color:       "var(--color-text-primary)",
-    display:     "block" as const,
+    fontSize:     "var(--text-xs)",
+    fontWeight:   "var(--font-medium)" as const,
+    color:        "var(--color-text-primary)",
+    display:      "block" as const,
     marginBottom: "var(--space-1)",
   },
   input: {
@@ -60,11 +59,9 @@ const s = {
     color:        "var(--color-text-primary)",
     outline:      "none",
   },
-  inputError: {
-    borderColor: "var(--color-error)",
-  },
+  inputError: { borderColor: "var(--color-error)" },
   th: {
-    textAlign:     "left"    as const,
+    textAlign:     "left" as const,
     fontSize:      "var(--text-2xs)",
     fontWeight:    "var(--font-medium)" as const,
     textTransform: "uppercase" as const,
@@ -75,98 +72,133 @@ const s = {
     background:    "var(--color-surface-raised)",
   },
   td: {
-    padding:     "10px 12px",
-    fontSize:    "var(--text-sm)",
-    color:       "var(--color-text-primary)",
-    borderBottom: "1px solid var(--color-border)",
+    padding:       "10px 12px",
+    fontSize:      "var(--text-sm)",
+    color:         "var(--color-text-primary)",
+    borderBottom:  "1px solid var(--color-border)",
     verticalAlign: "middle" as const,
   },
 }
 
-// ── Componente modal de confirmación ────────────────────────
-function ModalConfirmar({
-  mensaje,
-  onConfirmar,
-  onCancelar,
+// ── Dropdown Gestionar ───────────────────────────────────────
+function MenuGestionar({
+  agente,
+  onEditar,
+  onEliminar,
+  onReactivar,
 }: {
-  mensaje:     string
-  onConfirmar: () => void
-  onCancelar:  () => void
+  agente:      Agente
+  onEditar:    () => void
+  onEliminar:  () => void
+  onReactivar: () => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [pos,     setPos]     = useState({ top: 0, left: 0 })
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current  && !btnRef.current.contains(e.target as Node)
+      ) {
+        setAbierto(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  function abrir() {
+    if (!btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    setPos({ top: rect.bottom + 4, left: rect.right - 140 })
+    setAbierto(v => !v)
+  }
+
+  const puedeEliminar = !agente.tieneAsignacionesActivas
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={abrir}
+        style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+      >
+        Gestionar ▾
+      </button>
+
+      {abierto && (
+        <div
+          ref={menuRef}
+          style={{
+            position:     "fixed",
+            top:          pos.top,
+            left:         pos.left,
+            background:   "var(--color-surface)",
+            border:       "1px solid var(--color-border)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow:    "0 4px 16px rgba(0,0,0,0.10)",
+            minWidth:     140,
+            zIndex:       9999,
+            overflow:     "hidden",
+          }}
+        >
+          {agente.activo ? (
+            <>
+              <button
+                onClick={() => { setAbierto(false); onEditar() }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
+                disabled={!puedeEliminar}
+                title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
+                onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Eliminar
+                {!puedeEliminar && (
+                  <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
+                    Tiene asignaciones activas
+                  </span>
+                )}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => { setAbierto(false); onReactivar() }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              Reactivar
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Modal confirmación ───────────────────────────────────────
+function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
+  mensaje: string; onConfirmar: () => void; onCancelar: () => void
 }) {
   return (
-    <div
-      style={{
-        position:       "fixed",
-        inset:          0,
-        background:     "rgba(0,0,0,0.4)",
-        display:        "flex",
-        alignItems:     "center",
-        justifyContent: "center",
-        zIndex:         "var(--z-modal)",
-      }}
-      onClick={onCancelar}
-    >
-      <div
-        style={{
-          background:   "var(--color-surface)",
-          borderRadius: "var(--radius-xl)",
-          padding:      "var(--space-6)",
-          maxWidth:     360,
-          width:        "90%",
-          boxShadow:    "0 8px 32px rgba(0,0,0,0.12)",
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        <h3
-          style={{
-            fontSize:     "var(--text-base)",
-            fontWeight:   "var(--font-medium)",
-            color:        "var(--color-text-primary)",
-            marginBottom: "var(--space-2)",
-          }}
-        >
-          Confirmar acción
-        </h3>
-        <p
-          style={{
-            fontSize:     "var(--text-sm)",
-            color:        "var(--color-text-secondary)",
-            marginBottom: "var(--space-6)",
-          }}
-        >
-          {mensaje}
-        </p>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }} onClick={onCancelar}>
+      <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-2)" }}>Confirmar acción</h3>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>{mensaje}</p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
-          <button
-            onClick={onCancelar}
-            style={{
-              padding:      "8px 16px",
-              borderRadius: "var(--radius-lg)",
-              border:       "1px solid var(--color-border-strong)",
-              background:   "transparent",
-              fontSize:     "var(--text-sm)",
-              fontWeight:   "var(--font-medium)",
-              color:        "var(--color-text-primary)",
-              cursor:       "pointer",
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirmar}
-            style={{
-              padding:      "8px 16px",
-              borderRadius: "var(--radius-lg)",
-              border:       "none",
-              background:   "var(--color-error)",
-              fontSize:     "var(--text-sm)",
-              fontWeight:   "var(--font-medium)",
-              color:        "white",
-              cursor:       "pointer",
-            }}
-          >
-            Eliminar
-          </button>
+          <button onClick={onCancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
+          <button onClick={onConfirmar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}>Eliminar</button>
         </div>
       </div>
     </div>
@@ -186,11 +218,9 @@ export default function AgentesPage() {
   const [error,        setError]        = useState<string | null>(null)
   const [guardando,    setGuardando]    = useState(false)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
-  // ── NUEVO ──────────────────────────────────────────────────
   const [busqueda,     setBusqueda]     = useState("")
   const [verInactivos, setVerInactivos] = useState(false)
 
-  // ── Filtro client-side (búsqueda sobre lo que ya trajo la API) ─
   const agentesFiltrados = useMemo(() => {
     if (!busqueda.trim()) return agentes
     const q = busqueda.toLowerCase()
@@ -202,12 +232,9 @@ export default function AgentesPage() {
     )
   }, [agentes, busqueda])
 
-  // ── Carga ──────────────────────────────────────────────────
   async function cargarAgentes() {
     try {
-      // Pasa el flag igual que en asignaciones
-      const url = `/api/agentes?inactivos=${String(verInactivos)}`      
-      const res = await fetch(url, {headers: authHeaders,cache: "no-store",})
+      const res = await fetch(`/api/agentes?inactivos=${String(verInactivos)}`, { headers: authHeaders, cache: "no-store" })
       if (!res.ok) throw new Error()
       setAgentes(await res.json())
     } catch {
@@ -219,41 +246,21 @@ export default function AgentesPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargarAgentes()
-  }, [authHeaders.Authorization, verInactivos]) // <── se re-ejecuta al cambiar el toggle
+  }, [authHeaders.Authorization, verInactivos])
 
-  // ── Form ───────────────────────────────────────────────────
   function abrirCrear() {
-    setForm(FORM_VACIO)
-    setFormErrors({})
-    setEditando(null)
-    setMostrarForm(true)
-    setError(null)
+    setForm(FORM_VACIO); setFormErrors({}); setEditando(null); setMostrarForm(true); setError(null)
   }
 
   function abrirEditar(a: Agente) {
-    setForm({
-      nombre:    a.nombre,
-      apellido:  a.apellido,
-      documento: a.documento,
-      email:     a.email    ?? "",
-      telefono:  a.telefono ?? "",
-      domicilio: a.domicilio ?? "",
-    })
-    setFormErrors({})
-    setEditando(a.id)
-    setMostrarForm(true)
-    setError(null)
+    setForm({ nombre: a.nombre, apellido: a.apellido, documento: a.documento, email: a.email ?? "", telefono: a.telefono ?? "", domicilio: a.domicilio ?? "" })
+    setFormErrors({}); setEditando(a.id); setMostrarForm(true); setError(null)
   }
 
   function cancelar() {
-    setMostrarForm(false)
-    setEditando(null)
-    setForm(FORM_VACIO)
-    setFormErrors({})
-    setError(null)
+    setMostrarForm(false); setEditando(null); setForm(FORM_VACIO); setFormErrors({}); setError(null)
   }
 
-  // ── Validación ─────────────────────────────────────────────
   function validar(): boolean {
     const errors: Partial<FormData> = {}
     CAMPOS.filter(c => c.required).forEach(c => {
@@ -263,19 +270,13 @@ export default function AgentesPage() {
     return Object.keys(errors).length === 0
   }
 
-  // ── Guardar ────────────────────────────────────────────────
   async function guardar() {
     if (!validar()) return
-    setGuardando(true)
-    setError(null)
+    setGuardando(true); setError(null)
     try {
       const url    = editando ? `/api/agentes/${editando}` : "/api/agentes"
       const method = editando ? "PATCH" : "POST"
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders,
-        body:    JSON.stringify(form),
-      })
+      const res = await fetch(url, { method, headers: authHeaders, body: JSON.stringify(form) })
       if (!res.ok) {
         const data = await res.json()
         setError(data.error ?? "Error guardando agente")
@@ -290,13 +291,9 @@ export default function AgentesPage() {
     }
   }
 
-  // ── Eliminar ───────────────────────────────────────────────
   async function eliminar(id: number) {
     try {
-      const res = await fetch(`/api/agentes/${id}`, {
-        method:  "DELETE",
-        headers: authHeaders,
-      })
+      const res = await fetch(`/api/agentes/${id}`, { method: "DELETE", headers: authHeaders })
       if (!res.ok) {
         const data = await res.json()
         setError(data.error ?? "Error eliminando")
@@ -310,48 +307,26 @@ export default function AgentesPage() {
     }
   }
 
-
-  // ── Reactivar ──────────────────────────────────────────────
-async function reactivar(id: number) {
-  try {
-    const res = await fetch(`/api/agentes/${id}/reactivar`, {
-      method:  "POST",
-      headers: authHeaders,
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      setError(data.error ?? "Error reactivando agente")
-      return
+  async function reactivar(id: number) {
+    try {
+      const res = await fetch(`/api/agentes/${id}/reactivar`, { method: "POST", headers: authHeaders })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error reactivando agente")
+        return
+      }
+      setAgentes(prev => prev.map(a => a.id === id ? { ...a, activo: true, deletedAt: null, estado: "ACTIVO" } : a))
+    } catch {
+      setError("Error de red")
     }
-    // Actualiza solo el agente reactivado en el estado local
-    setAgentes(prev => prev.map(a =>
-      a.id === id
-        ? { ...a, activo: true, deletedAt: null, estado: "ACTIVO" }
-        : a
-    ))
-  } catch {
-    setError("Error de red")
-  }
-}
-  // ── Loading ────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div
-        style={{
-          display:        "flex",
-          alignItems:     "center",
-          justifyContent: "center",
-          padding:        "var(--space-12)",
-          color:          "var(--color-text-hint)",
-          fontSize:       "var(--text-sm)",
-        }}
-      >
-        Cargando agentes...
-      </div>
-    )
   }
 
-  // ── Render ─────────────────────────────────────────────────
+  if (loading) return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
+      Cargando agentes...
+    </div>
+  )
+
   return (
     <>
       {confirmarId !== null && (
@@ -362,156 +337,67 @@ async function reactivar(id: number) {
         />
       )}
 
-      <div
-        style={{
-          display:       "flex",
-          flexDirection: "column",
-          gap:           "var(--space-6)",
-          maxWidth:      1100,
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
-              Agentes
-            </h1>
+            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Agentes</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
               {agentesFiltrados.length} agente{agentesFiltrados.length !== 1 ? "s" : ""}
               {!verInactivos && (" activo" + (agentesFiltrados.length !== 1 ? "s" : ""))}
             </p>
           </div>
-
           {!mostrarForm && (
-            <button
-              onClick={abrirCrear}
-              style={{
-                display:      "flex",
-                alignItems:   "center",
-                gap:          "var(--space-1)",
-                padding:      "9px 16px",
-                borderRadius: "var(--radius-lg)",
-                border:       "none",
-                background:   "var(--color-primary)",
-                color:        "white",
-                fontSize:     "var(--text-sm)",
-                fontWeight:   "var(--font-medium)",
-                cursor:       "pointer",
-              }}
-            >
+            <button onClick={abrirCrear} style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}>
               + Nuevo agente
             </button>
           )}
         </div>
 
-        {/* Error global */}
+        {/* Error */}
         {error && (
-          <div
-            style={{
-              display:      "flex",
-              alignItems:   "center",
-              gap:          "var(--space-2)",
-              padding:      "10px 14px",
-              borderRadius: "var(--radius-md)",
-              background:   "var(--color-error-bg)",
-              border:       "1px solid var(--color-error)",
-              fontSize:     "var(--text-xs)",
-              color:        "var(--color-error)",
-            }}
-            role="alert"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/>
-              <path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-            </svg>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
             {error}
-            <button
-              onClick={() => setError(null)}
-              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}
-              aria-label="Cerrar"
-            >
-              ×
-            </button>
+            <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
 
         {/* Formulario */}
         {mostrarForm && (
-          <div
-            style={{
-              background:   "var(--color-surface)",
-              border:       "1px solid var(--color-border)",
-              borderRadius: "var(--radius-xl)",
-              padding:      "var(--space-6)",
-              maxWidth:     520,
-            }}
-          >
-            <h2
-              style={{
-                fontSize:     "var(--text-base)",
-                fontWeight:   "var(--font-medium)",
-                color:        "var(--color-text-primary)",
-                marginBottom: "var(--space-6)",
-              }}
-            >
+          <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
+            <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editando ? "Editar agente" : "Nuevo agente"}
             </h2>
-
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
               {CAMPOS.map(({ key, label, required }) => (
                 <div key={key} style={{ gridColumn: key === "domicilio" ? "1 / -1" : undefined }}>
                   <label htmlFor={`field-${key}`} style={s.label}>
-                    {label}
-                    {required && <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>}
+                    {label}{required && <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>}
                   </label>
                   <input
                     id={`field-${key}`}
                     value={form[key]}
-                    onChange={e => {
-                      setForm(prev => ({ ...prev, [key]: e.target.value }))
-                      if (formErrors[key]) setFormErrors(prev => ({ ...prev, [key]: undefined }))
-                    }}
+                    onChange={e => { setForm(prev => ({ ...prev, [key]: e.target.value })); if (formErrors[key]) setFormErrors(prev => ({ ...prev, [key]: undefined })) }}
                     style={{ ...s.input, ...(formErrors[key] ? s.inputError : {}) }}
-                    onFocus={e => {
-                      e.target.style.borderColor = "var(--color-accent)"
-                      e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
-                    }}
-                    onBlur={e => {
-                      e.target.style.borderColor = formErrors[key] ? "var(--color-error)" : "var(--color-border)"
-                      e.target.style.boxShadow   = "none"
-                    }}
-                    aria-invalid={!!formErrors[key]}
+                    onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+                    onBlur={e => { e.target.style.borderColor = formErrors[key] ? "var(--color-error)" : "var(--color-border)"; e.target.style.boxShadow = "none" }}
                   />
-                  {formErrors[key] && (
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>
-                      {formErrors[key]}
-                    </span>
-                  )}
+                  {formErrors[key] && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors[key]}</span>}
                 </div>
               ))}
             </div>
-
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
-              <button
-                onClick={cancelar}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={guardar}
-                disabled={guardando}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
-                aria-busy={guardando}
-              >
+              <button onClick={cancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
+              <button onClick={guardar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
                 {guardando ? "Guardando..." : editando ? "Guardar cambios" : "Crear agente"}
               </button>
             </div>
           </div>
         )}
 
-        {/* ── NUEVO: Buscador + toggle inactivos ── */}
+        {/* Filtros */}
         {!mostrarForm && (
           <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
             <input
@@ -519,108 +405,62 @@ async function reactivar(id: number) {
               value={busqueda}
               onChange={e => setBusqueda(e.target.value)}
               style={{ ...s.input, flex: 1 }}
-              onFocus={e => {
-                e.target.style.borderColor = "var(--color-accent)"
-                e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
-              }}
-              onBlur={e => {
-                e.target.style.borderColor = "var(--color-border)"
-                e.target.style.boxShadow   = "none"
-              }}
+              onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+              onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
             />
             <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
-              <input
-                type="checkbox"
-                checked={verInactivos}
-                onChange={e => setVerInactivos(e.target.checked)}
-                style={{ cursor: "pointer" }}
-              />
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
               Ver inactivos
             </label>
           </div>
         )}
 
         {/* Tabla */}
-        <div
-          style={{
-            background:   "var(--color-surface)",
-            border:       "1px solid var(--color-border)",
-            borderRadius: "var(--radius-xl)",
-            overflow:     "hidden",
-          }}
-        >
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                {["Nombre", "Apellido", "Documento", "Email", "Teléfono", ""].map(col => (
+                {["Nombre", "Documento", "Email", "Teléfono", ""].map(col => (
                   <th key={col} style={s.th}>{col}</th>
                 ))}
               </tr>
             </thead>
-
-<tbody>
-  {agentesFiltrados.length === 0 ? (
-    <tr>
-      <td colSpan={6} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
-        No hay agentes{!verInactivos ? " activos" : ""} registrados
-      </td>
-    </tr>
-  ) : agentesFiltrados.map(a => (
-    <tr
-      key={a.id}
-      style={{ transition: "background 0.1s" }}
-      onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-    >
-      <td style={s.td}>
-        {a.apellido}, {a.nombre}
-        {!a.activo && (
-          <span style={{
-            marginLeft: 6,
-            fontSize: "var(--text-2xs)",
-            padding: "2px 6px",
-            borderRadius: "var(--radius-full)",
-            background: "var(--color-surface-raised)",
-            color: "var(--color-text-hint)",
-            border: "1px solid var(--color-border)",
-          }}>
-            Inactivo
-          </span>
-        )}
-      </td>
-      <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{a.documento}</td>
-      <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{a.email ?? "—"}</td>
-      <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{a.telefono ?? "—"}</td>
-      <td style={s.td}>
-        <div style={{ display: "flex", gap: "var(--space-3)" }}>
-          {a.activo ? (
-            <>
-              <button
-                onClick={() => abrirEditar(a)}
-                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
-              >
-                Editar
-              </button>
-              <button
-                onClick={() => setConfirmarId(a.id)}
-                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
-              >
-                Eliminar
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => reactivar(a.id)}
-              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
-            >
-              Reactivar
-            </button>
-          )}
-        </div>
-      </td>
-    </tr>
-  ))}
-</tbody>
+            <tbody>
+              {agentesFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                    No hay agentes{!verInactivos ? " activos" : ""} registrados
+                  </td>
+                </tr>
+              ) : agentesFiltrados.map(a => (
+                <tr
+                  key={a.id}
+                  style={{ transition: "background 0.1s" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td style={s.td}>
+                    {a.apellido}, {a.nombre}
+                    {!a.activo && (
+                      <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                        Inactivo
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{a.documento}</td>
+                  <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{a.email ?? "—"}</td>
+                  <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{a.telefono ?? "—"}</td>
+                  <td style={s.td}>
+                    <MenuGestionar
+                      agente={a}
+                      onEditar={() => abrirEditar(a)}
+                      onEliminar={() => setConfirmarId(a.id)}
+                      onReactivar={() => reactivar(a.id)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
 

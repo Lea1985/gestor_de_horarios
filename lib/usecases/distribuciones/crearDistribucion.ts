@@ -1,28 +1,30 @@
 // lib/usecases/distribuciones/crearDistribucion.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
+import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 
 export class DatosDistribucionInvalidosError extends Error {
   constructor() { super("asignacionId, version y fecha_vigencia_desde son obligatorios") }
 }
-
 export class FechaInvalidaError extends Error {
   constructor() { super("fecha_vigencia_desde inválida") }
 }
-
 export class RangoFechasInvalidoError extends Error {
   constructor() { super("fecha_vigencia_desde debe ser menor o igual a fecha_vigencia_hasta") }
 }
-
 export class AsignacionNoEncontradaError extends Error {
   constructor() { super("Asignación no encontrada") }
 }
-
 export class VersionDuplicadaError extends Error {
   constructor() { super("Ya existe esa versión para la asignación") }
 }
-
 export class SolapamientoError extends Error {
   constructor() { super("Existe una distribución activa en ese rango de fechas") }
+}
+export class SinPeriodoOperativoError extends Error {
+  constructor() { super("No hay período operativo vigente. Establecé uno antes de crear una distribución.") }
+}
+export class FechaFueraDePeriodoError extends Error {
+  constructor() { super("fecha_vigencia_desde debe estar dentro del período operativo vigente") }
 }
 
 export async function crearDistribucion(tenantId: number, body: {
@@ -43,6 +45,14 @@ export async function crearDistribucion(tenantId: number, body: {
   const hasta = distribucionRepository.parseDate(fecha_vigencia_hasta) ?? new Date("9999-12-31")
   if (desde > hasta) throw new RangoFechasInvalidoError()
 
+  // Validar período operativo vigente
+  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
+  if (!periodo) throw new SinPeriodoOperativoError()
+
+  if (desde < periodo.fecha_desde || desde > periodo.fecha_hasta) {
+    throw new FechaFueraDePeriodoError()
+  }
+
   const { default: prisma } = await import("@/lib/prisma")
   const asignacion = await prisma.asignacion.findFirst({
     where: { id: asignacionId, institucionId: tenantId, deletedAt: null },
@@ -50,7 +60,6 @@ export async function crearDistribucion(tenantId: number, body: {
   })
   if (!asignacion) throw new AsignacionNoEncontradaError()
 
-  // ✅ FIX: tenantId va primero, coincidiendo con la firma del repositorio
   const conflicto = await distribucionRepository.verificarSolapamiento(
     tenantId,
     asignacionId,

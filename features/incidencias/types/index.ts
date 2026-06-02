@@ -1,0 +1,126 @@
+// features/incidencias/types/index.ts
+export type Incidencia = {
+  id:           number
+  asignacionId: number
+  fecha_desde:  string
+  fecha_hasta:  string
+  observacion:  string | null
+  activo:       boolean
+  deletedAt:    string | null
+  asignacion?: {
+    identificadorEstructural: string
+    titularidades: {
+      agente: { nombre: string; apellido: string }
+    }[]
+    unidad:   { nombre: string; codigoUnidad: number }
+    materia:  { nombre: string } | null
+    comision: {
+      nombre: string
+      curso:  { nombre: string }
+      turno:  { nombre: string }
+    } | null
+    turno:    { nombre: string } | null
+  }
+  codigarioItem?: { codigo: string; nombre: string }
+  padre?:         { id: number } | null
+  hijos?:         { id: number }[]
+}
+
+export type IncidenciaDetalle = {
+  id:           number
+  asignacionId: number
+  fecha_desde:  string
+  fecha_hasta:  string
+  observacion:  string | null
+  activo:       boolean
+  deletedAt:    string | null
+  asignacion?: {
+    identificadorEstructural: string
+    titularidades: {
+      agente: { nombre: string; apellido: string; documento: string }
+    }[]
+    unidad: { nombre: string; codigoUnidad: number }
+  }
+  codigarioItem?: { codigo: string; nombre: string }
+  padre?: { id: number } | null
+  hijos?: { id: number }[]
+}
+
+export type CadenaItem = {
+  id:          number
+  fecha_desde: string
+  fecha_hasta: string
+  tipo?:       string
+}
+
+export type ReemplazoClase = {
+  id:                  number
+  asignacionTitularId: number
+  activo:              boolean        
+  asignacionSuplente?: {
+    identificadorEstructural: string
+    titularidades: {
+      agente: { nombre: string; apellido: string; documento: string }
+    }[]
+  } | null
+  agenteSuplente?: {
+    id:       number
+    nombre:   string
+    apellido: string
+  } | null
+}
+
+export type ClaseAfectada = {
+  id:     number
+  fecha:  string
+  estado: "PROGRAMADA" | "DICTADA" | "SUSPENDIDA" | "REEMPLAZADA"
+  modulo?: {
+    dia_semana: string
+    hora_desde: number
+    hora_hasta: number
+  } | null
+  unidad:   { nombre: string; codigoUnidad: number }
+  comision?: { id: number; nombre: string } | null
+  reemplazos: ReemplazoClase[]
+}
+
+export type AsignacionParaIncidencia = {
+  id:                       number
+  identificadorEstructural: string
+  titularidades: {
+    agente: { nombre: string; apellido: string; documento: string }
+  }[]
+  unidad:   { nombre: string }
+  comision: { id: number; nombre: string; curso?: { id: number; nombre: string } } | null
+  turno:    { id: number; nombre: string } | null
+}
+
+export type AgenteParaReemplazo = {
+  id:        number
+  nombre:    string
+  apellido:  string
+  documento: string
+}
+
+export type Codigario     = { id: number; nombre: string }
+export type CodigarioItem = { id: number; codigo: string; nombre: string }
+
+export type DatosComunes = {
+  codigarioId:     string
+  codigarioItemId: string
+  fecha_desde:     string
+  fecha_hasta:     string
+  observacion:     string
+}
+
+export type ResultadoCarga = {
+  asignacionId:  number
+  identificador: string
+  agente:        string
+  ok:            boolean
+  error?:        string
+}
+
+export const DATOS_VACIO: DatosComunes = {
+  codigarioId: "", codigarioItemId: "", fecha_desde: "", fecha_hasta: "", observacion: "",
+}

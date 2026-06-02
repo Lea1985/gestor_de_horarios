@@ -39,6 +39,7 @@
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
           return Response.json({ error: "Ya existe un item con ese código en este codigario" }, { status: 409 })
         }
+        console.error("ERROR COMPLETO:", error)
         return Response.json({ error: "Error creando item" }, { status: 500 })
       }
     })

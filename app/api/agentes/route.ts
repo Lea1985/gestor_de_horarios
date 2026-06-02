@@ -8,15 +8,12 @@ export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     const { searchParams } = new URL(req.url)
     const incluirInactivos = searchParams.get("inactivos") === "true"
-    const agentes = await listarAgentes(tenantId, incluirInactivos)
-    console.log(agentes)
-    return Response.json(agentes)
+    return Response.json(await listarAgentes(tenantId, incluirInactivos))
   })
 }
 
 export async function POST(req: Request) {
   return withContext(req, async ({ tenantId }) => {
-
     let body
     try {
       body = await req.json()
@@ -35,12 +32,8 @@ export async function POST(req: Request) {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        return Response.json(
-          { error: "El documento ya está registrado en esta institución" },
-          { status: 409 }
-        )
+        return Response.json({ error: "El documento ya está registrado en esta institución" }, { status: 409 })
       }
-      console.error("Error creando agente:", error)
       return Response.json({ error: "Error creando agente" }, { status: 500 })
     }
   })

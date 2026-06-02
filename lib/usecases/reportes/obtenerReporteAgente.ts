@@ -1,7 +1,11 @@
 import { reporteRepository } from "@/lib/repositories/reporteRepository"
 import { RequestContext } from "@/lib/types/context"
 
-export class ReporteAgenteInvalidoError extends Error {}
+export class ReporteAgenteInvalidoError extends Error {
+  constructor() {
+    super("fecha_desde y fecha_hasta son obligatorios")
+  }
+}
 export class AgenteNoEncontradoError extends Error {}
 
 export async function obtenerReporteAgente(
@@ -11,40 +15,30 @@ export async function obtenerReporteAgente(
   fechaHasta: string
 ) {
   if (!fechaDesde || !fechaHasta) {
-    throw new ReporteAgenteInvalidoError("fecha_desde y fecha_hasta son obligatorios")
+    throw new ReporteAgenteInvalidoError()
   }
 
   const agente = await reporteRepository.obtenerAgente(agenteId, ctx.tenantId)
-
   if (!agente) {
     throw new AgenteNoEncontradoError()
   }
 
   const desde = new Date(fechaDesde)
   const hasta = new Date(fechaHasta)
-
-  const asignaciones = await reporteRepository.listarAsignaciones(
-    agenteId,
-    ctx.tenantId
-  )
-
-  const asignacionIds = asignaciones.map(a => a.id)
-
   const rango = { gte: desde, lte: hasta }
 
-  const [programadas, dictadas, suspendidas, reemplazadas] =
-    await reporteRepository.contarClases(asignacionIds, rango)
+  const asignaciones = await reporteRepository.listarAsignaciones(agenteId, ctx.tenantId)
+  const asignacionIds = asignaciones.map(a => a.id)
 
-  const incidencias = await reporteRepository.listarIncidencias(
-    asignacionIds,
-    desde,
-    hasta
-  )
+  // ✅ NUEVO: usamos agregación directa en la base de datos (más rápido)
+  const resumenClases = await reporteRepository.obtenerResumenClasesPorAsignaciones(asignacionIds, rango)
+
+  const incidencias = await reporteRepository.listarIncidencias(asignacionIds, desde, hasta)
 
   const [reemplazosComoTitular, reemplazosComoSuplente] =
     await reporteRepository.contarReemplazos(asignacionIds, rango)
 
-  const total = programadas + dictadas + suspendidas + reemplazadas
+  const total = resumenClases.PROGRAMADA + resumenClases.DICTADA + resumenClases.SUSPENDIDA + resumenClases.REEMPLAZADA
 
   return {
     agente: agente.agente,
@@ -52,12 +46,12 @@ export async function obtenerReporteAgente(
     asignaciones,
     resumen: {
       total,
-      programadas,
-      dictadas,
-      suspendidas,
-      reemplazadas,
-      porcentajeDictadas: total > 0 ? Math.round((dictadas / total) * 100) : 0,
-      porcentajeSuspendidas: total > 0 ? Math.round((suspendidas / total) * 100) : 0,
+      programadas: resumenClases.PROGRAMADA,
+      dictadas: resumenClases.DICTADA,
+      suspendidas: resumenClases.SUSPENDIDA,
+      reemplazadas: resumenClases.REEMPLAZADA,
+      porcentajeDictadas: total > 0 ? Math.round((resumenClases.DICTADA / total) * 100) : 0,
+      porcentajeSuspendidas: total > 0 ? Math.round((resumenClases.SUSPENDIDA / total) * 100) : 0,
       reemplazosComoTitular,
       reemplazosComoSuplente,
     },

@@ -1,6 +1,6 @@
 
 //lib/usecases/clases/actualizarClase.ts
-import { claseRepository } from "@/lib/repositories/claseRepository"
+import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
 import { EstadoClase } from "@prisma/client"
 
 export class ClaseNoEncontradaError extends Error {
@@ -32,11 +32,11 @@ export async function actualizarClase(id: number, tenantId: number, body: {
     throw new EstadoInvalidoError(ESTADOS_VALIDOS)
   }
 
-  const existente = await claseRepository.existeEnTenant(id, tenantId)
+  const existente = await claseProgramadaRepository.existeEnTenant(id, tenantId)
   if (!existente) throw new ClaseNoEncontradaError()
 
   if (incidenciaId) {
-    const incidencia = await claseRepository.verificarIncidencia(incidenciaId, existente.asignacionId)
+    const incidencia = await claseProgramadaRepository.verificarIncidencia(incidenciaId, existente.asignacionId)
     if (!incidencia) throw new IncidenciaInvalidaError()
   }
 
@@ -44,5 +44,5 @@ export async function actualizarClase(id: number, tenantId: number, body: {
   if (estado       !== undefined) data.estado       = estado as EstadoClase
   if (incidenciaId !== undefined) data.incidenciaId = incidenciaId
 
-  return claseRepository.actualizar(id, data)
+  return claseProgramadaRepository.actualizar(id, data)
 }

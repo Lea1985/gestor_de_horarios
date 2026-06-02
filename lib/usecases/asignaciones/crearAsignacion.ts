@@ -5,6 +5,9 @@ import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
 export class DatosAsignacionInvalidosError extends Error {}
 export class EntidadNoEncontradaError extends Error {}
+export class IdentificadorDuplicadoError extends Error {
+  constructor() { super("Ya existe una asignación con ese identificador estructural") }
+}
 
 type Input = {
   agenteId?: number | null
@@ -40,6 +43,10 @@ export async function crearAsignacion(tenantId: number, data: Input) {
       "La fecha fin no puede ser anterior a la fecha inicio"
     )
   }
+
+  // Verificar duplicado de identificador antes de crear
+  const duplicado = await asignacionRepository.verificarIdentificador(identificador, tenantId)
+  if (duplicado) throw new IdentificadorDuplicadoError()
 
   const [agente, unidad, materia, comision, turno] = await Promise.all([
     data.agenteId
@@ -77,39 +84,34 @@ export async function crearAsignacion(tenantId: number, data: Input) {
 
   if (comision) {
     if (comision.turnoId !== data.turnoId) {
-      throw new DatosAsignacionInvalidosError(
-        "El turno no coincide con la comisión"
-      )
+      throw new DatosAsignacionInvalidosError("El turno no coincide con la comisión")
     }
-
     if (comision.unidadId && comision.unidadId !== data.unidadId) {
-      throw new DatosAsignacionInvalidosError(
-        "La unidad no coincide con la comisión"
-      )
+      throw new DatosAsignacionInvalidosError("La unidad no coincide con la comisión")
     }
   }
 
   return prisma.$transaction(async (tx) => {
     const asignacion = await tx.asignacion.create({
       data: {
-        institucionId: tenantId,
-        unidadId: data.unidadId,
+        institucionId:            tenantId,
+        unidadId:                 data.unidadId,
         identificadorEstructural: identificador,
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-        materiaId: data.materiaId ?? null,
-        comisionId: data.comisionId ?? null,
-        turnoId: data.turnoId,
+        fecha_inicio:             fechaInicio,
+        fecha_fin:                fechaFin,
+        materiaId:                data.materiaId ?? null,
+        comisionId:               data.comisionId ?? null,
+        turnoId:                  data.turnoId,
       },
       include: {
-        unidad: true,
-        materia: true,
+        unidad:   true,
+        materia:  true,
         comision: true,
-        turno: true,
+        turno:    true,
         titularidades: {
-          where: { activo: true, fecha_hasta: null },
+          where:   { activo: true, fecha_hasta: null },
           include: { agente: true },
-          take: 1,
+          take:    1,
         },
       },
     })
@@ -120,9 +122,9 @@ export async function crearAsignacion(tenantId: number, data: Input) {
       await tx.titularAsignacion.create({
         data: {
           institucionId: tenantId,
-          asignacionId: asignacion.id,
-          agenteId: data.agenteId,
-          fecha_desde: fechaInicio,
+          asignacionId:  asignacion.id,
+          agenteId:      data.agenteId,
+          fecha_desde:   fechaInicio,
         },
       })
     }

@@ -1,3 +1,4 @@
+//lib/usecases/asignaciones/reactivarAsignacion.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 
 export class AsignacionNoEncontradaError extends Error {

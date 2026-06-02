@@ -1,8 +1,8 @@
-//app/api/unidades/[id]/route.ts
+// app/api/unidades/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerUnidad, UnidadNoEncontradaError } from "@/lib/usecases/unidades/obtenerUnidad"
 import { actualizarUnidad, SinCamposParaActualizarError } from "@/lib/usecases/unidades/actualizarUnidad"
-import { eliminarUnidad } from "@/lib/usecases/unidades/eliminarUnidad"
+import { eliminarUnidad, TieneAsignacionesActivasError } from "@/lib/usecases/unidades/eliminarUnidad"
 
 function parseId(id: string) {
   const n = Number(id)
@@ -50,6 +50,13 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   if (!unidadId) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async (ctx) => {
-    return Response.json(await eliminarUnidad(ctx, unidadId))
+    try {
+      return Response.json(await eliminarUnidad(ctx, unidadId))
+    } catch (error) {
+      if (error instanceof TieneAsignacionesActivasError) {
+        return Response.json({ error: error.message }, { status: 409 })
+      }
+      return Response.json({ error: "Error eliminando unidad" }, { status: 500 })
+    }
   })
 }

@@ -1,48 +1,72 @@
+// lib/repositories/reporteRepository.ts
 import prisma from "@/lib/prisma"
 
 export const reporteRepository = {
-
   obtenerAgente(agenteId: number, tenantId: number) {
-    return prisma.agenteInstitucion.findFirst({
-      where: { agenteId, institucionId: tenantId },
-      include: {
-        agente: {
+    return prisma.agente.findFirst({
+      where: { id: agenteId, institucionId: tenantId },
+      select: { id: true, nombre: true, apellido: true, documento: true, email: true },
+    })
+  },
+
+  async listarAsignaciones(agenteId: number, tenantId: number) {
+    const titulares = await prisma.titularAsignacion.findMany({
+      where: {
+        agenteId,
+        institucionId: tenantId,
+        activo: true,
+        fecha_hasta: null,
+      },
+      select: {
+        asignacion: {
           select: {
-            nombre: true,
-            apellido: true,
-            documento: true,
-            email: true,
+            id: true,
+            identificadorEstructural: true,
+            unidad: { select: { nombre: true } },
           },
         },
       },
     })
+    return titulares.map(t => t.asignacion)
   },
 
-  listarAsignaciones(agenteId: number, tenantId: number) {
-    return prisma.asignacion.findMany({
-      where: { agenteId, institucionId: tenantId, activo: true },
-      select: {
-        id: true,
-        identificadorEstructural: true,
-        unidad: { select: { nombre: true } },
+  // ✅ Optimizado con groupBy y manejo de array vacío
+  async obtenerResumenClasesPorAsignaciones(
+    asignacionIds: number[],
+    rango: { gte: Date; lte: Date }
+  ) {
+    if (asignacionIds.length === 0) {
+      return { PROGRAMADA: 0, DICTADA: 0, SUSPENDIDA: 0, REEMPLAZADA: 0, total: 0 }
+    }
+    const resultados = await prisma.claseProgramada.groupBy({
+      by: ["estado"],
+      where: {
+        asignacionId: { in: asignacionIds },
+        fecha: rango,
       },
+      _count: { estado: true },
     })
+    const resumen = {
+      PROGRAMADA: 0,
+      DICTADA: 0,
+      SUSPENDIDA: 0,
+      REEMPLAZADA: 0,
+      total: 0,
+    }
+    for (const r of resultados) {
+      resumen[r.estado] = r._count.estado
+      resumen.total += r._count.estado
+    }
+    return resumen
   },
 
-  contarClases(asignacionIds: number[], rango: any) {
+  // Métodos legacy (se mantienen por compatibilidad, pero se recomienda usar los nuevos)
+  contarClases(asignacionIds: number[], rango: { gte: Date; lte: Date }) {
     return Promise.all([
-      prisma.claseProgramada.count({
-        where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "PROGRAMADA" },
-      }),
-      prisma.claseProgramada.count({
-        where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "DICTADA" },
-      }),
-      prisma.claseProgramada.count({
-        where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "SUSPENDIDA" },
-      }),
-      prisma.claseProgramada.count({
-        where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "REEMPLAZADA" },
-      }),
+      prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "PROGRAMADA" } }),
+      prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "DICTADA" } }),
+      prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "SUSPENDIDA" } }),
+      prisma.claseProgramada.count({ where: { asignacionId: { in: asignacionIds }, fecha: rango, estado: "REEMPLAZADA" } }),
     ])
   },
 
@@ -59,183 +83,114 @@ export const reporteRepository = {
         fecha_desde: true,
         fecha_hasta: true,
         observacion: true,
-        codigarioItem: {
-          select: { codigo: true, nombre: true },
-        },
+        codigarioItem: { select: { codigo: true, nombre: true } },
       },
     })
   },
 
-  contarReemplazos(asignacionIds: number[], rango: any) {
+  contarReemplazos(asignacionIds: number[], rango: { gte: Date; lte: Date }) {
     return Promise.all([
       prisma.reemplazo.count({
-        where: {
-          activo: true,
-          asignacionTitularId: { in: asignacionIds },
-          clase: { fecha: rango },
-        },
+        where: { activo: true, asignacionTitularId: { in: asignacionIds }, clase: { fecha: rango } },
       }),
       prisma.reemplazo.count({
-        where: {
-          activo: true,
-          asignacionSuplenteId: { in: asignacionIds },
-          clase: { fecha: rango },
-        },
+        where: { activo: true, clase: { fecha: rango, asignacionId: { in: asignacionIds } } },
       }),
     ])
   },
-  contarAsistencia(asignacionId: number, tenantId: number, rango: any) {
-  const donde = {
-    institucionId: tenantId,
-    asignacionId,
-    fecha: rango,
-  }
 
-  return Promise.all([
-    prisma.claseProgramada.count({ where: { ...donde, estado: "PROGRAMADA" } }),
-    prisma.claseProgramada.count({ where: { ...donde, estado: "DICTADA" } }),
-    prisma.claseProgramada.count({ where: { ...donde, estado: "SUSPENDIDA" } }),
-    prisma.claseProgramada.count({ where: { ...donde, estado: "REEMPLAZADA" } }),
-  ])
+  contarAsistencia(asignacionId: number, tenantId: number, rango: { gte: Date; lte: Date }) {
+    const donde = { institucionId: tenantId, asignacionId, fecha: rango }
+    return Promise.all([
+      prisma.claseProgramada.count({ where: { ...donde, estado: "PROGRAMADA" } }),
+      prisma.claseProgramada.count({ where: { ...donde, estado: "DICTADA" } }),
+      prisma.claseProgramada.count({ where: { ...donde, estado: "SUSPENDIDA" } }),
+      prisma.claseProgramada.count({ where: { ...donde, estado: "REEMPLAZADA" } }),
+    ])
   },
 
-  listarClases(asignacionId: number, tenantId: number, rango: any) {
+  listarClases(asignacionId: number, tenantId: number, rango: { gte: Date; lte: Date }) {
     return prisma.claseProgramada.findMany({
-        where: {
-        institucionId: tenantId,
-        asignacionId,
-        fecha: rango,
-        },
-        orderBy: { fecha: "asc" },
-        select: {
+      where: { institucionId: tenantId, asignacionId, fecha: rango },
+      orderBy: { fecha: "asc" },
+      select: {
         id: true,
         fecha: true,
         estado: true,
-        modulo: {
-            select: {
-            dia_semana: true,
-            hora_desde: true,
-            hora_hasta: true,
-            },
-        },
+        modulo: { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
         unidad: { select: { nombre: true } },
         incidencia: {
-            select: {
+          select: {
             id: true,
             fecha_desde: true,
             fecha_hasta: true,
             observacion: true,
-            codigarioItem: {
-                select: { codigo: true, nombre: true },
-            },
-            },
+            codigarioItem: { select: { codigo: true, nombre: true } },
+          },
         },
-        },
+      },
     })
   },
-  listarReemplazos(tenantId: number, desde: Date, hasta: Date) {
-  return prisma.reemplazo.findMany({
-    where: {
-      activo: true,
-      clase: {
-        institucionId: tenantId,
-        fecha: {
-          gte: desde,
-          lte: hasta,
-        },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-    include: {
-      clase: {
-        select: {
-          fecha: true,
-          estado: true,
-          modulo: {
-            select: {
-              dia_semana: true,
-              hora_desde: true,
-              hora_hasta: true,
-            },
-          },
-          unidad: { select: { nombre: true } },
-        },
-      },
-      asignacionTitular: {
-        select: {
-          identificadorEstructural: true,
-          agente: {
-            select: {
-              nombre: true,
-              apellido: true,
-              documento: true,
-            },
-          },
-        },
-      },
-      asignacionSuplente: {
-        select: {
-          identificadorEstructural: true,
-          agente: {
-            select: {
-              nombre: true,
-              apellido: true,
-              documento: true,
-            },
-          },
-        },
-      },
-    },
-  })
-},
-obtenerUnidad(unidadId: number, tenantId: number) {
-  return prisma.unidadOrganizativa.findFirst({
-    where: { id: unidadId, institucionId: tenantId },
-    select: { id: true, nombre: true, tipo: true },
-  })
-},
 
-listarClasesPorUnidad(
-  unidadId: number,
-  tenantId: number,
-  rango: any
-) {
-  return prisma.claseProgramada.findMany({
-    where: {
-      unidadId,
-      institucionId: tenantId,
-      fecha: rango,
-    },
-    orderBy: { fecha: "asc" },
-    include: {
-      modulo: {
-        select: {
-          dia_semana: true,
-          hora_desde: true,
-          hora_hasta: true,
-        },
+  listarReemplazos(tenantId: number, desde: Date, hasta: Date) {
+    return prisma.reemplazo.findMany({
+      where: {
+        activo: true,
+        clase: { institucionId: tenantId, fecha: { gte: desde, lte: hasta } },
       },
-      asignacion: {
-        select: {
-          identificadorEstructural: true,
-          agente: {
-            select: { nombre: true, apellido: true },
+      orderBy: { createdAt: "asc" },
+      include: {
+        clase: {
+          select: {
+            fecha: true,
+            estado: true,
+            modulo: { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
+            unidad: { select: { nombre: true } },
           },
         },
-      },
-      reemplazos: {
-        where: { activo: true },
-        select: {
-          asignacionSuplente: {
-            select: {
-              agente: {
-                select: { nombre: true, apellido: true },
-              },
+        asignacionTitular: {
+          select: {
+            identificadorEstructural: true,
+            titularidades: {
+              where: { activo: true, fecha_hasta: null },
+              take: 1,
+              select: { agente: { select: { nombre: true, apellido: true, documento: true } } },
             },
           },
         },
+        agenteSuplente: { select: { nombre: true, apellido: true, documento: true } },
       },
-    },
-  })
-}
+    })
+  },
+
+  obtenerUnidad(unidadId: number, tenantId: number) {
+    return prisma.unidadOrganizativa.findFirst({
+      where: { id: unidadId, institucionId: tenantId },
+      select: { id: true, nombre: true, tipo: true },
+    })
+  },
+
+  listarClasesPorUnidad(unidadId: number, tenantId: number, rango: { gte: Date; lte: Date }) {
+    return prisma.claseProgramada.findMany({
+      where: { unidadId, institucionId: tenantId, fecha: rango },
+      orderBy: { fecha: "asc" },
+      include: {
+        modulo: { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
+        asignacion: {
+          select: {
+            identificadorEstructural: true,
+            titularidades: {
+              where: { activo: true, fecha_hasta: null },
+              take: 1,
+              select: { agente: { select: { nombre: true, apellido: true } } },
+            },
+          },
+        },
+        reemplazos: {
+          where: { activo: true },
+          select: { agenteSuplente: { select: { nombre: true, apellido: true } } },
+        },
+      },
+    })
+  },
 }
