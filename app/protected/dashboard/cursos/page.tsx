@@ -1,22 +1,20 @@
-// app/protected/dashboard/cursos/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/app/hooks/useAuth"
 
 type Curso = {
-  id:          number
-  nombre:      string
-  descripcion: string | null
-  activo:      boolean
+  id:              number
+  nombre:          string
+  descripcion:     string | null
+  activo:          boolean
+  tieneMaterias:   boolean
+  tieneComisiones: boolean
+  puedeEliminar:   boolean
 }
 
-type FormData = {
-  nombre:      string
-  descripcion: string
-}
-
+type FormData = { nombre: string; descripcion: string }
 const FORM_VACIO: FormData = { nombre: "", descripcion: "" }
 
 const s = {
@@ -32,8 +30,7 @@ const s = {
   th: {
     textAlign: "left" as const, fontSize: "var(--text-2xs)", fontWeight: "var(--font-medium)" as const,
     textTransform: "uppercase" as const, letterSpacing: "0.5px", color: "var(--color-text-secondary)",
-    padding: "10px 12px", borderBottom: "1px solid var(--color-border-strong)",
-    background: "var(--color-surface-raised)",
+    padding: "10px 12px", borderBottom: "1px solid var(--color-border-strong)", background: "var(--color-surface-raised)",
   },
   td: {
     padding: "10px 12px", fontSize: "var(--text-sm)", color: "var(--color-text-primary)",
@@ -41,36 +38,90 @@ const s = {
   },
 }
 
-function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
-  mensaje: string; onConfirmar: () => void; onCancelar: () => void
-}) {
+function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: { mensaje: string; onConfirmar: () => void; onCancelar: () => void }) {
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }}
-      onClick={onCancelar}
-    >
-      <div
-        style={{ background: "var(--color-surface)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
-        onClick={e => e.stopPropagation()}
-      >
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }} onClick={onCancelar}>
+      <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-2)" }}>Confirmar acción</h3>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>{mensaje}</p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
-          <button
-            onClick={onCancelar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirmar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
-          >
-            Eliminar
-          </button>
+          <button onClick={onCancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
+          <button onClick={onConfirmar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}>Eliminar</button>
         </div>
       </div>
     </div>
+  )
+}
+
+function MenuGestionar({ curso, onEditar, onEliminar }: {
+  curso:      Curso
+  onEditar:   () => void
+  onEliminar: () => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [pos,     setPos]     = useState({ top: 0, left: 0 })
+  const btnRef  = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        btnRef.current  && !btnRef.current.contains(e.target as Node)
+      ) setAbierto(false)
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  function abrir() {
+    if (!btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    setPos({ top: rect.bottom + 4, left: rect.right - 140 })
+    setAbierto(v => !v)
+  }
+
+  const motivoBloqueo = curso.tieneMaterias && curso.tieneComisiones
+    ? "Tiene materias y comisiones activas"
+    : curso.tieneMaterias
+    ? "Tiene materias activas"
+    : curso.tieneComisiones
+    ? "Tiene comisiones activas"
+    : null
+
+  return (
+    <>
+      <button ref={btnRef} onClick={abrir} style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}>
+        Gestionar ▾
+      </button>
+      {abierto && (
+        <div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", minWidth: 160, zIndex: 9999, overflow: "hidden" }}>
+          <button
+            onClick={() => { setAbierto(false); onEditar() }}
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+          >
+            Editar
+          </button>
+          <button
+            onClick={() => { if (curso.puedeEliminar) { setAbierto(false); onEliminar() } }}
+            disabled={!curso.puedeEliminar}
+            title={motivoBloqueo ?? undefined}
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: curso.puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: curso.puedeEliminar ? "pointer" : "not-allowed", opacity: curso.puedeEliminar ? 1 : 0.5 }}
+            onMouseEnter={e => { if (curso.puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+          >
+            Eliminar
+            {motivoBloqueo && (
+              <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
+                {motivoBloqueo}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -105,27 +156,16 @@ export default function CursosPage() {
   }, [authHeaders.Authorization])
 
   function abrirCrear() {
-    setForm(FORM_VACIO)
-    setFormErrors({})
-    setEditandoId(null)
-    setMostrarForm(true)
-    setError(null)
+    setForm(FORM_VACIO); setFormErrors({}); setEditandoId(null); setMostrarForm(true); setError(null)
   }
 
   function abrirEditar(c: Curso) {
     setForm({ nombre: c.nombre, descripcion: c.descripcion ?? "" })
-    setFormErrors({})
-    setEditandoId(c.id)
-    setMostrarForm(true)
-    setError(null)
+    setFormErrors({}); setEditandoId(c.id); setMostrarForm(true); setError(null)
   }
 
   function cancelar() {
-    setMostrarForm(false)
-    setEditandoId(null)
-    setForm(FORM_VACIO)
-    setFormErrors({})
-    setError(null)
+    setMostrarForm(false); setEditandoId(null); setForm(FORM_VACIO); setFormErrors({}); setError(null)
   }
 
   function validar(): boolean {
@@ -137,8 +177,7 @@ export default function CursosPage() {
 
   async function guardar() {
     if (!validar()) return
-    setGuardando(true)
-    setError(null)
+    setGuardando(true); setError(null)
     try {
       const url    = editandoId ? `/api/cursos/${editandoId}` : "/api/cursos"
       const method = editandoId ? "PATCH" : "POST"
@@ -151,8 +190,7 @@ export default function CursosPage() {
         setError(data.error ?? "Error guardando")
         return
       }
-      await cargar()
-      cancelar()
+      await cargar(); cancelar()
     } catch {
       setError("Error de red")
     } finally {
@@ -186,7 +224,7 @@ export default function CursosPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este curso? Se eliminarán también todas sus materias asociadas."
+          mensaje="¿Eliminar este curso? Esta acción no se puede deshacer."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />
@@ -194,7 +232,6 @@ export default function CursosPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
 
-        {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Cursos</h1>
@@ -203,16 +240,12 @@ export default function CursosPage() {
             </p>
           </div>
           {!mostrarForm && (
-            <button
-              onClick={abrirCrear}
-              style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
-            >
+            <button onClick={abrirCrear} style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}>
               + Nuevo curso
             </button>
           )}
         </div>
 
-        {/* ERROR */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -221,13 +254,11 @@ export default function CursosPage() {
           </div>
         )}
 
-        {/* FORMULARIO */}
         {mostrarForm && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editandoId ? "Editar curso" : "Nuevo curso"}
             </h2>
-
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
               <div>
                 <label style={s.label}>Nombre <span style={{ color: "var(--color-error)" }}>*</span></label>
@@ -241,7 +272,6 @@ export default function CursosPage() {
                 />
                 {formErrors.nombre && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.nombre}</span>}
               </div>
-
               <div>
                 <label style={s.label}>Descripción</label>
                 <input
@@ -254,74 +284,41 @@ export default function CursosPage() {
                 />
               </div>
             </div>
-
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
-              <button
-                onClick={cancelar}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={guardar}
-                disabled={guardando}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
-              >
+              <button onClick={cancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
+              <button onClick={guardar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
                 {guardando ? "Guardando..." : editandoId ? "Guardar cambios" : "Crear curso"}
               </button>
             </div>
           </div>
         )}
 
-        {/* TABLA */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr>
-                {["Nombre", "Descripción", "Materias", ""].map(col => (
-                  <th key={col} style={s.th}>{col}</th>
-                ))}
-              </tr>
+              <tr>{["Nombre", "Descripción", "Materias", ""].map(col => <th key={col} style={s.th}>{col}</th>)}</tr>
             </thead>
             <tbody>
               {cursos.length === 0 ? (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
-                    No hay cursos registrados
-                  </td>
-                </tr>
+                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>No hay cursos registrados</td></tr>
               ) : cursos.map(c => (
-                <tr
-                  key={c.id}
-                  style={{ transition: "background 0.1s" }}
+                <tr key={c.id} style={{ transition: "background 0.1s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
                   <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>{c.nombre}</td>
                   <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{c.descripcion ?? "—"}</td>
                   <td style={s.td}>
-                    <Link
-                      href={`/protected/dashboard/cursos/${c.id}/materias`}
-                      style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}
-                    >
+                    <Link href={`/protected/dashboard/cursos/${c.id}/materias`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
                       Administrar →
                     </Link>
                   </td>
                   <td style={s.td}>
-                    <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                      <button
-                        onClick={() => abrirEditar(c)}
-                        style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => setConfirmarId(c.id)}
-                        style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                    <MenuGestionar
+                      curso={c}
+                      onEditar={() => abrirEditar(c)}
+                      onEliminar={() => setConfirmarId(c.id)}
+                    />
                   </td>
                 </tr>
               ))}
