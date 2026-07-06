@@ -1,14 +1,15 @@
-//features/incidencias/components/useIncidenciaDetalle.ts
+//features/incidencias/hooks/useIncidenciaDetalle.ts
 import { useEffect, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
-import { fetchIncidenciaDetalle, fetchCadena, deleteIncidencia, reactivarIncidencia } from "../services/incidenciasService"
-import type { IncidenciaDetalle, CadenaItem } from "../types"
+import { fetchIncidenciaDetalle, fetchCadena, fetchCobertura, deleteIncidencia, reactivarIncidencia } from "../services/incidenciasService"
+import type { IncidenciaDetalle, CadenaItem, TramoCobertura } from "../types"
 
 export function useIncidenciaDetalle(id: string) {
   const { authHeaders } = useAuth()
 
   const [incidencia, setIncidencia] = useState<IncidenciaDetalle | null>(null)
   const [cadena,     setCadena]     = useState<CadenaItem[]>([])
+  const [cobertura,  setCobertura]  = useState<TramoCobertura[]>([])
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState<string | null>(null)
   const [confirmar,  setConfirmar]  = useState(false)
@@ -24,6 +25,9 @@ export function useIncidenciaDetalle(id: string) {
       ])
       setIncidencia(inc)
       setCadena(cad)
+
+      const cob = await fetchCobertura(id, authHeaders)
+      setCobertura(cob)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
@@ -63,6 +67,7 @@ export function useIncidenciaDetalle(id: string) {
   return {
     incidencia,
     cadena,
+    cobertura,
     loading,
     error,
     setError,

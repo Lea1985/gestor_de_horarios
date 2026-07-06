@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
 type Curso   = { id: number; nombre: string }
@@ -15,6 +15,7 @@ type Comision = {
   turnoId:                 number
   unidadId?:               number | null
   activo:                  boolean
+  deletedAt:               string | null
   curso?:                  Curso
   turno?:                  Turno
   unidad?:                 Unidad | null
@@ -81,10 +82,11 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: { mensaje: string;
   )
 }
 
-function MenuGestionar({ comision, onEditar, onEliminar }: {
-  comision:   Comision
-  onEditar:   () => void
-  onEliminar: () => void
+function MenuGestionar({ comision, onEditar, onEliminar, onReactivar }: {
+  comision:    Comision
+  onEditar:    () => void
+  onEliminar:  () => void
+  onReactivar: () => void
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pos,     setPos]     = useState({ top: 0, left: 0 })
@@ -109,6 +111,7 @@ function MenuGestionar({ comision, onEditar, onEliminar }: {
     setAbierto(v => !v)
   }
 
+  const esInactiva    = !comision.activo || comision.deletedAt !== null
   const puedeEliminar = !comision.tieneAsignacionesActivas
 
   return (
@@ -118,29 +121,42 @@ function MenuGestionar({ comision, onEditar, onEliminar }: {
       </button>
       {abierto && (
         <div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", minWidth: 140, zIndex: 9999, overflow: "hidden" }}>
-          <button
-            onClick={() => { setAbierto(false); onEditar() }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Editar
-          </button>
-          <button
-            onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
-            disabled={!puedeEliminar}
-            title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
-            onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Eliminar
-            {!puedeEliminar && (
-              <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
-                Tiene asignaciones activas
-              </span>
-            )}
-          </button>
+          {esInactiva ? (
+            <button
+              onClick={() => { setAbierto(false); onReactivar() }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              Reactivar
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => { setAbierto(false); onEditar() }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
+                disabled={!puedeEliminar}
+                title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
+                onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Eliminar
+                {!puedeEliminar && (
+                  <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
+                    Tiene asignaciones activas
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
       )}
     </>
@@ -163,12 +179,31 @@ export default function ComisionesPage() {
   const [form,        setForm]        = useState<FormData>(FORM_VACIO)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
 
+  // ── Filtros ───────────────────────────────────────────────
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  const comisionesFiltradas = useMemo(() => {
+    let filtradas = comisiones
+    if (!verInactivos) filtradas = filtradas.filter(c => c.activo && c.deletedAt === null)
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      filtradas = filtradas.filter(c =>
+        c.nombre.toLowerCase().includes(q) ||
+        (c.curso?.nombre.toLowerCase().includes(q) ?? false) ||
+        (c.turno?.nombre.toLowerCase().includes(q) ?? false) ||
+        (c.unidad?.nombre.toLowerCase().includes(q) ?? false)
+      )
+    }
+    return filtradas
+  }, [comisiones, busqueda, verInactivos])
+
   async function cargarTodo() {
     try {
       setLoading(true)
       setError(null)
       const [r1, r2, r3, r4] = await Promise.all([
-        fetch("/api/comisiones", { headers: authHeaders }),
+        fetch(`/api/comisiones?inactivos=${verInactivos}`, { headers: authHeaders }),
         fetch("/api/cursos",     { headers: authHeaders }),
         fetch("/api/turnos",     { headers: authHeaders }),
         fetch("/api/unidades",   { headers: authHeaders }),
@@ -191,7 +226,7 @@ export default function ComisionesPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargarTodo()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos])
 
   function abrirNuevo() {
     setEditandoId(null)
@@ -264,6 +299,17 @@ export default function ComisionesPage() {
     }
   }
 
+  async function reactivar(id: number) {
+    try {
+      const res  = await fetch(`/api/comisiones/${id}/reactivar`, { method: "POST", headers: authHeaders })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || "Error reactivando comisión"); return }
+      cargarTodo()
+    } catch {
+      setError("Error de red")
+    }
+  }
+
   // Campos estructurales bloqueados al editar con asignaciones activas
   const bloqueado = editandoId !== null && editandoTieneAsignaciones
 
@@ -290,7 +336,8 @@ export default function ComisionesPage() {
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Comisiones</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {comisiones.length} registro{comisiones.length !== 1 ? "s" : ""}
+              {comisionesFiltradas.length} registro{comisionesFiltradas.length !== 1 ? "s" : ""}
+              {!verInactivos && " activo" + (comisionesFiltradas.length !== 1 ? "s" : "")}
             </p>
           </div>
           {!mostrarForm && (
@@ -384,6 +431,24 @@ export default function ComisionesPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda + toggle inactivos */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre, curso, turno o unidad..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={focus}
+              onBlur={blur}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
         {/* Tabla */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -393,26 +458,39 @@ export default function ComisionesPage() {
               </tr>
             </thead>
             <tbody>
-              {comisiones.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>Sin registros</td></tr>
-              ) : comisiones.map(item => (
-                <tr key={item.id} style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={s.td}>{item.nombre}</td>
-                  <td style={s.td}>{item.curso?.nombre ?? "—"}</td>
-                  <td style={s.td}>{item.turno?.nombre ?? "—"}</td>
-                  <td style={s.td}>{item.unidad ? item.unidad.nombre : "—"}</td>
-                  <td style={s.td}>
-                    <MenuGestionar
-                      comision={item}
-                      onEditar={() => abrirEditar(item)}
-                      onEliminar={() => setConfirmarId(item.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {comisionesFiltradas.length === 0 ? (
+                <tr><td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
+                  Sin registros{!verInactivos ? " activos" : ""}
+                </td></tr>
+              ) : comisionesFiltradas.map(item => {
+                const esInactiva = !item.activo || item.deletedAt !== null
+                return (
+                  <tr key={item.id} style={{ transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={s.td}>
+                      {item.nombre}
+                      {esInactiva && (
+                        <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                          Inactiva
+                        </span>
+                      )}
+                    </td>
+                    <td style={s.td}>{item.curso?.nombre ?? "—"}</td>
+                    <td style={s.td}>{item.turno?.nombre ?? "—"}</td>
+                    <td style={s.td}>{item.unidad ? item.unidad.nombre : "—"}</td>
+                    <td style={s.td}>
+                      <MenuGestionar
+                        comision={item}
+                        onEditar={() => abrirEditar(item)}
+                        onEliminar={() => setConfirmarId(item.id)}
+                        onReactivar={() => reactivar(item.id)}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

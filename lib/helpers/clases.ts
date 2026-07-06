@@ -26,6 +26,8 @@ type ClaseACrear = {
   moduloId:      number | null
   unidadId:      number
   comisionId:    number | null
+  incidenciaId:  number | null
+
   fecha:         Date
   estado:        EstadoClase
 }
@@ -35,12 +37,13 @@ export function generarClases(params: {
   asignacionId:         number
   unidadId:             number
   comisionId:           number | null
+  incidenciaId:         number | null
   modulos:              ModuloConDia[]
   desde:                Date
   hasta:                Date
   diasSuspendidos:      DiaSuspendido[]
 }): ClaseACrear[] {
-  const { institucionId, asignacionId, unidadId, comisionId, modulos, desde, hasta, diasSuspendidos } = params
+  const { institucionId, asignacionId, unidadId, comisionId, incidenciaId, modulos, desde, hasta, diasSuspendidos } = params
 
   const fechasSuspendidas = new Set(
     diasSuspendidos.map(d => d.fecha.toISOString().slice(0, 10))
@@ -70,6 +73,7 @@ export function generarClases(params: {
           moduloId:  null,
           unidadId,
           comisionId: null,
+          incidenciaId,
           fecha:  new Date(cursor),
           estado: suspendida ? EstadoClase.SUSPENDIDA : EstadoClase.PROGRAMADA,
         })
@@ -92,6 +96,7 @@ export function generarClases(params: {
           moduloId:  modulo.id,
           unidadId,
           comisionId,
+          incidenciaId,
           fecha:  new Date(cursor),
           estado: suspendida ? EstadoClase.SUSPENDIDA : EstadoClase.PROGRAMADA,
         })

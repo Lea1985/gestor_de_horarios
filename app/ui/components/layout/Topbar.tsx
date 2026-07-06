@@ -18,9 +18,13 @@ const PAGE_TITLES: Record<string, string> = {
   "/protected/dashboard/incidencias":  "Incidencias",
   "/protected/dashboard/calendario":   "Calendario Escolar",
   "/protected/dashboard/periodos-operativos": "Períodos Operativos",
-  "/protected/dashboard/reportes/reemplazos":    "Reporte de Reemplazos",
-  "/protected/dashboard/reportes/agente":        "Reporte por Agente",
-  "/protected/dashboard/reportes/unidad":        "Reporte por Unidad",
+  "/protected/dashboard/reportes/asignaciones": "Reporte asignaciones",
+  "/protected/dashboard/reportes/ausencias": "Reporte ausencias",
+  "/protected/dashboard/reportes/codigarios": "Reporte codigarios",
+  "/protected/dashboard/reportes/horarios": "Reporte horarios",
+  "/protected/dashboard/reportes/profesor": "Reporte profesor",
+  "/protected/dashboard/reportes/profesores": "Reporte profesores",
+
 }
 
 interface TopbarProps {

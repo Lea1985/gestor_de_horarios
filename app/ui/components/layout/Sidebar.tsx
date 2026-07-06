@@ -20,9 +20,13 @@ const ACADEMIC_ITEMS = [
 ]
 
 const REPORT_ITEMS = [
-  { label: "Reemplazos", href: "/protected/dashboard/reportes/reemplazos" },
-  { label: "Por agente", href: "/protected/dashboard/reportes/agente" },
-  { label: "Por unidad", href: "/protected/dashboard/reportes/unidad" },
+
+  { label: "Asiganciones", href: "/protected/dashboard/reportes/asignaciones" },
+  { label: "Ausencias", href: "/protected/dashboard/reportes/ausencias" },
+  { label: "Codigarios", href: "/protected/dashboard/reportes/codigarios" },
+  { label: "Horarios", href: "/protected/dashboard/reportes/horarios" },
+  { label: "Profesor", href: "/protected/dashboard/reportes/profesor" },
+  { label: "Profesores", href: "/protected/dashboard/reportes/profesores" },
 ]
 
 const CONFIG_ITEMS = [
@@ -61,8 +65,8 @@ function NavLink({
 }) {
   const isActive =
     href === "/protected/dashboard"
-      ? pathname === href
-      : pathname.startsWith(href)
+      ? pathname === "/protected/dashboard"
+      : pathname === href || pathname.startsWith(`${href}/`)
 
   return (
     <Link
@@ -171,8 +175,8 @@ function Section({
 export function Sidebar() {
   const pathname = usePathname()
 
-  const [academicOpen, setAcademicOpen] = useState(true)
-  const [reportesOpen, setReportesOpen] = useState(true)  // ← NUEVO
+  const [academicOpen, setAcademicOpen] = useState(false)
+  const [reportesOpen, setReportesOpen] = useState(false)  // ← NUEVO
   const [configOpen, setConfigOpen] = useState(false)
 
   return (

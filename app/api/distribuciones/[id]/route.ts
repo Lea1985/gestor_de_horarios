@@ -1,4 +1,4 @@
-//api/distribuciones/[id]/route.ts
+// app/api/distribuciones/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerDistribucion, DistribucionNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/distribuciones/obtenerDistribucion"
@@ -54,6 +54,21 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   if (!distId) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async ({ tenantId }) => {
-    return Response.json(await eliminarDistribucion(distId, tenantId))
+    // El body es opcional: DELETE sin body = primera llamada (puede volver
+    // requiereConfirmacion). DELETE con { mantenerReemplazo } = confirmación.
+    let body: { mantenerReemplazo?: boolean } = {}
+    try {
+      const text = await req.text()
+      if (text) body = JSON.parse(text)
+    } catch {
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
+    }
+
+    const result = await eliminarDistribucion(distId, tenantId, body)
+
+    // IMPORTANTE: si requiereConfirmacion, NO es un borrado exitoso.
+    // Devolvemos 200 igual (es una pregunta, no un error) pero el frontend
+    // DEBE chequear el flag antes de asumir que se borró algo.
+    return Response.json(result)
   })
 }

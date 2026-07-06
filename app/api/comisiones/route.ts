@@ -6,7 +6,9 @@ import { crearComision, DatosComisionInvalidosError } from "@/lib/usecases/comis
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
-    return Response.json(await listarComisiones(tenantId))
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
+    return Response.json(await listarComisiones(tenantId, incluirInactivos))
   })
 }
 

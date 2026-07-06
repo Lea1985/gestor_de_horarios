@@ -11,7 +11,9 @@ import {
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
-    const cursos = await listarCursos(tenantId)
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
+    const cursos = await listarCursos(tenantId, incluirInactivos)
     return Response.json(cursos)
   })
 }

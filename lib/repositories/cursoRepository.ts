@@ -4,17 +4,16 @@ import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
 export const cursoRepository = {
-  listar(tenantId: number) {
+  listar(tenantId: number, incluirInactivos = false) {
     return prisma.curso.findMany({
       where: {
         institucionId: tenantId,
-        deletedAt: null,
+        ...(incluirInactivos ? {} : { deletedAt: null }),
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     })
   },
+ 
 
   obtenerPorId(id: number, tenantId: number) {
     return prisma.curso.findFirst({
@@ -103,6 +102,35 @@ export const cursoRepository = {
         activo: false,
         deletedAt: new Date(),
       },
+    })
+  },
+
+    async reactivar(id: number, tenantId: number) {
+    const existente = await prisma.curso.findFirst({
+      where: { id, institucionId: tenantId, deletedAt: { not: null } },
+      select: { id: true, nombre: true },
+    })
+ 
+    if (!existente) return null
+ 
+    // Si ya existe otro curso activo con el mismo nombre, no se puede reactivar
+    const duplicado = await prisma.curso.findFirst({
+      where: {
+        institucionId: tenantId,
+        nombre: existente.nombre,
+        deletedAt: null,
+        id: { not: id },
+      },
+      select: { id: true },
+    })
+ 
+    if (duplicado) {
+      throw new Error(`Ya existe un curso activo con el nombre "${existente.nombre}"`)
+    }
+ 
+    return prisma.curso.update({
+      where: { id },
+      data: { activo: true, deletedAt: null },
     })
   },
 }

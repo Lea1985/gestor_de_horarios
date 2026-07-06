@@ -6,7 +6,9 @@ import { crearTurno } from "@/lib/usecases/turnos/crearTurno"
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
-    return Response.json(await listarTurnos(tenantId))
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
+    return Response.json(await listarTurnos(tenantId, incluirInactivos))
   })
 }
 

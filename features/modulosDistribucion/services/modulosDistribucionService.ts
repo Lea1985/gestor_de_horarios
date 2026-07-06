@@ -1,6 +1,6 @@
 // features/modulosDistribucion/services/modulosDistribucionService.ts
 
-import type { Modulo, Distribucion } from "../types"
+import type { Modulo, Distribucion, IncidenciaAfectada } from "../types"
 
 export const modulosDistribucionService = {
 
@@ -16,14 +16,31 @@ export const modulosDistribucionService = {
     return res.json()
   },
 
-  async guardarModulos(id: string, modulos: number[], headers: Record<string, string>): Promise<void> {
+  async guardarModulos(
+    id: string,
+    modulos: number[],
+    headers: Record<string, string>,
+    migrarIncidenciaIds?: number[]
+  ): Promise<{
+    ok: boolean
+    requiereConfirmacion?: boolean
+    incidenciasAfectadas?: IncidenciaAfectada[]
+    total?: number
+    clases?: number
+    migrados?: number
+    noMigrables?: number[]
+  }> {
     const res = await fetch(`/api/distribuciones/${id}/modulos`, {
       method:  "POST",
       headers,
-      body:    JSON.stringify({ modulos }),
+      body:    JSON.stringify({
+        modulos,
+        ...(migrarIncidenciaIds ? { migrarIncidenciaIds } : {}),
+      }),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error ?? "Error guardando módulos")
+    return data
   },
 
   async crearNuevaVersion(id: string, headers: Record<string, string>): Promise<{ nuevaVersionId: number }> {

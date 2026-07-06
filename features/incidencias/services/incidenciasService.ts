@@ -3,6 +3,7 @@ import type {
   Incidencia,
   IncidenciaDetalle,
   CadenaItem,
+  TramoCobertura,
   AsignacionParaIncidencia,
   AgenteParaReemplazo,
   Codigario,
@@ -62,6 +63,16 @@ export async function fetchCadena(
   const data = await res.json()
   return Array.isArray(data) ? data : []
 }
+
+export async function fetchCobertura(
+  id: string,
+  headers: Record<string, string>
+): Promise<TramoCobertura[]> {
+  const res = await fetch(`/api/incidencias/${id}/cobertura`, { headers })
+  if (!res.ok) return []
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+} 
 
 export async function fetchClasesAfectadas(
   id: string,
@@ -137,6 +148,7 @@ export async function crearReemplazoService(
     claseId:             number
     asignacionTitularId: number
     agenteSuplenteId:    number
+    incidenciaId?:       number
     reemplazoPadreId?:   number  
     observacion?:        string
   },
@@ -161,5 +173,26 @@ export async function eliminarReemplazoService(
   if (!res.ok) {
     const data = await res.json()
     throw new Error(data.error ?? "Error eliminando reemplazo")
+  }
+}
+
+export async function reasignarReemplazoService(
+  payload: {
+    claseId:             number
+    nuevaIncidenciaId:   number
+    asignacionTitularId: number
+    agenteSuplenteId:    number
+    observacion?:        string
+  },
+  headers: Record<string, string>
+): Promise<void> {
+  const res = await fetch("/api/reemplazos/reasignar", {
+    method:  "POST",
+    headers,
+    body:    JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    throw new Error(data.error ?? "Error reasignando reemplazo")
   }
 }

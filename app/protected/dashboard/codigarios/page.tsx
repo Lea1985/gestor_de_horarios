@@ -1,7 +1,7 @@
 // app/protected/dashboard/codigarios/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/app/hooks/useAuth"
 
@@ -10,6 +10,8 @@ type Codigario = {
   nombre:      string
   descripcion: string | null
   activo:      boolean
+  deletedAt:   string | null
+  _count:      { items: number }
 }
 
 type FormData = {
@@ -61,20 +63,36 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
 export default function CodigariosPage() {
   const { authHeaders } = useAuth()
 
-  const [codigarios,  setCodigarios]  = useState<Codigario[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [mostrarForm, setMostrarForm] = useState(false)
-  const [editandoId,  setEditandoId]  = useState<number | null>(null)
-  const [form,        setForm]        = useState<FormData>(FORM_VACIO)
-  const [formErrors,  setFormErrors]  = useState<Partial<FormData>>({})
-  const [error,       setError]       = useState<string | null>(null)
-  const [guardando,   setGuardando]   = useState(false)
-  const [confirmarId, setConfirmarId] = useState<number | null>(null)
+  const [codigarios,   setCodigarios]   = useState<Codigario[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [mostrarForm,  setMostrarForm]  = useState(false)
+  const [editandoId,   setEditandoId]   = useState<number | null>(null)
+  const [form,         setForm]         = useState<FormData>(FORM_VACIO)
+  const [formErrors,   setFormErrors]   = useState<Partial<FormData>>({})
+  const [error,        setError]        = useState<string | null>(null)
+  const [guardando,    setGuardando]    = useState(false)
+  const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  // ── Filtro client-side ────────────────────────────────────
+  const codigariosFiltrados = useMemo(() => {
+    let filtrados = codigarios
+    if (!verInactivos) filtrados = filtrados.filter(c => c.activo && c.deletedAt === null)
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      filtrados = filtrados.filter(c =>
+        c.nombre.toLowerCase().includes(q) ||
+        (c.descripcion?.toLowerCase().includes(q) ?? false)
+      )
+    }
+    return filtrados
+  }, [codigarios, busqueda, verInactivos])
 
   async function cargar() {
     try {
       setLoading(true)
-      const res = await fetch("/api/codigarios", { headers: authHeaders })
+      const res = await fetch(`/api/codigarios?inactivos=${verInactivos}`, { headers: authHeaders })
       if (!res.ok) throw new Error()
       setCodigarios(await res.json())
     } catch {
@@ -86,7 +104,7 @@ export default function CodigariosPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargar()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos])
 
   function abrirCrear() {
     setForm(FORM_VACIO)
@@ -115,6 +133,14 @@ export default function CodigariosPage() {
   function validar(): boolean {
     const errors: Partial<FormData> = {}
     if (!form.nombre.trim()) errors.nombre = "Campo requerido"
+    const nombreNorm = form.nombre.trim().toUpperCase()
+    const duplicado = codigarios.find(c =>
+      c.nombre === nombreNorm &&
+      c.activo &&
+      c.deletedAt === null &&
+      c.id !== editandoId
+    )
+    if (duplicado) errors.nombre = "Ya existe un codigario con ese nombre"
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -160,6 +186,23 @@ export default function CodigariosPage() {
     }
   }
 
+  async function reactivar(id: number) {
+    try {
+      const res = await fetch(`/api/codigarios/${id}/reactivar`, {
+        method: "POST",
+        headers: authHeaders,
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error reactivando codigario")
+        return
+      }
+      await cargar()
+    } catch {
+      setError("Error de red")
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando codigarios...
@@ -170,7 +213,7 @@ export default function CodigariosPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este codigario? Se eliminarán también todos sus items."
+          mensaje="¿Eliminar este codigario? Esta acción no se puede deshacer."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />
@@ -178,11 +221,13 @@ export default function CodigariosPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
 
+        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Codigarios</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {codigarios.length} catálogo{codigarios.length !== 1 ? "s" : ""} institucional{codigarios.length !== 1 ? "es" : ""}
+              {codigariosFiltrados.length} catálogo{codigariosFiltrados.length !== 1 ? "s" : ""} institucional{codigariosFiltrados.length !== 1 ? "es" : ""}
+              {!verInactivos && " activo" + (codigariosFiltrados.length !== 1 ? "s" : "")}
             </p>
           </div>
           {!mostrarForm && (
@@ -192,6 +237,7 @@ export default function CodigariosPage() {
           )}
         </div>
 
+        {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -200,6 +246,7 @@ export default function CodigariosPage() {
           </div>
         )}
 
+        {/* Formulario */}
         {mostrarForm && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
@@ -242,36 +289,112 @@ export default function CodigariosPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda + toggle inactivos */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre o descripción..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+              onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
+        {/* Tabla */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                {["Nombre", "Descripción", "Items", ""].map(col => <th key={col} style={s.th}>{col}</th>)}
+                {["Nombre", "Descripción", "Items", "Acciones"].map(col => <th key={col} style={s.th}>{col}</th>)}
               </tr>
             </thead>
             <tbody>
-              {codigarios.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>No hay codigarios registrados</td></tr>
-              ) : codigarios.map(c => (
-                <tr key={c.id} style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>{c.nombre}</td>
-                  <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{c.descripcion ?? "—"}</td>
-                  <td style={s.td}>
-                    <Link href={`/protected/dashboard/codigarios/${c.id}`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
-                      Administrar →
-                    </Link>
-                  </td>
-                  <td style={s.td}>
-                    <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                      <button onClick={() => abrirEditar(c)} style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}>Editar</button>
-                      <button onClick={() => setConfirmarId(c.id)} style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}>Eliminar</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {codigariosFiltrados.length === 0 ? (
+                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                  No hay codigarios{!verInactivos ? " activos" : ""} registrados
+                </td></tr>
+              ) : codigariosFiltrados.map(c => {
+                const itemCount  = c._count?.items ?? 0
+                const tieneItems = itemCount > 0
+                const esInactivo = !c.activo || c.deletedAt !== null
+                return (
+                  <tr key={c.id} style={{ transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    {/* Nombre */}
+                    <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>
+                      {c.nombre}
+                      {esInactivo && (
+                        <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Descripción */}
+                    <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{c.descripcion ?? "—"}</td>
+
+                    {/* Items */}
+                    <td style={s.td}>
+                      {esInactivo ? (
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
+                          {itemCount} item{itemCount !== 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <Link href={`/protected/dashboard/codigarios/${c.id}`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
+                          {itemCount} item{itemCount !== 1 ? "s" : ""} →
+                        </Link>
+                      )}
+                    </td>
+
+                    {/* Acciones */}
+                    <td style={s.td}>
+                      {esInactivo ? (
+                        <button
+                          onClick={() => reactivar(c.id)}
+                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                        >
+                          Reactivar
+                        </button>
+                      ) : (
+                        <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+                          <button
+                            onClick={() => abrirEditar(c)}
+                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                          >
+                            Editar
+                          </button>
+
+                          {tieneItems ? (
+                            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", display: "flex", alignItems: "center", gap: 4 }}>
+                              <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/>
+                                <path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                              </svg>
+                              Tiene {itemCount} item{itemCount !== 1 ? "s" : ""}
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmarId(c.id)}
+                              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

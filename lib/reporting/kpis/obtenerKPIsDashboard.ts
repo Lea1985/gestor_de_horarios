@@ -1,5 +1,5 @@
 // lib/reporting/kpis/obtenerKPIsDashboard.ts
-import { obtenerClasesOperativasHoy } from "../datasets/obtenerClasesOperativasHoy"
+import { obtenerClasesOperativasHoy } from "../datasets/obtenerClasesOperativas"
 import { calcularCobertura, type ResumenCobertura } from "../transformers/calcularCobertura"
 
 export type DashboardKPIs = {
@@ -9,7 +9,7 @@ export type DashboardKPIs = {
   sinCoberturaHoy: number
   incidenciasActivas: number
   coberturaPorcentaje: number
-  coberturaDetalle: ResumenCobertura  // ← nuevo para debugging
+  coberturaDetalle: ResumenCobertura
 }
 
 export async function obtenerKPIsDashboard(tenantId: number): Promise<DashboardKPIs> {

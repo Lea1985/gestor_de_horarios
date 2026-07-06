@@ -2,8 +2,8 @@
 import { turnoRepository } from "@/lib/repositories/turnoRepository"
 import prisma from "@/lib/prisma"
 
-export async function listarTurnos(tenantId: number) {
-  const turnos = await turnoRepository.listar(tenantId)
+export async function listarTurnos(tenantId: number, incluirInactivos = false) {
+  const turnos = await turnoRepository.listar(tenantId, incluirInactivos)
 
   const asignaciones = await prisma.asignacion.findMany({
     where: {

@@ -1,17 +1,16 @@
 // app/protected/dashboard/distribuciones/[id]/modulos/page.tsx
 "use client"
-
 import { useEffect, useState } from "react"
 import {
   useModulosDistribucion,
   ModalNuevaVersion,
+  ModalMigrarReemplazos,
   ModulosHeader,
   ModulosGrid,
 } from "@/features/modulosDistribucion"
 
 export default function ModulosDistribucionPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState("")
-
   useEffect(() => { params.then(p => setId(p.id)) }, [params])
 
   const {
@@ -19,6 +18,7 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
     loading, guardando, guardado, error, setError,
     esActivo, tieneModulos, checkboxHabilitado, totalSeleccionados,
     editando, setEditando, modalVersion, setModalVersion, creandoVersion,
+    incidenciasAfectadas, cancelarMigracion,
     toggle, toggleDia, cancelarEdicion, guardar, crearNuevaVersion,
   } = useModulosDistribucion(id)
 
@@ -30,12 +30,20 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 900 }}>
-
       {modalVersion && (
         <ModalNuevaVersion
           onConfirmar={crearNuevaVersion}
           onCancelar={() => setModalVersion(false)}
           guardando={creandoVersion}
+        />
+      )}
+
+      {incidenciasAfectadas && incidenciasAfectadas.length > 0 && (
+        <ModalMigrarReemplazos
+          incidencias={incidenciasAfectadas}
+          onConfirmar={(idsAMigrar) => guardar(idsAMigrar)}
+          onCancelar={cancelarMigracion}
+          guardando={guardando}
         />
       )}
 
@@ -47,7 +55,7 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
         guardando={guardando}
         guardado={guardado}
         totalSeleccionados={totalSeleccionados}
-        onGuardar={guardar}
+        onGuardar={() => guardar()}
         onEditar={() => setEditando(true)}
         onCancelarEdicion={cancelarEdicion}
         onNuevaVersion={() => setModalVersion(true)}
@@ -83,7 +91,6 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
           {esActivo ? "Seleccioná los módulos horarios y guardá." : "Esta versión no tiene módulos asignados."}
         </div>
       )}
-
     </div>
   )
 }

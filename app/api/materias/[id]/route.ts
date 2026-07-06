@@ -16,6 +16,7 @@ import {
 import {
   eliminarMateria,
   MateriaNoEncontradaError as EliminarNotFound,
+  MateriaConAsignacionesError,
 } from "@/lib/usecases/materias/eliminarMateria"
 
 function parseId(id: string) {
@@ -159,6 +160,13 @@ export async function DELETE(
         return Response.json(
           { error: error.message },
           { status: 404 }
+        )
+      }
+
+      if (error instanceof MateriaConAsignacionesError) {
+        return Response.json(
+          { error: error.message },
+          { status: 409 }
         )
       }
 

@@ -5,7 +5,7 @@ import {
   fetchCodigarios,
   fetchItemsCodigario,
   crearIncidencia,
-  crearReemplazoService,
+  reasignarReemplazoService,
 } from "../services/incidenciasService"
 import type { Codigario, CodigarioItem, AgenteParaReemplazo } from "../types"
 
@@ -102,18 +102,28 @@ export function ModalAusenciaSuplente({
         incidenciaPadreId,
       }, authHeaders)
 
-      // 2. Si hay suplente, cargar clases y crear reemplazos
+      // 2. Si hay suplente, cargar clases y reasignarlas a la nueva
+      //    incidencia de forma atómica (desactiva el reemplazo viejo,
+      //    mueve clase.incidenciaId, crea el reemplazo nuevo — todo
+      //    en una sola transacción del backend).
       if (suplenteId) {
         const res = await fetch(`/api/incidencias/${nueva.id}/clases`, {
           headers: authHeaders,
         })
         if (res.ok) {
           const clases = await res.json()
-          const programadas = clases.filter((c: { estado: string }) => c.estado === "PROGRAMADA")
+
+          // Incluye clases sin cubrir (PROGRAMADA) y clases que ya tenían
+          // un reemplazo activo (REEMPLAZADA), para poder reasignarlas.
+          const elegibles = clases.filter((c: { estado: string }) =>
+            c.estado === "PROGRAMADA" || c.estado === "REEMPLAZADA"
+          )
+
           await Promise.allSettled(
-            programadas.map((clase: { id: number }) =>
-              crearReemplazoService({
+            elegibles.map((clase: { id: number }) =>
+              reasignarReemplazoService({
                 claseId:             clase.id,
+                nuevaIncidenciaId:   nueva.id,
                 asignacionTitularId,
                 agenteSuplenteId:    Number(suplenteId),
               }, authHeaders)

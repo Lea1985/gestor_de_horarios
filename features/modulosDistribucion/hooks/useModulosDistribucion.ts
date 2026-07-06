@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { modulosDistribucionService } from "../services/modulosDistribucionService"
-import type { Modulo, Distribucion } from "../types"
+import type { Modulo, Distribucion, IncidenciaAfectada } from "../types"
 import { ORDEN_DIAS } from "../types"
 
 export function useModulosDistribucion(distribuidonId: string) {
@@ -25,6 +25,9 @@ export function useModulosDistribucion(distribuidonId: string) {
   const [modalVersion,   setModalVersion]   = useState(false)
   const [creandoVersion, setCreandoVersion] = useState(false)
   const [editando,       setEditando]       = useState(false)
+
+  // ── migración de reemplazos ───────────────────────────────────────────────
+  const [incidenciasAfectadas, setIncidenciasAfectadas] = useState<IncidenciaAfectada[] | null>(null)
 
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -90,12 +93,21 @@ export function useModulosDistribucion(distribuidonId: string) {
     setGuardado(false)
   }
 
-  async function guardar() {
+  async function guardar(migrarIncidenciaIds?: number[]) {
     setGuardando(true)
     setError(null)
     setGuardado(false)
     try {
-      await modulosDistribucionService.guardarModulos(distribuidonId, seleccionados, authHeaders)
+      const data = await modulosDistribucionService.guardarModulos(
+        distribuidonId, seleccionados, authHeaders, migrarIncidenciaIds
+      )
+
+      if (data.requiereConfirmacion) {
+        setIncidenciasAfectadas(data.incidenciasAfectadas ?? [])
+        return // esperamos que el usuario decida en el modal
+      }
+
+      setIncidenciasAfectadas(null)
       setGuardado(true)
       setEditando(false)
       setSeleccionadosOriginal(seleccionados)
@@ -108,6 +120,10 @@ export function useModulosDistribucion(distribuidonId: string) {
     } finally {
       setGuardando(false)
     }
+  }
+
+  function cancelarMigracion() {
+    setIncidenciasAfectadas(null)
   }
 
   async function crearNuevaVersion() {
@@ -150,6 +166,10 @@ export function useModulosDistribucion(distribuidonId: string) {
     modalVersion,
     setModalVersion,
     creandoVersion,
+
+    // migración de reemplazos
+    incidenciasAfectadas,
+    cancelarMigracion,
 
     // acciones
     toggle,

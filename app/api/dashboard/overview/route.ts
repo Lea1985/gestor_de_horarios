@@ -1,45 +1,211 @@
 // app/api/dashboard/overview/route.ts
 import { withContext } from "@/lib/auth/withContext"
-import { obtenerClasesOperativas } from "@/lib/reporting/datasets/obtenerClasesOperativas"
+import { obtenerClasesOperativas, obtenerClasesOperativasHoy } from "@/lib/reporting/datasets/obtenerClasesOperativas"
 import { generarTimelineCobertura } from "@/lib/reporting/transformers/generarTimelineCobertura"
 import { obtenerKPIsDashboard } from "@/lib/reporting/kpis/obtenerKPIsDashboard"
+import prisma from "@/lib/prisma"
+
+const RANGOS_VALIDOS = [7, 14, 30] as const
+type RangoDias = (typeof RANGOS_VALIDOS)[number]
+
+function esRangoValido(n: number): n is RangoDias {
+  return RANGOS_VALIDOS.includes(n as RangoDias)
+}
+
+/** Cobertura de ayer para calcular delta */
+async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
+  const ayer = new Date()
+  ayer.setDate(ayer.getDate() - 1)
+  ayer.setHours(0, 0, 0, 0)
+  const ayerFin = new Date(ayer)
+  ayerFin.setHours(23, 59, 59, 999)
+
+  const clases = await prisma.claseProgramada.findMany({
+    where: {
+      institucionId: tenantId,
+      fecha: { gte: ayer, lte: ayerFin },
+    },
+    select: {
+      estado: true,
+      incidencia: { select: { id: true } },
+      reemplazos: { where: { activo: true }, select: { id: true }, take: 1 },
+    },
+  })
+
+  if (clases.length === 0) return null
+
+  let cubiertas = 0
+  let suspendidas = 0
+
+  for (const c of clases) {
+    if (c.estado === "SUSPENDIDA") { suspendidas++; continue }
+    if (c.reemplazos.length > 0 || c.incidencia === null) cubiertas++
+  }
+
+  const denominador = clases.length - suspendidas
+  if (denominador === 0) return null
+  return Math.round((cubiertas / denominador) * 100)
+}
+
+/** Próximos vencimientos: incidencias que vencen en los próximos N días */
+async function obtenerProximosVencimientos(tenantId: number) {
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  const manana = new Date(hoy)
+  manana.setDate(hoy.getDate() + 1)
+  const mananaFin = new Date(manana)
+  mananaFin.setHours(23, 59, 59, 999)
+
+  const semanaFin = new Date(hoy)
+  semanaFin.setDate(hoy.getDate() + 7)
+  semanaFin.setHours(23, 59, 59, 999)
+
+  const [vencenHoy, vencenManana, vencenEstaSemana, reemplazosVencenSemana] =
+    await Promise.all([
+      // Incidencias que vencen hoy
+      prisma.incidencia.count({
+        where: {
+          activo: true, deletedAt: null,
+          fecha_hasta: { gte: hoy, lte: new Date(hoy.getTime() + 86399999) },
+          asignacion: { institucionId: tenantId },
+        },
+      }),
+      // Incidencias que vencen mañana
+      prisma.incidencia.count({
+        where: {
+          activo: true, deletedAt: null,
+          fecha_hasta: { gte: manana, lte: mananaFin },
+          asignacion: { institucionId: tenantId },
+        },
+      }),
+      // Incidencias que vencen esta semana (excluyendo hoy y mañana)
+      prisma.incidencia.count({
+        where: {
+          activo: true, deletedAt: null,
+          fecha_hasta: { gt: mananaFin, lte: semanaFin },
+          asignacion: { institucionId: tenantId },
+        },
+      }),
+      // Reemplazos activos cuya incidencia vence esta semana
+      prisma.reemplazo.count({
+        where: {
+          activo: true, deletedAt: null,
+          clase: {
+            institucionId: tenantId,
+            incidencia: {
+              activo: true,
+              fecha_hasta: { gte: hoy, lte: semanaFin },
+            },
+          },
+        },
+      }),
+    ])
+
+  return { vencenHoy, vencenManana, vencenEstaSemana, reemplazosVencenSemana }
+}
+
+/** Continuidad pedagógica del período: (cubiertas) / (total - suspendidas) */
+function calcularContinuidad(timeline: ReturnType<typeof generarTimelineCobertura>): number | null {
+  const totals = timeline.reduce(
+    (acc, d) => ({
+      cubiertas:    acc.cubiertas    + d.normales + d.reemplazadas,
+      denominador:  acc.denominador  + d.total    - d.suspendidas,
+    }),
+    { cubiertas: 0, denominador: 0 }
+  )
+  if (totals.denominador === 0) return null
+  return Math.round((totals.cubiertas / totals.denominador) * 100)
+}
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     try {
       const { searchParams } = new URL(req.url)
       const hoy = new Date()
-      const desde = searchParams.get("fecha_desde") ?? (() => {
+
+      const diasRaw = Number(searchParams.get("dias"))
+      const dias: RangoDias = esRangoValido(diasRaw) ? diasRaw : 14
+
+      const hasta = hoy.toISOString().split("T")[0]
+      const desde = (() => {
         const d = new Date()
-        d.setDate(hoy.getDate() - 14)
+        d.setDate(hoy.getDate() - (dias - 1))
         return d.toISOString().split("T")[0]
       })()
-      const hasta = searchParams.get("fecha_hasta") ?? hoy.toISOString().split("T")[0]
 
       const desdeDate = new Date(desde)
       const hastaDate = new Date(hasta)
 
-      // 1. Obtener KPIs usando el módulo reporting (sin duplicar)
-      const kpis = await obtenerKPIsDashboard(tenantId)
+      // Todas las queries en paralelo
+      const [kpis, clasesRango, clasesHoy, coberturaAyer, proximosVencimientos] =
+        await Promise.all([
+          obtenerKPIsDashboard(tenantId),
+          obtenerClasesOperativas(tenantId, desdeDate, hastaDate),
+          obtenerClasesOperativasHoy(tenantId),
+          obtenerCoberturaAyer(tenantId),
+          obtenerProximosVencimientos(tenantId),
+        ])
 
-      // 2. Obtener dataset para timeline (mismo período que el frontend pide)
-      const clases = await obtenerClasesOperativas(tenantId, desdeDate, hastaDate)
-      const timeline = generarTimelineCobertura(clases)
+      const timeline              = generarTimelineCobertura(clasesRango)
+      const continuidadPedagogica = calcularContinuidad(timeline)
+
+      // Delta cobertura vs ayer
+      const coberturaHoy = kpis.coberturaPorcentaje
+      const deltaCobertura =
+        coberturaAyer !== null && typeof coberturaHoy === "number"
+          ? coberturaHoy - coberturaAyer
+          : null
+
+      const sinCobertura = clasesHoy
+        .filter(c => c.coberturaEstado === "SIN_COBERTURA")
+        .map(c => ({
+          claseId:       c.id,
+          incidenciaId:  c.incidencia?.id ?? null,
+          unidad:        c.unidad?.nombre ?? null,
+          comision:      c.comision?.nombre ?? null,
+          identificador: c.asignacion?.identificadorEstructural ?? null,
+          titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
+          articulo:      c.incidencia?.articulo ?? null,
+        }))
+
+      const reemplazosActivos = clasesHoy
+        .filter(c => c.coberturaEstado === "REEMPLAZADA")
+        .map(c => ({
+          claseId:       c.id,
+          incidenciaId:  c.incidencia?.id ?? null,
+          unidad:        c.unidad?.nombre ?? null,
+          comision:      c.comision?.nombre ?? null,
+          identificador: c.asignacion?.identificadorEstructural ?? null,
+          titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
+          suplente:      c.suplente ? `${c.suplente.apellido}, ${c.suplente.nombre}` : "—",
+        }))
 
       return Response.json({
         kpis: {
-          clasesHoy: kpis.clasesHoy,
-          reemplazosActivos: kpis.reemplazosActivos,
-          suspendidasHoy: kpis.suspendidasHoy,
-          sinCoberturaHoy: kpis.sinCoberturaHoy,
-          incidenciasActivas: kpis.incidenciasActivas,
+          clasesHoy:           kpis.clasesHoy,
+          reemplazosActivos:   kpis.reemplazosActivos,
+          suspendidasHoy:      kpis.suspendidasHoy,
+          sinCoberturaHoy:     kpis.sinCoberturaHoy,
+          incidenciasActivas:  kpis.incidenciasActivas,
           coberturaPorcentaje: kpis.coberturaPorcentaje,
+          // Nuevos campos
+          continuidadPedagogica,   // number | null
+          deltaCobertura,          // number | null — positivo = mejoró
         },
-        coberturaDetalle: kpis.coberturaDetalle, // ← NUEVO
+        pendientes: {
+          sinCobertura:              sinCobertura.length,
+          vencenHoy:                 proximosVencimientos.vencenHoy,
+          vencenManana:              proximosVencimientos.vencenManana,
+          vencenEstaSemana:          proximosVencimientos.vencenEstaSemana,
+          reemplazosVencenSemana:    proximosVencimientos.reemplazosVencenSemana,
+        },
+        sinCobertura,
+        reemplazosActivos,
         timeline,
         meta: {
-          periodo: { desde, hasta },
-          totalClases: clases.length,
+          periodo: { desde, hasta, dias },
+          totalClases: clasesRango.length,
         },
       })
     } catch (error) {

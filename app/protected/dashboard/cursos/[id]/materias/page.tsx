@@ -1,15 +1,18 @@
 // app/protected/dashboard/cursos/[id]/materias/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 
 type Materia = {
-  id:      number
-  nombre:  string
-  cursoId: number | null
+  id:                       number
+  nombre:                   string
+  cursoId:                  number | null
+  activo:                   boolean
+  deletedAt:                string | null
+  tieneAsignacionesActivas: boolean
 }
 
 type Curso = {
@@ -92,12 +95,26 @@ export default function MateriasPage() {
   const [guardando,   setGuardando]   = useState(false)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
 
+  // ── Filtros ───────────────────────────────────────────────
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  const materiasFiltradas = useMemo(() => {
+    let filtradas = materias
+    if (!verInactivos) filtradas = filtradas.filter(m => m.activo && m.deletedAt === null)
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      filtradas = filtradas.filter(m => m.nombre.toLowerCase().includes(q))
+    }
+    return filtradas
+  }, [materias, busqueda, verInactivos])
+
   async function cargar() {
     try {
       setLoading(true)
       const [resCurso, resMaterias] = await Promise.all([
         fetch(`/api/cursos/${cursoId}`,          { headers: authHeaders }),
-        fetch(`/api/cursos/${cursoId}/materias`, { headers: authHeaders }),
+        fetch(`/api/cursos/${cursoId}/materias?inactivos=${verInactivos}`, { headers: authHeaders }),
       ])
       if (!resCurso.ok || !resMaterias.ok) throw new Error()
       setCurso(await resCurso.json())
@@ -111,7 +128,7 @@ export default function MateriasPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargar()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos])
 
   function abrirCrear() {
     setForm(FORM_VACIO)
@@ -177,11 +194,25 @@ export default function MateriasPage() {
         setError(data.error ?? "Error eliminando")
         return
       }
-      setMaterias(prev => prev.filter(m => m.id !== id))
+      await cargar()
     } catch {
       setError("Error de red")
     } finally {
       setConfirmarId(null)
+    }
+  }
+
+  async function reactivar(id: number) {
+    try {
+      const res = await fetch(`/api/materias/${id}/reactivar`, { method: "POST", headers: authHeaders })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error reactivando materia")
+        return
+      }
+      await cargar()
+    } catch {
+      setError("Error de red")
     }
   }
 
@@ -221,7 +252,8 @@ export default function MateriasPage() {
               Materias — {curso?.nombre}
             </h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {materias.length} materia{materias.length !== 1 ? "s" : ""}
+              {materiasFiltradas.length} materia{materiasFiltradas.length !== 1 ? "s" : ""}
+              {!verInactivos && " activa" + (materiasFiltradas.length !== 1 ? "s" : "")}
             </p>
           </div>
           {!mostrarForm && (
@@ -283,6 +315,24 @@ export default function MateriasPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda + toggle inactivos */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+              onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
         {/* TABLA */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -294,38 +344,67 @@ export default function MateriasPage() {
               </tr>
             </thead>
             <tbody>
-              {materias.length === 0 ? (
+              {materiasFiltradas.length === 0 ? (
                 <tr>
                   <td colSpan={2} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
-                    No hay materias para este curso
+                    No hay materias{!verInactivos ? " activas" : ""} para este curso
                   </td>
                 </tr>
-              ) : materias.map(m => (
-                <tr
-                  key={m.id}
-                  style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>{m.nombre}</td>
-                  <td style={s.td}>
-                    <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                      <button
-                        onClick={() => abrirEditar(m)}
-                        style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => setConfirmarId(m.id)}
-                        style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : materiasFiltradas.map(m => {
+                const esInactiva = !m.activo || m.deletedAt !== null
+                return (
+                  <tr
+                    key={m.id}
+                    style={{ transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>
+                      {m.nombre}
+                      {esInactiva && (
+                        <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                          Inactiva
+                        </span>
+                      )}
+                    </td>
+                    <td style={s.td}>
+                      {esInactiva ? (
+                        <button
+                          onClick={() => reactivar(m.id)}
+                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                        >
+                          Reactivar
+                        </button>
+                      ) : (
+                        <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+                          <button
+                            onClick={() => abrirEditar(m)}
+                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                          >
+                            Editar
+                          </button>
+                          {m.tieneAsignacionesActivas ? (
+                            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", display: "flex", alignItems: "center", gap: 4 }}>
+                              <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/>
+                                <path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                              </svg>
+                              Tiene asignaciones activas
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmarId(m.id)}
+                              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

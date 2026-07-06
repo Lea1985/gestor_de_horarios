@@ -9,6 +9,7 @@ import {
   CodigarioItemNoValidoError,
   IncidenciaPadreNoValidaError,
   FechaFueraDePadreError,
+  SinClasesProgramadasError,
   SuperposicionError,
 } from "@/lib/usecases/incidencias/crearIncidencia"
 
@@ -39,7 +40,8 @@ export async function POST(req: Request) {
         error instanceof RangoFechasInvalidoError ||
         error instanceof CodigarioItemNoValidoError ||
         error instanceof IncidenciaPadreNoValidaError ||
-        error instanceof FechaFueraDePadreError
+        error instanceof FechaFueraDePadreError ||
+        error instanceof SinClasesProgramadasError
       ) {
         return Response.json({ error: (error as Error).message }, { status: 400 })
       }

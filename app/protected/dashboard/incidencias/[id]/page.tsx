@@ -19,7 +19,7 @@ export default function IncidenciaDetallePage() {
   const id     = params?.id as string
 
   const {
-    incidencia, cadena, loading, error, setError,
+    incidencia, cadena, cobertura, loading, error, setError,
     confirmar, setConfirmar, eliminar,
     confirmarReactivar, setConfirmarReactivar, reactivar,
   } = useIncidenciaDetalle(id)
@@ -59,6 +59,11 @@ export default function IncidenciaDetallePage() {
     : tieneReemplazos
     ? "Tiene reemplazos asignados en sus clases"
     : null
+
+  // Reemplazo activo a nivel de la incidencia (todas las clases comparten el mismo suplente vigente)
+  const reemplazoActivoIncidencia = clases
+    .flatMap(c => c.reemplazos)
+    .find(r => r.activo) ?? null
 
   return (
     <>
@@ -152,6 +157,19 @@ export default function IncidenciaDetallePage() {
               </button>
             ) : (
               <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                {reemplazoActivoIncidencia && (
+                  <button
+                    onClick={() => abrirModalAusencia(
+                      reemplazoActivoIncidencia.id,
+                      reemplazoActivoIncidencia.agenteSuplente
+                        ? `${reemplazoActivoIncidencia.agenteSuplente.apellido}, ${reemplazoActivoIncidencia.agenteSuplente.nombre}`
+                        : "—"
+                    )}
+                    style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
+                  >
+                    Ausencia del suplente
+                  </button>
+                )}
                 <button
                   onClick={() => puedeEditar && router.push(`/protected/dashboard/incidencias/editar/${id}`)}
                   disabled={!puedeEditar}
@@ -195,7 +213,7 @@ export default function IncidenciaDetallePage() {
           </div>
         )}
 
-        <IncidenciaDetalleHeader incidencia={incidencia} />
+        <IncidenciaDetalleHeader incidencia={incidencia} clases={clases} cobertura={cobertura} />
 
         {/* Clases afectadas — solo para incidencias activas */}
         {!esEliminada && (
@@ -206,9 +224,9 @@ export default function IncidenciaDetallePage() {
           ) : (
             <ClasesAfectadasTable
               clases={clases}
+              esRaiz={!incidencia.padre}
               onAgregarReemplazo={abrirModal}
               onEliminarReemplazo={eliminarReemplazo}
-              onAusenciaSuplente={abrirModalAusencia}
             />
           )
         )}

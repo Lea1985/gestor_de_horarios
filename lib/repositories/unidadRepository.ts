@@ -4,11 +4,11 @@ import prisma from "@/lib/prisma"
 import { TipoUnidad, Prisma } from "@prisma/client"
 
 export const unidadRepository = {
-  listar(tenantId: number) {
+  listar(tenantId: number, incluirInactivos = false) {
     return prisma.unidadOrganizativa.findMany({
       where: {
         institucionId: tenantId,
-        deletedAt: null,
+        ...(incluirInactivos ? {} : { deletedAt: null }),
       },
       orderBy: { codigoUnidad: "asc" },
     })
@@ -87,6 +87,35 @@ export const unidadRepository = {
     })
   },
 
+  async reactivar(id: number, tenantId: number) {
+    const existente = await prisma.unidadOrganizativa.findFirst({
+      where: { id, institucionId: tenantId, deletedAt: { not: null } },
+      select: { id: true, codigoUnidad: true },
+    })
+ 
+    if (!existente) return null
+ 
+    // Si ya existe otra unidad activa con el mismo código, no se puede reactivar
+    const duplicado = await prisma.unidadOrganizativa.findFirst({
+      where: {
+        institucionId: tenantId,
+        codigoUnidad: existente.codigoUnidad,
+        deletedAt: null,
+        id: { not: id },
+      },
+      select: { id: true },
+    })
+ 
+    if (duplicado) {
+      throw new Error(`Ya existe una unidad activa con el código ${existente.codigoUnidad}`)
+    }
+ 
+    return prisma.unidadOrganizativa.update({
+      where: { id },
+      data: { activo: true, deletedAt: null },
+    })
+  },
+  
   existe(id: number, tenantId: number) {
     return prisma.unidadOrganizativa.findFirst({
       where: {

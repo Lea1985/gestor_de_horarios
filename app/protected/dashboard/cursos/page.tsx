@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/app/hooks/useAuth"
 
@@ -9,6 +9,7 @@ type Curso = {
   nombre:          string
   descripcion:     string | null
   activo:          boolean
+  deletedAt:       string | null
   tieneMaterias:   boolean
   tieneComisiones: boolean
   puedeEliminar:   boolean
@@ -53,10 +54,11 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: { mensaje: string;
   )
 }
 
-function MenuGestionar({ curso, onEditar, onEliminar }: {
-  curso:      Curso
-  onEditar:   () => void
-  onEliminar: () => void
+function MenuGestionar({ curso, onEditar, onEliminar, onReactivar }: {
+  curso:       Curso
+  onEditar:    () => void
+  onEliminar:  () => void
+  onReactivar: () => void
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pos,     setPos]     = useState({ top: 0, left: 0 })
@@ -81,6 +83,8 @@ function MenuGestionar({ curso, onEditar, onEliminar }: {
     setAbierto(v => !v)
   }
 
+  const esInactivo = !curso.activo || curso.deletedAt !== null
+
   const motivoBloqueo = curso.tieneMaterias && curso.tieneComisiones
     ? "Tiene materias y comisiones activas"
     : curso.tieneMaterias
@@ -96,29 +100,42 @@ function MenuGestionar({ curso, onEditar, onEliminar }: {
       </button>
       {abierto && (
         <div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", minWidth: 160, zIndex: 9999, overflow: "hidden" }}>
-          <button
-            onClick={() => { setAbierto(false); onEditar() }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Editar
-          </button>
-          <button
-            onClick={() => { if (curso.puedeEliminar) { setAbierto(false); onEliminar() } }}
-            disabled={!curso.puedeEliminar}
-            title={motivoBloqueo ?? undefined}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: curso.puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: curso.puedeEliminar ? "pointer" : "not-allowed", opacity: curso.puedeEliminar ? 1 : 0.5 }}
-            onMouseEnter={e => { if (curso.puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Eliminar
-            {motivoBloqueo && (
-              <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
-                {motivoBloqueo}
-              </span>
-            )}
-          </button>
+          {esInactivo ? (
+            <button
+              onClick={() => { setAbierto(false); onReactivar() }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              Reactivar
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => { setAbierto(false); onEditar() }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => { if (curso.puedeEliminar) { setAbierto(false); onEliminar() } }}
+                disabled={!curso.puedeEliminar}
+                title={motivoBloqueo ?? undefined}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: curso.puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: curso.puedeEliminar ? "pointer" : "not-allowed", opacity: curso.puedeEliminar ? 1 : 0.5 }}
+                onMouseEnter={e => { if (curso.puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Eliminar
+                {motivoBloqueo && (
+                  <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
+                    {motivoBloqueo}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
       )}
     </>
@@ -138,10 +155,27 @@ export default function CursosPage() {
   const [guardando,   setGuardando]   = useState(false)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
 
+  // ── Filtros ───────────────────────────────────────────────
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  const cursosFiltrados = useMemo(() => {
+    let filtrados = cursos
+    if (!verInactivos) filtrados = filtrados.filter(c => c.activo && c.deletedAt === null)
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      filtrados = filtrados.filter(c =>
+        c.nombre.toLowerCase().includes(q) ||
+        (c.descripcion?.toLowerCase().includes(q) ?? false)
+      )
+    }
+    return filtrados
+  }, [cursos, busqueda, verInactivos])
+
   async function cargar() {
     try {
       setLoading(true)
-      const res = await fetch("/api/cursos", { headers: authHeaders })
+      const res = await fetch(`/api/cursos?inactivos=${verInactivos}`, { headers: authHeaders })
       if (!res.ok) throw new Error()
       setCursos(await res.json())
     } catch {
@@ -153,7 +187,7 @@ export default function CursosPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargar()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos])
 
   function abrirCrear() {
     setForm(FORM_VACIO); setFormErrors({}); setEditandoId(null); setMostrarForm(true); setError(null)
@@ -214,6 +248,20 @@ export default function CursosPage() {
     }
   }
 
+  async function reactivar(id: number) {
+    try {
+      const res = await fetch(`/api/cursos/${id}/reactivar`, { method: "POST", headers: authHeaders })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error reactivando curso")
+        return
+      }
+      await cargar()
+    } catch {
+      setError("Error de red")
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando cursos...
@@ -236,7 +284,8 @@ export default function CursosPage() {
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Cursos</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {cursos.length} curso{cursos.length !== 1 ? "s" : ""}
+              {cursosFiltrados.length} curso{cursosFiltrados.length !== 1 ? "s" : ""}
+              {!verInactivos && " activo" + (cursosFiltrados.length !== 1 ? "s" : "")}
             </p>
           </div>
           {!mostrarForm && (
@@ -293,35 +342,70 @@ export default function CursosPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda + toggle inactivos */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre o descripción..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+              onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>{["Nombre", "Descripción", "Materias", ""].map(col => <th key={col} style={s.th}>{col}</th>)}</tr>
             </thead>
             <tbody>
-              {cursos.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>No hay cursos registrados</td></tr>
-              ) : cursos.map(c => (
-                <tr key={c.id} style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>{c.nombre}</td>
-                  <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{c.descripcion ?? "—"}</td>
-                  <td style={s.td}>
-                    <Link href={`/protected/dashboard/cursos/${c.id}/materias`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
-                      Administrar →
-                    </Link>
-                  </td>
-                  <td style={s.td}>
-                    <MenuGestionar
-                      curso={c}
-                      onEditar={() => abrirEditar(c)}
-                      onEliminar={() => setConfirmarId(c.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {cursosFiltrados.length === 0 ? (
+                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                  No hay cursos{!verInactivos ? " activos" : ""} registrados
+                </td></tr>
+              ) : cursosFiltrados.map(c => {
+                const esInactivo = !c.activo || c.deletedAt !== null
+                return (
+                  <tr key={c.id} style={{ transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ ...s.td, fontWeight: "var(--font-medium)" }}>
+                      {c.nombre}
+                      {esInactivo && (
+                        <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{c.descripcion ?? "—"}</td>
+                    <td style={s.td}>
+                      {esInactivo ? (
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>—</span>
+                      ) : (
+                        <Link href={`/protected/dashboard/cursos/${c.id}/materias`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
+                          Administrar →
+                        </Link>
+                      )}
+                    </td>
+                    <td style={s.td}>
+                      <MenuGestionar
+                        curso={c}
+                        onEditar={() => abrirEditar(c)}
+                        onEliminar={() => setConfirmarId(c.id)}
+                        onReactivar={() => reactivar(c.id)}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

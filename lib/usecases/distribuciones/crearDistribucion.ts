@@ -1,6 +1,8 @@
 // lib/usecases/distribuciones/crearDistribucion.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import prisma from "@/lib/prisma"
 
 export class DatosDistribucionInvalidosError extends Error {
   constructor() { super("asignacionId, version y fecha_vigencia_desde son obligatorios") }
@@ -20,12 +22,10 @@ export class VersionDuplicadaError extends Error {
 export class SolapamientoError extends Error {
   constructor() { super("Existe una distribución activa en ese rango de fechas") }
 }
-export class SinPeriodoOperativoError extends Error {
-  constructor() { super("No hay período operativo vigente. Establecé uno antes de crear una distribución.") }
-}
-export class FechaFueraDePeriodoError extends Error {
-  constructor() { super("fecha_vigencia_desde debe estar dentro del período operativo vigente") }
-}
+
+// NOTA: SinPeriodoOperativoError y FechaFueraDePeriodoError se ELIMINAN.
+// Ya no es un error crear una distribución sin período ACTIVO: simplemente
+// no se generan clases todavía (regla de negocio original, punto 2).
 
 export async function crearDistribucion(tenantId: number, body: {
   asignacionId?:         number
@@ -45,36 +45,50 @@ export async function crearDistribucion(tenantId: number, body: {
   const hasta = distribucionRepository.parseDate(fecha_vigencia_hasta) ?? new Date("9999-12-31")
   if (desde > hasta) throw new RangoFechasInvalidoError()
 
-  // Validar período operativo vigente
-  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
-  if (!periodo) throw new SinPeriodoOperativoError()
-
-  if (desde < periodo.fecha_desde || desde > periodo.fecha_hasta) {
-    throw new FechaFueraDePeriodoError()
-  }
-
-  const { default: prisma } = await import("@/lib/prisma")
   const asignacion = await prisma.asignacion.findFirst({
     where: { id: asignacionId, institucionId: tenantId, deletedAt: null },
-    select: { id: true },
+    select: { id: true, unidadId: true, comisionId: true },
   })
   if (!asignacion) throw new AsignacionNoEncontradaError()
 
   const conflicto = await distribucionRepository.verificarSolapamiento(
-    tenantId,
-    asignacionId,
-    version,
-    desde,
-    hasta
+    tenantId, asignacionId, version, desde, hasta
   )
   if (conflicto?.tipo === "version")      throw new VersionDuplicadaError()
   if (conflicto?.tipo === "solapamiento") throw new SolapamientoError()
 
-  return distribucionRepository.crear({
+  const nueva = await distribucionRepository.crear({
     tenantId,
     asignacionId,
     version,
     fecha_vigencia_desde: desde,
     fecha_vigencia_hasta: fecha_vigencia_hasta ? hasta : null,
   })
+
+  // Si hay período ACTIVO y su rango se solapa con el de la distribución,
+  // generamos las clases correspondientes ya mismo. Si no hay período ACTIVO,
+  // no pasa nada acá: activarPeriodo se encargará cuando exista uno.
+  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
+  let clasesCreadas = 0
+
+  if (periodo && desde <= periodo.fecha_hasta) {
+    const desdeGenerar = desde > periodo.fecha_desde ? desde : periodo.fecha_desde
+    const hastaGenerar = nueva.fecha_vigencia_hasta && nueva.fecha_vigencia_hasta < periodo.fecha_hasta
+      ? nueva.fecha_vigencia_hasta
+      : periodo.fecha_hasta
+
+    const { creadas } = await claseProgramadaService.generarParaRango({
+      institucionId:  tenantId,
+      asignacionId:   asignacion.id,
+      unidadId:       asignacion.unidadId,
+      comisionId:     asignacion.comisionId,
+      distribucionId: nueva.id,
+      periodoId:      periodo.id,
+      desde: desdeGenerar,
+      hasta: hastaGenerar,
+    })
+    clasesCreadas = creadas
+  }
+
+  return { ...nueva, clasesCreadas }
 }

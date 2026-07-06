@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { minutosAHora, horaAMinutos } from "@/lib/helpers/tiempo"
 
@@ -9,6 +9,8 @@ type Turno = {
   nombre:                  string
   horaInicio:              number
   horaFin:                 number
+  activo:                  boolean
+  deletedAt:               string | null
   tieneAsignacionesActivas: boolean
 }
 
@@ -56,10 +58,11 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: { mensaje: string;
   )
 }
 
-function MenuGestionar({ turno, onEditar, onEliminar }: {
-  turno:      Turno
-  onEditar:   () => void
-  onEliminar: () => void
+function MenuGestionar({ turno, onEditar, onEliminar, onReactivar }: {
+  turno:       Turno
+  onEditar:    () => void
+  onEliminar:  () => void
+  onReactivar: () => void
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pos,     setPos]     = useState({ top: 0, left: 0 })
@@ -84,6 +87,7 @@ function MenuGestionar({ turno, onEditar, onEliminar }: {
     setAbierto(v => !v)
   }
 
+  const esInactivo    = !turno.activo || turno.deletedAt !== null
   const puedeEliminar = !turno.tieneAsignacionesActivas
 
   return (
@@ -93,29 +97,42 @@ function MenuGestionar({ turno, onEditar, onEliminar }: {
       </button>
       {abierto && (
         <div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", minWidth: 140, zIndex: 9999, overflow: "hidden" }}>
-          <button
-            onClick={() => { setAbierto(false); onEditar() }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Editar
-          </button>
-          <button
-            onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
-            disabled={!puedeEliminar}
-            title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
-            onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Eliminar
-            {!puedeEliminar && (
-              <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
-                Tiene asignaciones activas
-              </span>
-            )}
-          </button>
+          {esInactivo ? (
+            <button
+              onClick={() => { setAbierto(false); onReactivar() }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              Reactivar
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => { setAbierto(false); onEditar() }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
+                disabled={!puedeEliminar}
+                title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
+                onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Eliminar
+                {!puedeEliminar && (
+                  <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
+                    Tiene asignaciones activas
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
       )}
     </>
@@ -134,9 +151,24 @@ export default function TurnosPage() {
   const [guardando,   setGuardando]   = useState(false)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
 
+  // ── Filtros ───────────────────────────────────────────────
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  const turnosFiltrados = useMemo(() => {
+    let filtrados = turnos
+    if (!verInactivos) filtrados = filtrados.filter(t => t.activo && t.deletedAt === null)
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      filtrados = filtrados.filter(t => t.nombre.toLowerCase().includes(q))
+    }
+    return filtrados
+  }, [turnos, busqueda, verInactivos])
+
   async function cargar() {
     try {
-      const res = await fetch("/api/turnos", { headers: authHeaders })
+      setLoading(true)
+      const res = await fetch(`/api/turnos?inactivos=${verInactivos}`, { headers: authHeaders })
       if (!res.ok) throw new Error()
       setTurnos(await res.json())
     } catch {
@@ -148,7 +180,7 @@ export default function TurnosPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargar()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos])
 
   function abrirCrear() {
     setEditando(null); setForm(FORM_VACIO); setMostrarForm(true); setError(null)
@@ -204,6 +236,20 @@ export default function TurnosPage() {
     }
   }
 
+  async function reactivar(id: number) {
+    try {
+      const res = await fetch(`/api/turnos/${id}/reactivar`, { method: "POST", headers: authHeaders })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error reactivando turno")
+        return
+      }
+      await cargar()
+    } catch {
+      setError("Error de red")
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando turnos...
@@ -226,7 +272,8 @@ export default function TurnosPage() {
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Turnos</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {turnos.length} turno{turnos.length !== 1 ? "s" : ""} registrado{turnos.length !== 1 ? "s" : ""}
+              {turnosFiltrados.length} turno{turnosFiltrados.length !== 1 ? "s" : ""}
+              {!verInactivos && " activo" + (turnosFiltrados.length !== 1 ? "s" : "")}
             </p>
           </div>
           {!mostrarForm && (
@@ -281,31 +328,62 @@ export default function TurnosPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda + toggle inactivos */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+              onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>{["Nombre", "Inicio", "Fin", ""].map(col => <th key={col} style={s.th}>{col}</th>)}</tr>
             </thead>
             <tbody>
-              {turnos.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>No hay turnos registrados</td></tr>
-              ) : turnos.map(turno => (
-                <tr key={turno.id} style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={s.td}>{turno.nombre}</td>
-                  <td style={s.td}>{minutosAHora(turno.horaInicio)}</td>
-                  <td style={s.td}>{minutosAHora(turno.horaFin)}</td>
-                  <td style={s.td}>
-                    <MenuGestionar
-                      turno={turno}
-                      onEditar={() => abrirEditar(turno)}
-                      onEliminar={() => setConfirmarId(turno.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {turnosFiltrados.length === 0 ? (
+                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                  No hay turnos{!verInactivos ? " activos" : ""} registrados
+                </td></tr>
+              ) : turnosFiltrados.map(turno => {
+                const esInactivo = !turno.activo || turno.deletedAt !== null
+                return (
+                  <tr key={turno.id} style={{ transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={s.td}>
+                      {turno.nombre}
+                      {esInactivo && (
+                        <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
+                    <td style={s.td}>{minutosAHora(turno.horaInicio)}</td>
+                    <td style={s.td}>{minutosAHora(turno.horaFin)}</td>
+                    <td style={s.td}>
+                      <MenuGestionar
+                        turno={turno}
+                        onEditar={() => abrirEditar(turno)}
+                        onEliminar={() => setConfirmarId(turno.id)}
+                        onReactivar={() => reactivar(turno.id)}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

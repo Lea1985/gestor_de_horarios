@@ -3,7 +3,38 @@ import prisma from "@/lib/prisma"
 
 const incidenciaInclude = {
   codigarioItem: true,
-  padre: true,
+  padre: {
+    include: {
+      codigarioItem: true,
+      asignacion: {
+        include: {
+          titularidades: {
+            orderBy: { fecha_desde: "desc" as const },
+            include: { agente: true },
+            take: 1,
+          },
+          unidad: true,
+          comision: { include: { curso: true } },
+        },
+      },
+      // NUEVO: para mostrar quién era el suplente (B) en la incidencia padre
+      ClaseProgramada: {
+        where: { estado: "REEMPLAZADA" as const },
+        include: {
+          reemplazos: {
+            where: { activo: true },
+            include: {
+              agenteSuplente: {
+                select: { nombre: true, apellido: true },
+              },
+            },
+            take: 1,
+          },
+        },
+        take: 1,
+      },
+    },
+  },
   hijos: true,
   asignacion: {
     include: {
@@ -108,73 +139,54 @@ listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
       where: {
         id:          incidenciaPadreId,
         asignacionId,
-        activo:      true,        // ← agregar
+        activo:      true,
         deletedAt:   null,
         asignacion: {
           institucionId: tenantId,
         },
       },
-      select: { id: true, fecha_hasta: true },
+      select: { id: true, fecha_desde: true, fecha_hasta: true },  // ← agregar fecha_desde
     })
   },
 
   verificarSuperposicion(
-  asignacionId: number,
-  fechaDesde: Date,
-  fechaHasta: Date,
-  tenantId: number,
-  excludeId?: number,
-  incidenciaPadreId?: number | null
-) {
-  return prisma.incidencia.findFirst({
-    where: {
-      asignacionId,
-      activo: true,
-      deletedAt: null,
+    asignacionId: number,
+    fechaDesde: Date,
+    fechaHasta: Date,
+    tenantId: number,
+    excludeId?: number,
+    incidenciaPadreId?: number | null
+  ) {
+    return prisma.incidencia.findFirst({
+      where: {
+        asignacionId,
+        activo: true,
+        deletedAt: null,
 
-      asignacion: {
-        institucionId: tenantId,
+        asignacion: {
+          institucionId: tenantId,
+        },
+
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+
+        // Permitir superposición solo con el padre directo,
+        // NO con hermanas (hijas del mismo padre).
+        ...(incidenciaPadreId
+          ? { NOT: { id: incidenciaPadreId } }
+          : {}),
+
+        AND: [
+          { fecha_desde: { lte: fechaHasta } },
+          { fecha_hasta: { gte: fechaDesde } },
+        ],
       },
 
-      ...(excludeId
-        ? {
-            id: {
-              not: excludeId,
-            },
-          }
-        : {}),
-
-      // Permitir superposición dentro
-      // de la misma cadena de incidencias
-      ...(incidenciaPadreId
-        ? {
-            NOT: [
-              { id: incidenciaPadreId },
-              { incidenciaPadreId },
-            ],
-          }
-        : {}),
-
-      AND: [
-        {
-          fecha_desde: {
-            lte: fechaHasta,
-          },
-        },
-        {
-          fecha_hasta: {
-            gte: fechaDesde,
-          },
-        },
-      ],
-    },
-
-    select: {
-      id: true,
-      fecha_desde: true,
-      fecha_hasta: true,
-    },
-  })
+      select: {
+        id: true,
+        fecha_desde: true,
+        fecha_hasta: true,
+      },
+    })
   },
 
   crear(data: {

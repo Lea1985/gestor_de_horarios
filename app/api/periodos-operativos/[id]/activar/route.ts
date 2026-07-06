@@ -3,9 +3,11 @@
 import { withContext } from "@/lib/auth/withContext"
 
 import {
-  cambiarPeriodoActivo,
+  activarPeriodo,
   PeriodoNoEncontradoError,
-} from "@/lib/usecases/periodosOperativos/cambiarPeriodoActivo"
+  PeriodoNoEsBorradorError,
+  YaHayPeriodoActivoError,
+} from "@/lib/usecases/periodosOperativos/activarPeriodo"
 
 function parseId(id: string) {
   const n = Number(id)
@@ -16,44 +18,32 @@ export async function POST(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-
   const { id } = await context.params
-
   const periodoId = parseId(id)
 
   if (!periodoId) {
-    return Response.json(
-      { error: "ID inválido" },
-      { status: 400 }
-    )
+    return Response.json({ error: "ID inválido" }, { status: 400 })
   }
 
   return withContext(req, async ({ tenantId }) => {
-
     try {
-
-      const periodoVigente = await cambiarPeriodoActivo(
-        tenantId,
-        periodoId
-      )
-
-      return Response.json(periodoVigente)
-
+      const result = await activarPeriodo(tenantId, periodoId)
+      return Response.json(result)
     } catch (error) {
-
       if (error instanceof PeriodoNoEncontradoError) {
+        return Response.json({ error: error.message }, { status: 404 })
+      }
+      if (error instanceof PeriodoNoEsBorradorError) {
+        return Response.json({ error: error.message }, { status: 409 })
+      }
+      if (error instanceof YaHayPeriodoActivoError) {
         return Response.json(
-          { error: error.message },
-          { status: 404 }
+          { error: error.message, periodoActivoId: error.periodoActivoId },
+          { status: 409 }
         )
       }
-
       console.error("Error activando período:", error)
-
-      return Response.json(
-        { error: "Error activando período" },
-        { status: 500 }
-      )
+      return Response.json({ error: "Error activando período" }, { status: 500 })
     }
   })
 }

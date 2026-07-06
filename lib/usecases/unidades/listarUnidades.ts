@@ -3,8 +3,8 @@ import { unidadRepository } from "@/lib/repositories/unidadRepository"
 import { RequestContext as Context } from "@/lib/types/context"
 import prisma from "@/lib/prisma"
 
-export async function listarUnidades(ctx: Context) {
-  const unidades = await unidadRepository.listar(ctx.tenantId)
+export async function listarUnidades(ctx: Context, incluirInactivos = false) {
+  const unidades = await unidadRepository.listar(ctx.tenantId, incluirInactivos)
 
   const asignaciones = await prisma.asignacion.findMany({
     where: {

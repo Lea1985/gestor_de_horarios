@@ -6,7 +6,9 @@ import { crearCodigario, NombreObligatorioError } from "@/lib/usecases/codigario
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
-    const codigarios = await listarCodigarios(tenantId)
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
+    const codigarios = await listarCodigarios(tenantId, incluirInactivos)
     return Response.json(codigarios)
   })
 }

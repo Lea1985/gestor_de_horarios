@@ -1,9 +1,16 @@
 // lib/usecases/materias/eliminarMateria.ts
 import { materiaRepository } from "@/lib/repositories/materiaRepository"
+import prisma from "@/lib/prisma"
 
 export class MateriaNoEncontradaError extends Error {
   constructor() {
     super("Materia no encontrada")
+  }
+}
+
+export class MateriaConAsignacionesError extends Error {
+  constructor() {
+    super("No se puede eliminar la materia porque tiene asignaciones activas")
   }
 }
 
@@ -17,7 +24,19 @@ export async function eliminarMateria(
     throw new MateriaNoEncontradaError()
   }
 
-  // ✅ FIX: pasar tenantId para mantener consistencia multi-tenant
+  const tieneAsignaciones = await prisma.asignacion.count({
+    where: {
+      materiaId: id,
+      institucionId: tenantId,
+      activo: true,
+      deletedAt: null,
+    },
+  })
+
+  if (tieneAsignaciones > 0) {
+    throw new MateriaConAsignacionesError()
+  }
+
   await materiaRepository.eliminar(id, tenantId)
 
   return {

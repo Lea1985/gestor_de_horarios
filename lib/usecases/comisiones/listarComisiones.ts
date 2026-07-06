@@ -2,8 +2,8 @@
 import { comisionRepository } from "@/lib/repositories/comisionRepository"
 import prisma from "@/lib/prisma"
 
-export async function listarComisiones(tenantId: number) {
-  const comisiones = await comisionRepository.listar(tenantId)
+export async function listarComisiones(tenantId: number, incluirInactivos = false) {
+  const comisiones = await comisionRepository.listar(tenantId, incluirInactivos)
 
   const asignaciones = await prisma.asignacion.findMany({
     where: {

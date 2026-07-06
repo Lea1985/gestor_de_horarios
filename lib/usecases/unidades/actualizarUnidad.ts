@@ -38,5 +38,5 @@ export async function actualizarUnidad(
     throw new SinCamposParaActualizarError()
   }
 
-  return unidadRepository.actualizar(id, data)
+return unidadRepository.actualizar(id, ctx.tenantId, data)
 }

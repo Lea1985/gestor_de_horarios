@@ -2,7 +2,11 @@
 
 import { comisionRepository } from "@/lib/repositories/comisionRepository"
 
-export class ComisionNoEncontradaError extends Error {}
+export class ComisionNoEncontradaError extends Error {
+  constructor() {
+    super("Comisión no encontrada")
+  }
+}
 
 export async function eliminarComision(
   id: number,
@@ -11,10 +15,11 @@ export async function eliminarComision(
   const existe = await comisionRepository.existeEnTenant(id, tenantId)
 
   if (!existe) {
-    throw new ComisionNoEncontradaError("Comisión no encontrada")
+    throw new ComisionNoEncontradaError()
   }
 
-  await comisionRepository.eliminar(id)
+  // FIX: el repository requiere (id, tenantId)
+  await comisionRepository.eliminar(id, tenantId)
 
   return { ok: true }
 }

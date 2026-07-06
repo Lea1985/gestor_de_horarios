@@ -3,9 +3,13 @@ import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoR
 export class DatosPeriodoInvalidosError extends Error {
   constructor() { super("nombre, fecha_desde y fecha_hasta son requeridos") }
 }
-
 export class FechasInvalidasError extends Error {
   constructor() { super("fecha_desde debe ser menor a fecha_hasta") }
+}
+export class SuperposicionPeriodoError extends Error {
+  constructor(nombre: string) {
+    super(`Las fechas se superponen con el período "${nombre}". No pueden existir dos períodos operativos con fechas superpuestas.`)
+  }
 }
 
 export async function crearPeriodo(tenantId: number, body: {
@@ -15,16 +19,18 @@ export async function crearPeriodo(tenantId: number, body: {
   activo?:      boolean
 }) {
   const { nombre, fecha_desde, fecha_hasta, activo } = body
-
   if (!nombre || !fecha_desde || !fecha_hasta) {
     throw new DatosPeriodoInvalidosError()
   }
-
   const desde = new Date(fecha_desde)
   const hasta = new Date(fecha_hasta)
-
   if (desde >= hasta) {
     throw new FechasInvalidasError()
+  }
+
+  const solapado = await periodoOperativoRepository.verificarSuperposicion(tenantId, desde, hasta)
+  if (solapado) {
+    throw new SuperposicionPeriodoError(solapado.nombre)
   }
 
   return periodoOperativoRepository.crear({

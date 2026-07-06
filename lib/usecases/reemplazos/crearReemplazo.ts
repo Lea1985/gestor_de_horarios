@@ -30,38 +30,33 @@ export async function crearReemplazo(
     claseId?:             number
     asignacionTitularId?: number
     agenteSuplenteId?:    number
+    incidenciaId?:        number
     observacion?:         string
   }
 ) {
-  const { claseId, asignacionTitularId, agenteSuplenteId, observacion } = body
-
+  const { claseId, asignacionTitularId, agenteSuplenteId, incidenciaId, observacion } = body
   if (!claseId || !asignacionTitularId) throw new DatosReemplazoInvalidosError()
   if (!agenteSuplenteId) throw new SuplenteRequeridoError()
-
   if (!await reemplazoRepository.verificarClase(claseId, tenantId)) {
     throw new ClaseNoEncontradaError()
   }
-
   if (!await reemplazoRepository.verificarAsignacion(asignacionTitularId, tenantId)) {
     throw new AsignacionTitularNoEncontradaError()
   }
-
   if (!await reemplazoRepository.verificarAgente(agenteSuplenteId, tenantId)) {
     throw new AgenteSuplenteNoEncontradoError()
   }
-
   if (await validarSuperposicionSuplente(claseId, agenteSuplenteId, tenantId)) {
     throw new SuperposicionSuplenteError()
   }
-
   if (await reemplazoRepository.verificarReemplazoActivo(claseId, tenantId)) {
     throw new ReemplazoActivoExistenteError()
   }
-
   return reemplazoRepository.crear(tenantId, {
     claseId,
     asignacionTitularId,
     agenteSuplenteId,
+    incidenciaId,
     observacion,
   })
 }

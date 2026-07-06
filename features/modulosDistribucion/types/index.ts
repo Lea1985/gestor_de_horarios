@@ -29,3 +29,18 @@ export const LABEL_DIAS: Record<string, string> = {
   SABADO:    "Sábado",
   DOMINGO:   "Domingo",
 }
+
+export type IncidenciaAfectada = {
+  incidenciaId: number
+  fecha_desde: string
+  fecha_hasta: string
+  codigario: string | null
+  observacion: string | null
+  totalClasesConReemplazo: number
+  migrable: boolean
+  suplente: {
+    asignacionTitularId: number
+    agenteSuplenteId: number
+    nombre: string
+  } | null
+}

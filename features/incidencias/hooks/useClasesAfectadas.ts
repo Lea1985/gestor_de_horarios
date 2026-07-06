@@ -78,6 +78,7 @@ export function useClasesAfectadas(incidenciaId: string, asignacionTitularId: nu
         claseId:             claseSeleccionada.id,
         asignacionTitularId,
         agenteSuplenteId:    Number(suplenteId),
+        incidenciaId:        Number(incidenciaId),
         observacion:         observacionReemplazo || undefined,
       }, authHeaders)
       cerrarModal()

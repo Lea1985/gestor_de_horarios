@@ -10,8 +10,6 @@ import {
   AsignacionNoEncontradaError,
   VersionDuplicadaError,
   SolapamientoError,
-  SinPeriodoOperativoError,
-  FechaFueraDePeriodoError,
 } from "@/lib/usecases/distribuciones/crearDistribucion"
 
 export async function GET(req: Request) {
@@ -36,8 +34,7 @@ export async function POST(req: Request) {
       if (
         error instanceof DatosDistribucionInvalidosError ||
         error instanceof FechaInvalidaError ||
-        error instanceof RangoFechasInvalidoError ||
-        error instanceof FechaFueraDePeriodoError
+        error instanceof RangoFechasInvalidoError
       ) {
         return Response.json({ error: (error as Error).message }, { status: 400 })
       }
@@ -46,8 +43,7 @@ export async function POST(req: Request) {
       }
       if (
         error instanceof VersionDuplicadaError ||
-        error instanceof SolapamientoError ||
-        error instanceof SinPeriodoOperativoError
+        error instanceof SolapamientoError
       ) {
         return Response.json({ error: (error as Error).message }, { status: 409 })
       }

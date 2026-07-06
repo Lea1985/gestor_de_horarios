@@ -40,9 +40,35 @@ export type IncidenciaDetalle = {
       agente: { nombre: string; apellido: string; documento: string }
     }[]
     unidad: { nombre: string; codigoUnidad: number }
+    comision: {
+      nombre: string
+      curso:  { nombre: string }
+    } | null
   }
   codigarioItem?: { codigo: string; nombre: string }
-  padre?: { id: number } | null
+  padre?: {
+    id:          number
+    fecha_desde: string
+    fecha_hasta: string
+    codigarioItem?: { codigo: string; nombre: string }
+    asignacion?: {
+      identificadorEstructural: string
+      titularidades: {
+        agente: { nombre: string; apellido: string; documento: string }
+      }[]
+      unidad: { nombre: string; codigoUnidad: number }
+      comision: {
+        nombre: string
+        curso:  { nombre: string }
+      } | null
+    }
+    // NUEVO: suplente que cubría en la incidencia padre
+    ClaseProgramada?: {
+      reemplazos: {
+        agenteSuplente: { nombre: string; apellido: string } | null
+      }[]
+    }[]
+  } | null
   hijos?: { id: number }[]
 }
 
@@ -123,4 +149,10 @@ export type ResultadoCarga = {
 
 export const DATOS_VACIO: DatosComunes = {
   codigarioId: "", codigarioItemId: "", fecha_desde: "", fecha_hasta: "", observacion: "",
+}
+
+export type TramoCobertura = {
+  desde:    string
+  hasta:    string
+  suplente: { id: number; nombre: string; apellido: string } | null
 }

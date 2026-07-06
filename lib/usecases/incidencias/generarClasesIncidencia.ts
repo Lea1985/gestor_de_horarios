@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma"
 import { generarClases } from "@/lib/helpers/clases"
 import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
+import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 
 /**
  * Dado el id de una incidencia, busca la asignación con su distribución
@@ -64,19 +65,25 @@ export async function generarClasesIncidencia(
 
   const modulos = distribucion.distribucionModulos.map(dm => dm.moduloHorario)
 
-  // 3. Obtener feriados en el rango
+  // 3. Obtener período operativo vigente
+  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
+  if (!periodo) return { count: 0 }
+
+  // 4. Obtener feriados en el rango, dentro del período operativo vigente
   const feriados = await claseProgramadaRepository.listarFeriados(
     tenantId,
+    periodo.id,
     incidencia.fecha_desde,
     incidencia.fecha_hasta
   )
 
-  // 4. Generar clases con el helper existente
+  // 5. Generar clases con el helper existente
   const clases = generarClases({
     institucionId: tenantId,
     asignacionId:  incidencia.asignacionId,
     unidadId:      asignacion.unidadId,
     comisionId:    asignacion.comisionId ?? null,
+    incidenciaId,
     modulos,
     desde:         incidencia.fecha_desde,
     hasta:         incidencia.fecha_hasta,
@@ -85,7 +92,7 @@ export async function generarClasesIncidencia(
 
   if (clases.length === 0) return { count: 0 }
 
-  // 5. Insertar con skipDuplicates — idempotente
+  // 6. Insertar con skipDuplicates — idempotente
   return prisma.claseProgramada.createMany({
     data: clases,
     skipDuplicates: true,

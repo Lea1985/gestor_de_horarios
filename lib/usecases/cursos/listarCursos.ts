@@ -2,8 +2,8 @@
 import { cursoRepository } from "@/lib/repositories/cursoRepository"
 import prisma from "@/lib/prisma"
 
-export async function listarCursos(tenantId: number) {
-  const cursos = await cursoRepository.listar(tenantId)
+export async function listarCursos(tenantId: number, incluirInactivos = false) {
+  const cursos = await cursoRepository.listar(tenantId, incluirInactivos)
 
   // Detectar cursos con materias o comisiones activas
   const [materias, comisiones] = await Promise.all([

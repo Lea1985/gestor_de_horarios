@@ -39,3 +39,14 @@ export const FORM_VACIO: DistribucionFormData = {
   fecha_vigencia_desde: "",
   fecha_vigencia_hasta: "",
 }
+
+export type IncidenciaAfectada = {
+  incidenciaId: number
+  fecha_desde: string
+  fecha_hasta: string
+  codigario: string | null
+  observacion: string | null
+  totalClasesConReemplazo: number
+  migrable: boolean
+  suplente: { asignacionTitularId: number; agenteSuplenteId: number; nombre: string } | null
+}

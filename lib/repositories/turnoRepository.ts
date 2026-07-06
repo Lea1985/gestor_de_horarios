@@ -8,15 +8,13 @@ export const turnoRepository = {
   // TURNOS
   // =========================
 
-  listar(tenantId: number) {
+  listar(tenantId: number, incluirInactivos = false) {
     return prisma.turno.findMany({
       where: {
         institucionId: tenantId,
-        deletedAt: null,
+        ...(incluirInactivos ? {} : { deletedAt: null }),
       },
-      orderBy: {
-        horaInicio: "asc",
-      },
+      orderBy: { horaInicio: "asc" },
     })
   },
 
@@ -133,6 +131,35 @@ export const turnoRepository = {
         activo: false,
         deletedAt: new Date(),
       },
+    })
+  },
+
+  async reactivar(id: number, tenantId: number) {
+    const existente = await prisma.turno.findFirst({
+      where: { id, institucionId: tenantId, deletedAt: { not: null } },
+      select: { id: true, nombre: true },
+    })
+ 
+    if (!existente) return null
+ 
+    // Si ya existe otro turno activo con el mismo nombre, no se puede reactivar
+    const duplicado = await prisma.turno.findFirst({
+      where: {
+        institucionId: tenantId,
+        nombre: existente.nombre,
+        deletedAt: null,
+        id: { not: id },
+      },
+      select: { id: true },
+    })
+ 
+    if (duplicado) {
+      throw new Error(`Ya existe un turno activo con el nombre "${existente.nombre}"`)
+    }
+ 
+    return prisma.turno.update({
+      where: { id },
+      data: { activo: true, deletedAt: null },
     })
   },
 }

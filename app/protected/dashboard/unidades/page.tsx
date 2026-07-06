@@ -1,6 +1,7 @@
+// app/protected/dashboard/unidades/page.tsx
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
 type Unidad = {
@@ -9,6 +10,7 @@ type Unidad = {
   nombre:                  string
   tipo:                    string | null
   activo:                  boolean
+  deletedAt:               string | null
   tieneAsignacionesActivas: boolean
 }
 
@@ -75,10 +77,11 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: { mensaje: string;
   )
 }
 
-function MenuGestionar({ unidad, onEditar, onEliminar }: {
-  unidad:     Unidad
-  onEditar:   () => void
-  onEliminar: () => void
+function MenuGestionar({ unidad, onEditar, onEliminar, onReactivar }: {
+  unidad:      Unidad
+  onEditar:    () => void
+  onEliminar:  () => void
+  onReactivar: () => void
 }) {
   const [abierto, setAbierto] = useState(false)
   const [pos,     setPos]     = useState({ top: 0, left: 0 })
@@ -103,6 +106,7 @@ function MenuGestionar({ unidad, onEditar, onEliminar }: {
     setAbierto(v => !v)
   }
 
+  const esInactivo    = !unidad.activo || unidad.deletedAt !== null
   const puedeEliminar = !unidad.tieneAsignacionesActivas
 
   return (
@@ -112,29 +116,42 @@ function MenuGestionar({ unidad, onEditar, onEliminar }: {
       </button>
       {abierto && (
         <div ref={menuRef} style={{ position: "fixed", top: pos.top, left: pos.left, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", boxShadow: "0 4px 16px rgba(0,0,0,0.10)", minWidth: 140, zIndex: 9999, overflow: "hidden" }}>
-          <button
-            onClick={() => { setAbierto(false); onEditar() }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-            onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Editar
-          </button>
-          <button
-            onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
-            disabled={!puedeEliminar}
-            title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
-            onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
-          >
-            Eliminar
-            {!puedeEliminar && (
-              <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
-                Tiene asignaciones activas
-              </span>
-            )}
-          </button>
+          {esInactivo ? (
+            <button
+              onClick={() => { setAbierto(false); onReactivar() }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              Reactivar
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => { setAbierto(false); onEditar() }}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => { if (puedeEliminar) { setAbierto(false); onEliminar() } }}
+                disabled={!puedeEliminar}
+                title={!puedeEliminar ? "Tiene asignaciones activas" : undefined}
+                style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)", cursor: puedeEliminar ? "pointer" : "not-allowed", opacity: puedeEliminar ? 1 : 0.5 }}
+                onMouseEnter={e => { if (puedeEliminar) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+                onMouseLeave={e => (e.currentTarget.style.background = "none")}
+              >
+                Eliminar
+                {!puedeEliminar && (
+                  <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontWeight: 400, marginTop: 2 }}>
+                    Tiene asignaciones activas
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
       )}
     </>
@@ -154,9 +171,28 @@ export default function UnidadesPage() {
   const [guardando,   setGuardando]   = useState(false)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
 
+  // ── Filtros ───────────────────────────────────────────────
+  const [busqueda,     setBusqueda]     = useState("")
+  const [verInactivos, setVerInactivos] = useState(false)
+
+  const unidadesFiltradas = useMemo(() => {
+    let filtradas = unidades
+    if (!verInactivos) filtradas = filtradas.filter(u => u.activo && u.deletedAt === null)
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      filtradas = filtradas.filter(u =>
+        u.nombre.toLowerCase().includes(q) ||
+        String(u.codigoUnidad).includes(q) ||
+        (u.tipo?.toLowerCase().includes(q) ?? false)
+      )
+    }
+    return filtradas
+  }, [unidades, busqueda, verInactivos])
+
   async function cargarUnidades() {
     try {
-      const res = await fetch("/api/unidades", { headers: authHeaders })
+      setLoading(true)
+      const res = await fetch(`/api/unidades?inactivos=${verInactivos}`, { headers: authHeaders })
       if (!res.ok) throw new Error()
       setUnidades(await res.json())
     } catch {
@@ -168,7 +204,7 @@ export default function UnidadesPage() {
 
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargarUnidades()
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, verInactivos])
 
   function abrirCrear() {
     setForm(FORM_VACIO); setFormErrors({}); setEditando(null); setMostrarForm(true); setError(null)
@@ -230,6 +266,20 @@ export default function UnidadesPage() {
     }
   }
 
+  async function reactivar(id: number) {
+    try {
+      const res = await fetch(`/api/unidades/${id}/reactivar`, { method: "POST", headers: authHeaders })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error reactivando unidad")
+        return
+      }
+      await cargarUnidades()
+    } catch {
+      setError("Error de red")
+    }
+  }
+
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando unidades...
@@ -252,7 +302,8 @@ export default function UnidadesPage() {
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Unidades Organizativas</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {unidades.length} unidad{unidades.length !== 1 ? "es" : ""} registrada{unidades.length !== 1 ? "s" : ""}
+              {unidadesFiltradas.length} unidad{unidadesFiltradas.length !== 1 ? "es" : ""}
+              {!verInactivos && " activa" + (unidadesFiltradas.length !== 1 ? "s" : "")}
             </p>
           </div>
           {!mostrarForm && (
@@ -321,31 +372,62 @@ export default function UnidadesPage() {
           </div>
         )}
 
+        {/* Barra de búsqueda + toggle inactivos */}
+        {!mostrarForm && (
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
+            <input
+              placeholder="Buscar por nombre, código o tipo..."
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ ...s.input, flex: 1 }}
+              onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
+              onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", cursor: "pointer", whiteSpace: "nowrap" as const }}>
+              <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} style={{ cursor: "pointer" }} />
+              Ver inactivos
+            </label>
+          </div>
+        )}
+
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>{["Código", "Nombre", "Tipo", ""].map(col => <th key={col} style={s.th}>{col}</th>)}</tr>
             </thead>
             <tbody>
-              {unidades.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>No hay unidades registradas</td></tr>
-              ) : unidades.map(u => (
-                <tr key={u.id} style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{u.codigoUnidad}</td>
-                  <td style={s.td}>{u.nombre}</td>
-                  <td style={s.td}><BadgeTipo tipo={u.tipo} /></td>
-                  <td style={s.td}>
-                    <MenuGestionar
-                      unidad={u}
-                      onEditar={() => abrirEditar(u)}
-                      onEliminar={() => setConfirmarId(u.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {unidadesFiltradas.length === 0 ? (
+                <tr><td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                  No hay unidades{!verInactivos ? " activas" : ""} registradas
+                </td></tr>
+              ) : unidadesFiltradas.map(u => {
+                const esInactivo = !u.activo || u.deletedAt !== null
+                return (
+                  <tr key={u.id} style={{ transition: "background 0.1s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ ...s.td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{u.codigoUnidad}</td>
+                    <td style={s.td}>
+                      {u.nombre}
+                      {esInactivo && (
+                        <span style={{ marginLeft: 6, fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
+                    <td style={s.td}><BadgeTipo tipo={u.tipo} /></td>
+                    <td style={s.td}>
+                      <MenuGestionar
+                        unidad={u}
+                        onEditar={() => abrirEditar(u)}
+                        onEliminar={() => setConfirmarId(u.id)}
+                        onReactivar={() => reactivar(u.id)}
+                      />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -354,3 +436,4 @@ export default function UnidadesPage() {
     </>
   )
 }
+s

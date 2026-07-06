@@ -6,7 +6,9 @@ import { crearUnidad, DatosUnidadInvalidosError, TipoUnidadInvalidoError } from 
 
 export async function GET(req: Request) {
   return withContext(req, async (ctx) => {
-    return Response.json(await listarUnidades(ctx))
+    const { searchParams } = new URL(req.url)
+    const incluirInactivos = searchParams.get("inactivos") === "true"
+    return Response.json(await listarUnidades(ctx, incluirInactivos))
   })
 }
 

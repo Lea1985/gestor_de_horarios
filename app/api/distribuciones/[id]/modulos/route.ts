@@ -5,7 +5,7 @@ import {
   DistribucionNoEncontradaError,
   ModulosInvalidosError,
   FormatoModulosInvalidoError,
-  SinPeriodoOperativoError,
+  SinPeriodoActivoError,
 } from "@/lib/usecases/distribuciones/asignarModulos"
 
 function parseId(id: string) {
@@ -30,7 +30,11 @@ export async function POST(
     }
 
     try {
-      return Response.json(await asignarModulos(distId, tenantId, body))
+      const result = await asignarModulos(distId, tenantId, body)
+      // Si el servicio devolvió requiereConfirmacion, respondemos 200 igual
+      // (no es un error, es una pregunta al frontend), pero con el flag
+      // explícito para que el cliente lo distinga de un éxito definitivo.
+      return Response.json(result)
     } catch (error) {
       if (
         error instanceof FormatoModulosInvalidoError ||
@@ -41,7 +45,7 @@ export async function POST(
       if (error instanceof DistribucionNoEncontradaError) {
         return Response.json({ error: (error as Error).message }, { status: 404 })
       }
-      if (error instanceof SinPeriodoOperativoError) {
+      if (error instanceof SinPeriodoActivoError) {
         return Response.json({ error: (error as Error).message }, { status: 409 })
       }
       console.error("Error asignando módulos:", error)

@@ -39,6 +39,12 @@ enum EstadoClase {
   REEMPLAZADA
 }
 
+enum EstadoPeriodo {
+  BORRADOR
+  ACTIVO
+  CERRADO
+}
+
 /// ENTIDADES PRINCIPALES
 
 model Usuario {
@@ -417,10 +423,13 @@ model Incidencia {
   incidenciaPadreId Int?
   padre             Incidencia?  @relation("incidenciaPadre", fields: [incidenciaPadreId], references: [id])
   hijos             Incidencia[] @relation("incidenciaPadre")
+  reemplazosDecididos Reemplazo[]
+
 
   asignacion      Asignacion        @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
   codigarioItem   CodigarioItem     @relation(fields: [codigarioItemId], references: [id])
   ClaseProgramada ClaseProgramada[]
+  
 
   @@unique([asignacionId, fecha_desde], name: "asignacionId_fecha_desde")
   @@index([asignacionId])
@@ -485,6 +494,7 @@ model ClaseProgramada {
   @@index([asignacionId])
   @@index([moduloId])
   @@index([comisionId, fecha])
+  @@unique([asignacionId, moduloId, fecha], name: "clase_unica_por_modulo_fecha")
 }
 
 model Reemplazo {
@@ -492,6 +502,7 @@ model Reemplazo {
   claseId             Int
   asignacionTitularId Int
   agenteSuplenteId    Int
+  incidenciaId        Int?
   observacion         String?
   activo              Boolean   @default(true)
   deletedAt           DateTime?
@@ -500,6 +511,7 @@ model Reemplazo {
   asignacionTitular Asignacion      @relation("TitularReemplazo", fields: [asignacionTitularId], references: [id])
   agenteSuplente    Agente          @relation("ReemplazoSuplente", fields: [agenteSuplenteId], references: [id])
   clase             ClaseProgramada @relation("ClaseProgramadaReemplazos", fields: [claseId], references: [id])
+  incidencia        Incidencia?     @relation(fields: [incidenciaId], references: [id])
 
   @@index([claseId])
   @@index([asignacionTitularId])
@@ -547,7 +559,7 @@ model PeriodoOperativo {
 
   // Solo un período puede estar vigente por institución.
   // Los períodos históricos quedan con vigente = false.
-  vigente       Boolean   @default(false)
+  estado        EstadoPeriodo @default(BORRADOR)
 
   // Soft delete lógico
   deletedAt     DateTime?
@@ -563,7 +575,7 @@ model PeriodoOperativo {
   @@index([institucionId])
 
   // Búsqueda rápida del período vigente
-  @@index([institucionId, vigente])
+   @@index([institucionId, estado])
 
   @@index([fecha_desde, fecha_hasta])
 

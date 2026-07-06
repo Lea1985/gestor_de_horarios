@@ -1,4 +1,5 @@
 // features/incidencias/components/ClasesAfectadasTable.tsx
+import { useState } from "react"
 import type { ClaseAfectada, ReemplazoClase } from "../types"
 
 function formatHora(minutos: number): string {
@@ -41,149 +42,181 @@ const estadoBadge: Record<ClaseAfectada["estado"], { label: string; color: strin
   REEMPLAZADA: { label: "Reemplazada", color: "var(--color-accent)",         bg: "var(--color-accent-bg, #f0f8ff)" },
 }
 
+const UMBRAL_AUTO_COLAPSO = 5
+
 export function ClasesAfectadasTable({
   clases,
+  esRaiz,
   onAgregarReemplazo,
   onEliminarReemplazo,
-  onAusenciaSuplente,
 }: {
   clases:               ClaseAfectada[]
+  esRaiz:               boolean
   onAgregarReemplazo:   (clase: ClaseAfectada) => void
   onEliminarReemplazo:  (reemplazoId: number) => void
-  onAusenciaSuplente:   (reemplazoId: number, nombreSuplente: string) => void
 }) {
+const hayPendientes = clases.some(
+  c => c.estado === "PROGRAMADA" && c.reemplazos.every(r => !r.activo)
+)
+  // Colapsado por defecto si hay muchas clases, salvo que alguna esté sin cubrir.
+  const [abierto, setAbierto] = useState(
+    clases.length <= UMBRAL_AUTO_COLAPSO || hayPendientes
+  )
+
+  const puedeColapsar = clases.length > 0
+
   return (
     <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
 
-      <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
-          Clases afectadas
-        </span>
-        {clases.length > 0 && (
-          <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
-            {clases.length} clase{clases.length !== 1 ? "s" : ""}
+      <button
+        onClick={() => puedeColapsar && setAbierto(v => !v)}
+        disabled={!puedeColapsar}
+        style={{
+          width: "100%", padding: "14px 18px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "none", border: "none",
+          borderBottom: abierto ? "1px solid var(--color-border)" : "none",
+          cursor: puedeColapsar ? "pointer" : "default", textAlign: "left",
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+          <span style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
+            Clases afectadas
           </span>
+          {clases.length > 0 && (
+            <span style={{ fontSize: "var(--text-2xs)", padding: "1px 8px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+              {clases.length}
+            </span>
+          )}
+        </span>
+
+        {puedeColapsar && (
+          <svg
+            width="14" height="14" viewBox="0 0 14 14" fill="none"
+            style={{ transform: abierto ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s", color: "var(--color-text-hint)", flexShrink: 0 }}
+          >
+            <path d="M3 5.5L7 9.5L11 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         )}
-      </div>
+      </button>
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {["Fecha", "Módulo", "Estado", "Reemplazante", ""].map(col => (
-              <th key={col} style={th}>{col}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {clases.length === 0 ? (
+      {(!puedeColapsar || abierto) && (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
             <tr>
-              <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-8)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
-                No hay clases programadas en este rango
-              </td>
+              {["Fecha", "Módulo", "Estado", "Reemplazante", ""].map(col => (
+                <th key={col} style={th}>{col}</th>
+              ))}
             </tr>
-          ) : clases.map(clase => {
-            const badge          = estadoBadge[clase.estado]
-            const reemplazoActivo = clase.reemplazos.find(r => r.activo) ?? null
-            const cadena          = [...clase.reemplazos].sort((a, b) => a.id - b.id)
-
-            return (
-              <tr
-                key={clase.id}
-                style={{ transition: "background 0.1s" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-              >
-                {/* Fecha */}
-                <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                  {clase.fecha?.slice(0, 10).split("-").reverse().join("/")}
+          </thead>
+          <tbody>
+            {clases.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-8)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                  No hay clases programadas en este rango
                 </td>
+              </tr>
+            ) : clases.map(clase => {
+              const badge          = estadoBadge[clase.estado]
+              const reemplazoActivo = clase.reemplazos.find(r => r.activo) ?? null
+              const ordenados        = [...clase.reemplazos].sort((a, b) => a.id - b.id)
+              const cadena            = esRaiz ? ordenados.slice(0, 1) : ordenados
 
-                {/* Módulo */}
-                <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                  {clase.modulo
-                    ? `${clase.modulo.dia_semana} · ${formatHora(clase.modulo.hora_desde)}–${formatHora(clase.modulo.hora_hasta)}`
-                    : "—"
-                  }
-                </td>
+              return (
+                <tr
+                  key={clase.id}
+                  style={{ transition: "background 0.1s" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                    {clase.fecha?.slice(0, 10).split("-").reverse().join("/")}
+                  </td>
 
-                {/* Estado */}
-                <td style={td}>
-                  <span style={{
-                    fontSize:     "var(--text-xs)",
-                    fontWeight:   "var(--font-medium)",
-                    color:        badge.color,
-                    background:   badge.bg,
-                    padding:      "2px 8px",
-                    borderRadius: "var(--radius-full)",
-                    border:       "1px solid currentColor",
-                    opacity:      0.9,
-                  }}>
-                    {badge.label}
-                  </span>
-                </td>
+                  <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                    {clase.modulo
+                      ? `${clase.modulo.dia_semana} · ${formatHora(clase.modulo.hora_desde)}–${formatHora(clase.modulo.hora_hasta)}`
+                      : "—"
+                    }
+                  </td>
 
-                {/* Reemplazante */}
-                <td style={td}>
-                  {cadena.length === 0 ? (
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Sin cubrir</span>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {cadena.map((r, i) => (
-                        <span
-                          key={r.id}
-                          style={{
-                            fontSize:       "var(--text-xs)",
-                            color:          r.activo ? "var(--color-text-primary)" : "var(--color-text-hint)",
-                            fontWeight:     r.activo ? "var(--font-medium)" : 400,
-                            textDecoration: r.activo ? "none" : "line-through",
-                          }}
-                        >
-                          {i + 1}. {nombreSuplente(r)}
-                          {r.activo && (
-                            <span style={{ marginLeft: 4, fontSize: "var(--text-2xs)", color: "var(--color-accent)" }}>
-                              ● activo
-                            </span>
-                          )}
+                  <td style={td}>
+                    <span style={{
+                      fontSize:     "var(--text-xs)",
+                      fontWeight:   "var(--font-medium)",
+                      color:        badge.color,
+                      background:   badge.bg,
+                      padding:      "2px 8px",
+                      borderRadius: "var(--radius-full)",
+                      border:       "1px solid currentColor",
+                      opacity:      0.9,
+                    }}>
+                      {badge.label}
+                    </span>
+                  </td>
+
+                  {/* Reemplazante */}
+                  <td style={td}>
+                    {esRaiz ? (
+                      reemplazoActivo ? (
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-primary)", fontWeight: "var(--font-medium)" }}>
+                          {nombreSuplente(reemplazoActivo)}
                         </span>
-                      ))}
-                    </div>
-                  )}
-                </td>
+                      ) : (
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Sin cubrir</span>
+                      )
+                    ) : cadena.length === 0 ? (
+                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Sin cubrir</span>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        {cadena.map((r, i) => (
+                          <span
+                            key={r.id}
+                            style={{
+                              fontSize:       "var(--text-xs)",
+                              color:          r.activo ? "var(--color-text-primary)" : "var(--color-text-hint)",
+                              fontWeight:     r.activo ? "var(--font-medium)" : 400,
+                              textDecoration: r.activo ? "none" : "line-through",
+                            }}
+                          >
+                            {i + 1}. {nombreSuplente(r)}
+                            {r.activo && (
+                              <span style={{ marginLeft: 4, fontSize: "var(--text-2xs)", color: "var(--color-accent)" }}>
+                                ● activo
+                              </span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
 
-                {/* Acciones */}
-                <td style={td}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", alignItems: "flex-start" }}>
-                    {reemplazoActivo ? (
-                      <>
-                        <button
-                          onClick={() => onAusenciaSuplente(reemplazoActivo.id, nombreSuplente(reemplazoActivo))}
-                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
-                        >
-                          Ausencia suplente
-                        </button>
+                  <td style={td}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", alignItems: "flex-start" }}>
+                      {reemplazoActivo ? (
                         <button
                           onClick={() => onEliminarReemplazo(reemplazoActivo.id)}
                           style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
                         >
                           Quitar
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => onAgregarReemplazo(clase)}
-                        style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
-                      >
-                        + Agregar
-                      </button>
-                    )}
-                  </div>
-                </td>
+                      ) : (
+                        <button
+                          onClick={() => onAgregarReemplazo(clase)}
+                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                        >
+                          + Agregar
+                        </button>
+                      )}
+                    </div>
+                  </td>
 
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }

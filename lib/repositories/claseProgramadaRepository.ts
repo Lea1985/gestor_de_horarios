@@ -99,7 +99,6 @@ const claseIncludeConReemplazos = {
   unidad:   { select: { nombre: true, codigoUnidad: true } },
   comision: { select: { id: true, nombre: true } },
   reemplazos: {
-    where:  { activo: true },
     select: {
       id:                  true,
       asignacionTitularId: true,
@@ -213,12 +212,24 @@ export const claseProgramadaRepository = {
   },
 
   async eliminarFuturas(asignacionId: number, desde: Date) {
-    return prisma.claseProgramada.deleteMany({
-      where: {
-        asignacionId,
-        fecha:  { gte: desde },
-        estado: { in: [EstadoClase.PROGRAMADA, EstadoClase.SUSPENDIDA] },
-      },
+    return prisma.$transaction(async (tx) => {
+      const clases = await tx.claseProgramada.findMany({
+        where: {
+          asignacionId,
+          fecha:  { gte: desde },
+          estado: { in: [EstadoClase.PROGRAMADA, EstadoClase.SUSPENDIDA, EstadoClase.REEMPLAZADA] },
+        },
+        select: { id: true },
+      })
+      const ids = clases.map(c => c.id)
+      if (ids.length === 0) return { count: 0 }
+
+      // Sin esto, el delete de abajo rompe por FK si alguna clase
+      // tiene un Reemplazo activo apuntándole (Reemplazo.clase no
+      // tiene onDelete: Cascade en el schema).
+      await tx.reemplazo.deleteMany({ where: { claseId: { in: ids } } })
+
+      return tx.claseProgramada.deleteMany({ where: { id: { in: ids } } })
     })
   },
   async suspenderFuturas(asignacionId: number, desde: Date, hasta: Date) {

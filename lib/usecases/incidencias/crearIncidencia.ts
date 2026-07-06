@@ -1,5 +1,6 @@
 // lib/usecases/incidencias/crearIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
+import prisma from "@/lib/prisma"
 
 export class DatosIncidenciaInvalidosError extends Error {
   constructor() { super("asignacionId, fecha_desde, fecha_hasta y codigarioItemId son requeridos") }
@@ -18,6 +19,9 @@ export class IncidenciaPadreNoValidaError extends Error {
 }
 export class FechaFueraDePadreError extends Error {
   constructor() { super("El rango de la incidencia no puede exceder el de la incidencia padre") }
+}
+export class SinClasesProgramadasError extends Error {
+  constructor() { super("No hay clases programadas para esta asignación en el rango de fechas indicado") }
 }
 export class SuperposicionError extends Error {
   constructor(
@@ -59,7 +63,6 @@ export async function crearIncidencia(
     throw new RangoFechasInvalidoError()
   }
 
-  // Verifica que la asignación exista y esté activa
   const asignacion = await incidenciaRepository.verificarAsignacion(asignacionId, tenantId)
   if (!asignacion) throw new AsignacionNoValidaError()
 
@@ -67,11 +70,25 @@ export async function crearIncidencia(
   if (!codigario) throw new CodigarioItemNoValidoError()
 
   if (incidenciaPadreId) {
-    // Verifica que la padre exista, pertenezca a la misma asignación y esté activa
     const padre = await incidenciaRepository.verificarPadre(incidenciaPadreId, asignacionId, tenantId)
     if (!padre) throw new IncidenciaPadreNoValidaError()
-    if (fechaHasta > padre.fecha_hasta) throw new FechaFueraDePadreError()
+
+    // Validar que el rango esté completamente dentro del rango del padre
+    if (fechaDesde < padre.fecha_desde || fechaHasta > padre.fecha_hasta) {
+      throw new FechaFueraDePadreError()
+    }
   }
+
+  // Validar que existan clases programadas en el rango para esta asignación
+  const claseEnRango = await prisma.claseProgramada.findFirst({
+    where: {
+      asignacionId,
+      institucionId: tenantId,
+      fecha: { gte: fechaDesde, lte: fechaHasta },
+    },
+    select: { id: true },
+  })
+  if (!claseEnRango) throw new SinClasesProgramadasError()
 
   const conflicto = await incidenciaRepository.verificarSuperposicion(
     asignacionId,
