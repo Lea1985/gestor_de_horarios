@@ -6,7 +6,6 @@ export class MateriaNoEncontradaError extends Error {
     super("Materia no encontrada")
   }
 }
-
 export class SinCamposParaActualizarError extends Error {
   constructor() {
     super("Sin campos para actualizar")
@@ -19,20 +18,16 @@ export async function actualizarMateria(
   body: any
 ) {
   const existe = await materiaRepository.existeEnTenant(id, tenantId)
-
   if (!existe) {
     throw new MateriaNoEncontradaError()
   }
 
   const data: any = {}
-
   if (typeof body.nombre === "string") {
     const nombre = body.nombre.trim()
-
     if (!nombre) {
       throw new SinCamposParaActualizarError()
     }
-
     data.nombre = nombre
   }
 
@@ -40,5 +35,5 @@ export async function actualizarMateria(
     throw new SinCamposParaActualizarError()
   }
 
-  return materiaRepository.actualizar(id, data)
+  return materiaRepository.actualizar(id, tenantId, data)
 }

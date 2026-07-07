@@ -20,5 +20,5 @@ export async function actualizarCodigario(id: number, tenantId: number, body: Re
 
   if (Object.keys(data).length === 0) throw new SinCamposError()
 
-  return codigarioRepository.actualizar(id, data)
+return codigarioRepository.actualizar(id, tenantId, data)
 }

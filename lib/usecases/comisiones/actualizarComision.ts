@@ -68,5 +68,5 @@ export async function actualizarComision(
     )
   }
 
-  return comisionRepository.actualizar(id, updateData)
+  return comisionRepository.actualizar(id, tenantId, updateData)
 }

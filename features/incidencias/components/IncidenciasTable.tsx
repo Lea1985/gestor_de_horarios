@@ -22,9 +22,11 @@ const td = {
   verticalAlign: "middle" as const,
 }
 
-export function IncidenciasTable({ incidencias, verEliminadas }: {
+export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onReactivar }: {
   incidencias:   Incidencia[]
   verEliminadas: boolean
+  onEliminar:    (id: number) => void
+  onReactivar:   (id: number) => void | Promise<void>
 }) {
   const router = useRouter()
 
@@ -133,12 +135,30 @@ export function IncidenciasTable({ incidencias, verEliminadas }: {
 
               {/* Acciones */}
               <td style={td}>
-                <button
-                  onClick={() => router.push(`/protected/dashboard/incidencias/${i.id}`)}
-                  style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
-                >
-                  Gestionar
-                </button>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button
+                    onClick={() => router.push(`/protected/dashboard/incidencias/${i.id}`)}
+                    style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                  >
+                    Gestionar
+                  </button>
+
+                  {i.activo ? (
+                    <button
+                      onClick={() => onEliminar(i.id)}
+                      style={{ background: "none", border: "none", fontSize: "var(--text-xs)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
+                    >
+                      Eliminar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onReactivar(i.id)}
+                      style={{ background: "none", border: "none", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", cursor: "pointer", padding: 0 }}
+                    >
+                      Reactivar
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

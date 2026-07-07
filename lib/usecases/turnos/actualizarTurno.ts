@@ -37,7 +37,7 @@ export async function actualizarTurno(
     throw new Error("El nombre es obligatorio")
   }
 
-  return turnoRepository.actualizar(id, {
+  return turnoRepository.actualizar(id, tenantId, {
     ...(data.nombre !== undefined && {
       nombre: data.nombre.trim(),
     }),

@@ -5,6 +5,6 @@ import { moduloHorarioRepository } from "@/lib/repositories/moduloHorarioReposit
 export async function eliminarModulo(id: number, tenantId: number) {
   const existente = await moduloHorarioRepository.existeEnTenant(id, tenantId)
   if (!existente || existente.deletedAt) return { ok: true, deleted: false }
-  await moduloHorarioRepository.eliminar(id)
+  await moduloHorarioRepository.eliminar(id, tenantId)
   return { ok: true, deleted: true }
 }
