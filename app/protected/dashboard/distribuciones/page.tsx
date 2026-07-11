@@ -8,6 +8,8 @@ import {
   DistribucionList,
   SinDistribucionBadges,
 } from "@/features/distribuciones"
+import { SinModulosBadges } from "@/features/distribuciones/components/SinModulosBadges"
+import { ModalEliminarConReemplazo } from "@/features/distribuciones/components/ModalEliminarConReemplazo"
 
 function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
   mensaje: string; onConfirmar: () => void; onCancelar: () => void
@@ -50,10 +52,11 @@ export default function DistribucionesPage() {
   const {
     distribuciones, loading, error, setError,
     gruposFiltrados, cursosUnicos, turnosUnicos,
-    hayFiltros, asignacionesSinDist,
+    hayFiltros, asignacionesSinDist, distribucionesSinModulos,
     mostrarForm, guardando, confirmarId, setConfirmarId, expandidos,
     form, formErrors, setCampo, proximaVersion, asignaciones,
     abrirForm, cerrarForm, crear, eliminar, toggleExpandido, limpiarFiltros,
+    confirmarEliminacion, cancelarEliminacion, tramoEliminacion,
     filtroTexto, setFiltroTexto,
     filtroCurso, setFiltroCurso,
     filtroTurno, setFiltroTurno,
@@ -68,11 +71,20 @@ export default function DistribucionesPage() {
 
   return (
     <>
-      {confirmarId !== null && (
+      {confirmarId !== null && tramoEliminacion === null && (
         <ModalConfirmar
           mensaje="¿Eliminar esta distribución horaria? Se eliminarán también sus módulos asociados."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
+        />
+      )}
+
+      {tramoEliminacion !== null && (
+        <ModalEliminarConReemplazo
+          tramo={tramoEliminacion}
+          onConfirmar={confirmarEliminacion}
+          onCancelar={cancelarEliminacion}
+          guardando={guardando}
         />
       )}
 
@@ -167,7 +179,12 @@ export default function DistribucionesPage() {
           />
         )}
 
-        {/* Sin distribución */}
+        {/* Distribuciones activas sin módulos asignados (no generan clases) */}
+        {!hayFiltros && (
+          <SinModulosBadges distribuciones={distribucionesSinModulos} />
+        )}
+
+        {/* Asignaciones sin distribución */}
         {!hayFiltros && (
           <SinDistribucionBadges asignaciones={asignacionesSinDist} />
         )}

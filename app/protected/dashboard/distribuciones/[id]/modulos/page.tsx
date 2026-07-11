@@ -18,7 +18,7 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
     loading, guardando, guardado, error, setError,
     esActivo, tieneModulos, checkboxHabilitado, totalSeleccionados,
     editando, setEditando, modalVersion, setModalVersion, creandoVersion,
-    incidenciasAfectadas, cancelarMigracion,
+    tramoAConfirmar, cancelarMigracion, avisoSinPeriodo,
     toggle, toggleDia, cancelarEdicion, guardar, crearNuevaVersion,
   } = useModulosDistribucion(id)
 
@@ -38,10 +38,10 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
         />
       )}
 
-      {incidenciasAfectadas && incidenciasAfectadas.length > 0 && (
+      {tramoAConfirmar && (
         <ModalMigrarReemplazos
-          incidencias={incidenciasAfectadas}
-          onConfirmar={(idsAMigrar) => guardar(idsAMigrar)}
+          tramo={tramoAConfirmar}
+          onConfirmar={(mantenerReemplazo) => guardar(mantenerReemplazo)}
           onCancelar={cancelarMigracion}
           guardando={guardando}
         />
@@ -75,6 +75,12 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
           </svg>
           {error}
           <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      {guardado && avisoSinPeriodo && (
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+          Módulos guardados. No hay período operativo <strong>ACTIVO</strong> todavía, así que no se generó ninguna clase — se van a generar automáticamente cuando actives un período.
         </div>
       )}
 

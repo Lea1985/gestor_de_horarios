@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { distribucionesService } from "../services/distribucionesService"
-import type { Distribucion, Asignacion, DistribucionFormData } from "../types"
+import type { Distribucion, Asignacion, DistribucionFormData, TramoReemplazo } from "../types"
 import { FORM_VACIO } from "../types"
 
 export function useDistribuciones() {
@@ -22,6 +22,10 @@ export function useDistribuciones() {
   const [guardando,   setGuardando]   = useState(false)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
   const [expandidos,  setExpandidos]  = useState<Set<number>>(new Set())
+
+  // ── eliminación con reemplazo (segundo paso, condicional) ────────────────
+  const [tramoEliminacion, setTramoEliminacion] = useState<TramoReemplazo | null>(null)
+  const [eliminandoId,     setEliminandoId]     = useState<number | null>(null)
 
   // ── form ───────────────────────────────────────────────────────────────────
   const [form,       setForm]       = useState<DistribucionFormData>(FORM_VACIO)
@@ -114,6 +118,15 @@ export function useDistribuciones() {
   const asignacionesConDist = Array.from(grupos.keys())
   const asignacionesSinDist = asignaciones.filter(a => !grupos.has(a.id))
 
+  // Distribuciones que SÍ existen pero todavía no tienen módulos asignados
+  // (no generan clases hasta que se complete ese paso). Solo tiene sentido
+  // avisar de las que están ACTIVAS — una versión vieja/cerrada sin módulos
+  // ya no importa.
+  const distribucionesSinModulos = useMemo(
+    () => distribuciones.filter(d => d._count.distribucionModulos === 0 && d.estado === "ACTIVO"),
+    [distribuciones]
+  )
+
   // ── form helpers ───────────────────────────────────────────────────────────
   function setCampo<K extends keyof DistribucionFormData>(key: K, value: string) {
     setForm(p => ({ ...p, [key]: value }))
@@ -164,15 +177,51 @@ export function useDistribuciones() {
     }
   }
 
+  // eliminar(id) — primer llamado, sin decisión sobre reemplazo todavía.
+  // Si el backend responde requiereConfirmacion, guardamos el tramo y
+  // esperamos a que el usuario decida en el modal (confirmarEliminacion).
   async function eliminar(id: number) {
     try {
-      await distribucionesService.eliminar(id, authHeaders)
+      const result = await distribucionesService.eliminar(id, authHeaders)
+
+      if (result.requiereConfirmacion) {
+        setEliminandoId(id)
+        setTramoEliminacion(result.tramos?.[0] ?? null)
+        return // no cerramos confirmarId todavía, el modal de tramo lo reemplaza
+      }
+
+      await cargar()
+      setConfirmarId(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red")
+      setConfirmarId(null)
+    }
+  }
+
+  // confirmarEliminacion(mantenerReemplazo) — segundo paso, ya con la
+  // decisión del usuario sobre el tramo detectado.
+  async function confirmarEliminacion(mantenerReemplazo: boolean) {
+    if (eliminandoId === null) return
+    try {
+      const result = await distribucionesService.eliminar(eliminandoId, authHeaders, mantenerReemplazo)
+      if (!result.deleted) {
+        setError("No se pudo eliminar la distribución")
+        return
+      }
       await cargar()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
+      setEliminandoId(null)
+      setTramoEliminacion(null)
       setConfirmarId(null)
     }
+  }
+
+  function cancelarEliminacion() {
+    setEliminandoId(null)
+    setTramoEliminacion(null)
+    setConfirmarId(null)
   }
 
   function toggleExpandido(asignacionId: number) {
@@ -208,6 +257,7 @@ export function useDistribuciones() {
     hayFiltros,
     asignacionesConDist,
     asignacionesSinDist,
+    distribucionesSinModulos,
 
     // ui
     mostrarForm,
@@ -226,6 +276,9 @@ export function useDistribuciones() {
     cerrarForm,
     crear,
     eliminar,
+    confirmarEliminacion,
+    cancelarEliminacion,
+    tramoEliminacion,
     toggleExpandido,
     limpiarFiltros,
 

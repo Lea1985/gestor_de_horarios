@@ -50,3 +50,25 @@ export type IncidenciaAfectada = {
   migrable: boolean
   suplente: { asignacionTitularId: number; agenteSuplenteId: number; nombre: string } | null
 }
+
+export type TramoReemplazo = {
+  desde:               string
+  hasta:               string
+  totalClases:         number
+  clasesConReemplazo:  number
+  migrable:            boolean
+  suplente: {
+    asignacionTitularId: number
+    agenteSuplenteId:    number
+    nombre:              string
+  } | null
+}
+ 
+export type EliminarDistribucionResult = {
+  ok:                     boolean
+  deleted?:               boolean
+  requiereConfirmacion?:  boolean
+  tramos?:                TramoReemplazo[]
+  clasesEliminadas?:      number
+  avisoReemplazoNoAplica?: boolean
+}

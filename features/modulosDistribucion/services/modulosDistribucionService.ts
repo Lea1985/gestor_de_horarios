@@ -1,6 +1,6 @@
 // features/modulosDistribucion/services/modulosDistribucionService.ts
 
-import type { Modulo, Distribucion, IncidenciaAfectada } from "../types"
+import type { Modulo, Distribucion, TramoReemplazo } from "../types"
 
 export const modulosDistribucionService = {
 
@@ -20,22 +20,24 @@ export const modulosDistribucionService = {
     id: string,
     modulos: number[],
     headers: Record<string, string>,
-    migrarIncidenciaIds?: number[]
+    mantenerReemplazo?: boolean
   ): Promise<{
     ok: boolean
     requiereConfirmacion?: boolean
-    incidenciasAfectadas?: IncidenciaAfectada[]
+    tramos?: TramoReemplazo[]
     total?: number
-    clases?: number
-    migrados?: number
-    noMigrables?: number[]
+    clasesCreadas?: number
+    clasesEliminadas?: number
+    reemplazosMigrados?: number
+    noMigrable?: TramoReemplazo | null
+    avisoSinPeriodoActivo?: boolean
   }> {
     const res = await fetch(`/api/distribuciones/${id}/modulos`, {
       method:  "POST",
       headers,
       body:    JSON.stringify({
         modulos,
-        ...(migrarIncidenciaIds ? { migrarIncidenciaIds } : {}),
+        ...(mantenerReemplazo !== undefined ? { mantenerReemplazo } : {}),
       }),
     })
     const data = await res.json()

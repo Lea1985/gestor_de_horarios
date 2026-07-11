@@ -5,13 +5,15 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
 // ── Tipos ────────────────────────────────────────────────────
+type EstadoPeriodo = "BORRADOR" | "ACTIVO" | "CERRADO"
+
 type Periodo = {
   id:            number
   institucionId: number
   nombre:        string
   fecha_desde:   string
   fecha_hasta:   string
-  vigente:       boolean
+  estado:        EstadoPeriodo
   deletedAt:     string | null
   createdAt:     string
   updatedAt:     string
@@ -72,15 +74,17 @@ const s = {
   },
 }
 
-// ── Modal de confirmación ────────────────────────────────────
+// ── Modal de confirmación genérico ───────────────────────────
 function ModalConfirmar({
   mensaje,
+  textoConfirmar = "Eliminar",
   onConfirmar,
   onCancelar,
 }: {
-  mensaje:     string
-  onConfirmar: () => void
-  onCancelar:  () => void
+  mensaje:         string
+  textoConfirmar?: string
+  onConfirmar:     () => void
+  onCancelar:      () => void
 }) {
   return (
     <div
@@ -116,7 +120,7 @@ function ModalConfirmar({
             onClick={onConfirmar}
             style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
           >
-            Eliminar
+            {textoConfirmar}
           </button>
         </div>
       </div>
@@ -137,6 +141,7 @@ export default function PeriodosOperativosPage() {
   const [error,        setError]        = useState<string | null>(null)
   const [guardando,    setGuardando]    = useState(false)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
+  const [confirmarCierreId, setConfirmarCierreId] = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verEliminados, setVerEliminados] = useState(false)
 
@@ -244,7 +249,7 @@ export default function PeriodosOperativosPage() {
   }
 
   // ── Eliminar ───────────────────────────────────────────────
-  // El usecase rechaza eliminar el vigente → el error llega como string
+  // El backend rechaza eliminar un período ACTIVO (hay que cerrarlo antes).
   async function eliminar(id: number) {
     try {
       const res = await fetch(`/api/periodos-operativos/${id}`, {
@@ -264,19 +269,35 @@ export default function PeriodosOperativosPage() {
     }
   }
 
-  // ── Cambiar vigente ────────────────────────────────────────
-  // Llama a cambiarPeriodoActivo: desactiva el actual y activa el nuevo.
-  // Solo disponible para períodos no eliminados y no vigentes.
-  async function cambiarVigente(id: number) {
+  const [avisoActivacion, setAvisoActivacion] = useState<string | null>(null)
+
+  // ── Activar (BORRADOR -> ACTIVO) ─────────────────────────────
+  // El backend rechaza activar si ya hay otro período ACTIVO —
+  // hay que cerrarlo primero. El mensaje de error ya viene armado
+  // desde el backend (YaHayPeriodoActivoError), se muestra tal cual.
+  async function activar(id: number) {
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/activar`, {
         method: "POST",
         headers: authHeaders,
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
-        setError(data.error ?? "Error estableciendo período vigente")
+        setError(data.error ?? "Error activando período")
         return
+      }
+      setAvisoActivacion(
+        data.distribucionesProcesadas > 0
+          ? `Período activado. Se generaron ${data.clasesCreadas} clase${data.clasesCreadas !== 1 ? "s" : ""} para ${data.distribucionesProcesadas} distribución${data.distribucionesProcesadas !== 1 ? "es" : ""} vigente${data.distribucionesProcesadas !== 1 ? "s" : ""}.`
+          : "Período activado. No había distribuciones vigentes con módulos asignados para generar clases todavía."
+      )
+      if (data.distribucionesSinModulos?.length > 0) {
+        const nombres = data.distribucionesSinModulos
+          .map((d: { identificadorEstructural: string; version: number }) => `${d.identificadorEstructural} (v${d.version})`)
+          .join(", ")
+        setAvisoActivacion(prev =>
+          `${prev} ${data.distribucionesSinModulos.length} distribución${data.distribucionesSinModulos.length !== 1 ? "es" : ""} sin módulos asignados, sin generar: ${nombres}.`
+        )
       }
       await cargarPeriodos()
     } catch {
@@ -284,9 +305,31 @@ export default function PeriodosOperativosPage() {
     }
   }
 
+  // ── Cerrar (ACTIVO -> CERRADO) ────────────────────────────────
+  // Congela el período: las clases PROGRAMADA residuales pasan a
+  // DICTADA automáticamente. No se puede deshacer.
+  async function cerrar(id: number) {
+    try {
+      const res = await fetch(`/api/periodos-operativos/${id}/cerrar`, {
+        method: "POST",
+        headers: authHeaders,
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "Error cerrando período")
+        return
+      }
+      await cargarPeriodos()
+    } catch {
+      setError("Error de red")
+    } finally {
+      setConfirmarCierreId(null)
+    }
+  }
+
   // ── Restaurar (reactivar período eliminado) ────────────────
-  // Un período restaurado vuelve a estar disponible pero NO pasa a ser vigente.
-  // Si el usuario quiere hacerlo vigente, lo hace explícitamente después.
+  // Un período restaurado vuelve en el estado que tenía (no cambia
+  // a ACTIVO automáticamente).
   async function restaurar(id: number) {
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/restaurar`, {
@@ -321,6 +364,15 @@ export default function PeriodosOperativosPage() {
           mensaje="¿Eliminar este período? Esta acción no se puede deshacer."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
+        />
+      )}
+
+      {confirmarCierreId !== null && (
+        <ModalConfirmar
+          mensaje="¿Cerrar este período? Las clases pendientes se marcarán como dictadas y no se van a poder hacer más cambios en el período. Esta acción no se puede deshacer."
+          textoConfirmar="Cerrar período"
+          onConfirmar={() => cerrar(confirmarCierreId)}
+          onCancelar={() => setConfirmarCierreId(null)}
         />
       )}
 
@@ -361,6 +413,21 @@ export default function PeriodosOperativosPage() {
             <button
               onClick={() => setError(null)}
               style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}
+              aria-label="Cerrar"
+            >×</button>
+          </div>
+        )}
+
+        {/* Aviso de activación (informa cuántas clases se generaron) */}
+        {avisoActivacion && (
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-success, green)", fontSize: "var(--text-xs)", color: "var(--color-success, green)" }}
+            role="status"
+          >
+            {avisoActivacion}
+            <button
+              onClick={() => setAvisoActivacion(null)}
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-success, green)", fontSize: "var(--text-base)", lineHeight: 1 }}
               aria-label="Cerrar"
             >×</button>
           </div>
@@ -492,13 +559,17 @@ export default function PeriodosOperativosPage() {
                         <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
                           ○ Eliminado
                         </span>
-                      ) : p.vigente ? (
+                      ) : p.estado === "ACTIVO" ? (
                         <span style={{ fontSize: "var(--text-xs)", color: "var(--color-success, green)" }}>
-                          ● Vigente
+                          ● Activo
+                        </span>
+                      ) : p.estado === "CERRADO" ? (
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
+                          ■ Cerrado
                         </span>
                       ) : (
                         <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                          ○ Inactivo
+                          ○ Borrador
                         </span>
                       )}
                     </td>
@@ -507,23 +578,28 @@ export default function PeriodosOperativosPage() {
                     <td style={s.td}>
                       <div style={{ display: "flex", gap: "var(--space-3)" }}>
                         {eliminado ? (
-                          // Período eliminado: solo restaurar
+                          // Eliminado: solo restaurar
                           <button
                             onClick={() => restaurar(p.id)}
                             style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
                           >
                             Restaurar
                           </button>
-                        ) : p.vigente ? (
-                          // Período vigente: solo editar — no se puede eliminar ni desactivar
+                        ) : p.estado === "CERRADO" ? (
+                          // Cerrado: es terminal, no se edita ni se hace nada más
+                          <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
+                            Sin acciones disponibles
+                          </span>
+                        ) : p.estado === "ACTIVO" ? (
+                          // Activo: solo cerrar (no se edita estructura, no se elimina)
                           <button
-                            onClick={() => abrirEditar(p)}
-                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+                            onClick={() => setConfirmarCierreId(p.id)}
+                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-text-secondary)", cursor: "pointer", padding: 0 }}
                           >
-                            Editar
+                            Cerrar período
                           </button>
                         ) : (
-                          // Período inactivo (no eliminado, no vigente): editar + establecer vigente + eliminar
+                          // Borrador: editar + activar + eliminar
                           <>
                             <button
                               onClick={() => abrirEditar(p)}
@@ -532,10 +608,10 @@ export default function PeriodosOperativosPage() {
                               Editar
                             </button>
                             <button
-                              onClick={() => cambiarVigente(p.id)}
+                              onClick={() => activar(p.id)}
                               style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-success, green)", cursor: "pointer", padding: 0 }}
                             >
-                              Establecer vigente
+                              Activar
                             </button>
                             <button
                               onClick={() => setConfirmarId(p.id)}

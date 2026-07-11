@@ -30,17 +30,18 @@ export const LABEL_DIAS: Record<string, string> = {
   DOMINGO:   "Domingo",
 }
 
-export type IncidenciaAfectada = {
-  incidenciaId: number
-  fecha_desde: string
-  fecha_hasta: string
-  codigario: string | null
-  observacion: string | null
-  totalClasesConReemplazo: number
-  migrable: boolean
+// Reemplaza a IncidenciaAfectada: antes se evaluaba por incidencia
+// individual, ahora se evalúa el tramo exacto de fechas que se va a
+// recrear/eliminar en la distribución.
+export type TramoReemplazo = {
+  desde:               string
+  hasta:               string
+  totalClases:         number
+  clasesConReemplazo:  number
+  migrable:            boolean
   suplente: {
     asignacionTitularId: number
-    agenteSuplenteId: number
-    nombre: string
+    agenteSuplenteId:    number
+    nombre:              string
   } | null
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { modulosDistribucionService } from "../services/modulosDistribucionService"
-import type { Modulo, Distribucion, IncidenciaAfectada } from "../types"
+import type { Modulo, Distribucion, TramoReemplazo } from "../types"
 import { ORDEN_DIAS } from "../types"
 
 export function useModulosDistribucion(distribuidonId: string) {
@@ -27,7 +27,14 @@ export function useModulosDistribucion(distribuidonId: string) {
   const [editando,       setEditando]       = useState(false)
 
   // ── migración de reemplazos ───────────────────────────────────────────────
-  const [incidenciasAfectadas, setIncidenciasAfectadas] = useState<IncidenciaAfectada[] | null>(null)
+  // Antes: lista de incidencias para elegir cuáles migrar (checkboxes).
+  // Ahora: un único tramo (o ninguno) — la pregunta es sí/no mantenerlo.
+  const [tramoAConfirmar, setTramoAConfirmar] = useState<TramoReemplazo | null>(null)
+
+  // Aviso informativo: se guardaron los módulos pero no hay período ACTIVO,
+  // así que no se generó ninguna clase todavía (se generarán cuando se
+  // active un período, vía activarPeriodo).
+  const [avisoSinPeriodo, setAvisoSinPeriodo] = useState(false)
 
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -93,21 +100,24 @@ export function useModulosDistribucion(distribuidonId: string) {
     setGuardado(false)
   }
 
-  async function guardar(migrarIncidenciaIds?: number[]) {
+  // mantenerReemplazo: undefined = primer intento (puede volver requiereConfirmacion).
+  //                     true/false = respuesta del usuario al modal.
+  async function guardar(mantenerReemplazo?: boolean) {
     setGuardando(true)
     setError(null)
     setGuardado(false)
     try {
       const data = await modulosDistribucionService.guardarModulos(
-        distribuidonId, seleccionados, authHeaders, migrarIncidenciaIds
+        distribuidonId, seleccionados, authHeaders, mantenerReemplazo
       )
 
       if (data.requiereConfirmacion) {
-        setIncidenciasAfectadas(data.incidenciasAfectadas ?? [])
+        setTramoAConfirmar(data.tramos?.[0] ?? null)
         return // esperamos que el usuario decida en el modal
       }
 
-      setIncidenciasAfectadas(null)
+      setTramoAConfirmar(null)
+      setAvisoSinPeriodo(!!data.avisoSinPeriodoActivo)
       setGuardado(true)
       setEditando(false)
       setSeleccionadosOriginal(seleccionados)
@@ -123,7 +133,7 @@ export function useModulosDistribucion(distribuidonId: string) {
   }
 
   function cancelarMigracion() {
-    setIncidenciasAfectadas(null)
+    setTramoAConfirmar(null)
   }
 
   async function crearNuevaVersion() {
@@ -168,8 +178,9 @@ export function useModulosDistribucion(distribuidonId: string) {
     creandoVersion,
 
     // migración de reemplazos
-    incidenciasAfectadas,
+    tramoAConfirmar,
     cancelarMigracion,
+    avisoSinPeriodo,
 
     // acciones
     toggle,

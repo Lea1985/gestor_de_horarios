@@ -35,11 +35,18 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
     data:  { estado: "ACTIVO" },
   })
 
-  // 2. Recorrer distribuciones cuyo rango se solape con el nuevo período
+  // 2. Recorrer distribuciones cuyo rango se solape con el nuevo período.
+  //    Se filtra por `activo` Y `estado` juntos — son dos campos separados
+  //    en el schema que hoy se mantienen sincronizados a mano (ver
+  //    nuevaVersionDistribucion.ts), pero nada garantiza que sigan así
+  //    siempre. Exigir los dos evita traer una distribución que quedó
+  //    lógicamente inactiva por `estado` aunque `activo` no se haya
+  //    actualizado en algún flujo futuro.
   const distribuciones = await prisma.distribucionHoraria.findMany({
     where: {
       institucionId: tenantId,
       activo: true,
+      estado: "ACTIVO",
       deletedAt: null,
       fecha_vigencia_desde: { lte: periodoActivo.fecha_hasta },
       OR: [
@@ -47,11 +54,29 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
         { fecha_vigencia_hasta: { gte: periodoActivo.fecha_desde } },
       ],
     },
-    include: { asignacion: { select: { id: true, unidadId: true, comisionId: true } } },
+    include: {
+      asignacion: { select: { id: true, unidadId: true, comisionId: true, identificadorEstructural: true } },
+      _count: { select: { distribucionModulos: true } },
+    },
   })
 
   let totalCreadas = 0
+  const distribucionesSinModulos: { id: number; identificadorEstructural: string; version: number }[] = []
+
   for (const dist of distribuciones) {
+    // Reporte explícito: si no tiene módulos, no hay nada que generar —
+    // se lo informamos al usuario en vez de dejarlo pasar en silencio
+    // (generarParaRango también lo detecta internamente y devuelve 0,
+    // pero acá lo distinguimos para el mensaje de resultado).
+    if (dist._count.distribucionModulos === 0) {
+      distribucionesSinModulos.push({
+        id: dist.id,
+        identificadorEstructural: dist.asignacion.identificadorEstructural,
+        version: dist.version,
+      })
+      continue
+    }
+
     // El rango real a generar es la intersección [dist.desde, periodo.hasta] —
     // nunca antes del inicio de la distribución ni después del fin del período.
     const desde = dist.fecha_vigencia_desde > periodoActivo.fecha_desde
@@ -71,5 +96,10 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
     totalCreadas += creadas
   }
 
-  return { periodo: periodoActivo, distribucionesProcesadas: distribuciones.length, clasesCreadas: totalCreadas }
+  return {
+    periodo: periodoActivo,
+    distribucionesProcesadas: distribuciones.length - distribucionesSinModulos.length,
+    clasesCreadas: totalCreadas,
+    distribucionesSinModulos,
+  }
 }

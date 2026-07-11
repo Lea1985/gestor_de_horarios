@@ -13,16 +13,26 @@ export class ModulosInvalidosError extends Error {
 export class FormatoModulosInvalidoError extends Error {
   constructor() { super("Se espera un array de IDs de módulos") }
 }
+// Ya NO se lanza — asignar módulos ahora funciona sin período ACTIVO.
+// Se deja exportada porque app/api/distribuciones/[id]/modulos/route.ts
+// todavía la importa; si la borrás de acá, borrá también esa importación.
 export class SinPeriodoActivoError extends Error {
-  constructor() { super("No hay período ACTIVO. Activá uno antes de asignar módulos.") }
+  constructor() { super("No hay período ACTIVO.") }
 }
 
 /**
- * Reasigna los módulos de una distribución. Esto es la operación real que
- * dispara la regla de negocio "modificar distribución": el tramo
- * [fecha_vigencia_desde, fin del período ACTIVO] se recalcula por completo.
+ * Reasigna los módulos de una distribución.
  *
- * Orden de operaciones (importante, evita corromper datos):
+ * Asignar módulos SIEMPRE es posible, haya o no período ACTIVO — es el paso
+ * que completa la distribución (sin esto, no es una distribución real, es
+ * una cáscara vacía). La gestión de ClaseProgramada (detectar reemplazo,
+ * borrar tramo viejo, generar tramo nuevo) es una consecuencia CONDICIONAL:
+ * solo aplica si hay un período ACTIVO al que referenciar. Sin período
+ * activo, se guardan los módulos y no se toca ninguna clase — quedará
+ * pendiente para cuando activarPeriodo() recorra las distribuciones
+ * vigentes y genere lo que corresponda.
+ *
+ * Orden de operaciones cuando SÍ hay período activo (evita corromper datos):
  *  1. Leer qué reemplazo cubre el tramo ANTES de tocar nada (solo lectura).
  *  2. Si hay reemplazo y no vino confirmación -> cortar y preguntar.
  *  3. Borrar las clases viejas del tramo completo (con `hasta` explícito).
@@ -48,8 +58,26 @@ export async function asignarModulos(
   if (!distribucion) throw new DistribucionNoEncontradaError()
 
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
-  if (!periodo) throw new SinPeriodoActivoError()
 
+  // ── Sin período ACTIVO: solo guardamos los módulos, sin tocar clases ──
+  if (!periodo) {
+    const result = await distribucionRepository.asignarModulos(
+      distribucionId, tenantId, body.modulos as number[]
+    )
+    if (!result) throw new ModulosInvalidosError()
+
+    return {
+      ok: true,
+      total: result.length,
+      clasesEliminadas: 0,
+      clasesCreadas: 0,
+      reemplazosMigrados: 0,
+      noMigrable: null,
+      avisoSinPeriodoActivo: true, // el frontend puede mostrar un aviso informativo
+    }
+  }
+
+  // ── Con período ACTIVO: flujo completo de reemplazo de clases ──
   const { asignacion } = distribucion
   const desde = distribucion.fecha_vigencia_desde
   const hasta = periodo.fecha_hasta // límite explícito, siempre
