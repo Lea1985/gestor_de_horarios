@@ -36,6 +36,11 @@ export function useModulosDistribucion(distribuidonId: string) {
   // active un período, vía activarPeriodo).
   const [avisoSinPeriodo, setAvisoSinPeriodo] = useState(false)
 
+  // Tramo a confirmar al crear una NUEVA VERSIÓN (distinto del tramo de
+  // reasignar módulos — acá nunca hay migración posible porque la versión
+  // nueva todavía no tiene módulos, solo se informa antes de perderlo).
+  const [tramoNuevaVersion, setTramoNuevaVersion] = useState<TramoReemplazo | null>(null)
+
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!distribuidonId || authHeaders.Authorization === "Bearer ") return
@@ -136,18 +141,35 @@ export function useModulosDistribucion(distribuidonId: string) {
     setTramoAConfirmar(null)
   }
 
-  async function crearNuevaVersion() {
+  // Primer intento: sin decisión sobre reemplazo todavía. Si el backend
+  // responde requiereConfirmacion, guardamos el tramo y esperamos a que
+  // el usuario decida (confirmarNuevaVersion) antes de seguir.
+  async function crearNuevaVersion(mantenerReemplazo?: boolean) {
     setCreandoVersion(true)
     setError(null)
     try {
-      const data = await modulosDistribucionService.crearNuevaVersion(distribuidonId, authHeaders)
+      const data = await modulosDistribucionService.crearNuevaVersion(
+        distribuidonId, authHeaders, mantenerReemplazo
+      )
+
+      if (data.requiereConfirmacion) {
+        setTramoNuevaVersion(data.tramos?.[0] ?? null)
+        return // el modal de tramo reemplaza a ModalNuevaVersion, no navegamos
+      }
+
+      setTramoNuevaVersion(null)
+      setModalVersion(false)
       router.push(`/protected/dashboard/distribuciones/${data.nuevaVersionId}/modulos`)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
       setCreandoVersion(false)
-      setModalVersion(false)
     }
+  }
+
+  function cancelarNuevaVersion() {
+    setTramoNuevaVersion(null)
+    setModalVersion(false)
   }
 
   // ── return ─────────────────────────────────────────────────────────────────
@@ -181,6 +203,8 @@ export function useModulosDistribucion(distribuidonId: string) {
     tramoAConfirmar,
     cancelarMigracion,
     avisoSinPeriodo,
+    tramoNuevaVersion,
+    cancelarNuevaVersion,
 
     // acciones
     toggle,

@@ -19,6 +19,7 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
     esActivo, tieneModulos, checkboxHabilitado, totalSeleccionados,
     editando, setEditando, modalVersion, setModalVersion, creandoVersion,
     tramoAConfirmar, cancelarMigracion, avisoSinPeriodo,
+    tramoNuevaVersion, cancelarNuevaVersion,
     toggle, toggleDia, cancelarEdicion, guardar, crearNuevaVersion,
   } = useModulosDistribucion(id)
 
@@ -30,10 +31,19 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 900 }}>
-      {modalVersion && (
+      {modalVersion && tramoNuevaVersion === null && (
         <ModalNuevaVersion
-          onConfirmar={crearNuevaVersion}
-          onCancelar={() => setModalVersion(false)}
+          onConfirmar={() => crearNuevaVersion()}
+          onCancelar={cancelarNuevaVersion}
+          guardando={creandoVersion}
+        />
+      )}
+
+      {tramoNuevaVersion !== null && (
+        <ModalMigrarReemplazos
+          tramo={tramoNuevaVersion}
+          onConfirmar={(mantenerReemplazo) => crearNuevaVersion(mantenerReemplazo)}
+          onCancelar={cancelarNuevaVersion}
           guardando={creandoVersion}
         />
       )}

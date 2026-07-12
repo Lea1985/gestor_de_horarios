@@ -45,10 +45,25 @@ export const modulosDistribucionService = {
     return data
   },
 
-  async crearNuevaVersion(id: string, headers: Record<string, string>): Promise<{ nuevaVersionId: number }> {
+  async crearNuevaVersion(
+    id: string,
+    headers: Record<string, string>,
+    mantenerReemplazo?: boolean
+  ): Promise<{
+    ok: boolean
+    nuevaVersionId?: number
+    version?: number
+    requiereConfirmacion?: boolean
+    tramos?: TramoReemplazo[]
+    clasesEliminadas?: number
+    avisoReemplazoNoAplica?: boolean
+  }> {
     const res = await fetch(`/api/distribuciones/${id}/nueva-version`, {
       method:  "POST",
       headers,
+      body: JSON.stringify(
+        mantenerReemplazo !== undefined ? { mantenerReemplazo } : {}
+      ),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error ?? "Error creando nueva versión")

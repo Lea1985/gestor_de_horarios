@@ -1,53 +1,76 @@
 // lib/usecases/distribuciones/nuevaVersionDistribucion.ts
 import prisma from "@/lib/prisma"
-import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
-import { generarClases } from "@/lib/helpers/clases"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 
 export class DistribucionNoEncontradaError extends Error {
   constructor() { super("Distribución no encontrada") }
 }
 
-export class SinPeriodoOperativoError extends Error {
-  constructor() { super("No hay período operativo vigente. Establecé uno antes de crear una nueva versión.") }
-}
-
+/**
+ * Cierra la distribución actual (fecha_vigencia_hasta = ayer, INACTIVO) y
+ * crea una nueva versión vacía (sin módulos, a asignar después vía
+ * asignarModulos). Ya NO bloquea si no hay período ACTIVO — coherente con
+ * el resto del sistema (crearDistribucion, asignarModulos).
+ *
+ * Gestión de clases del tramo [hoy, fin de período] de la versión VIEJA:
+ *  - Si no hay período ACTIVO: no hay nada que gestionar, se cierra y listo.
+ *  - Si hay período ACTIVO: se BORRAN (no se suspenden) las clases futuras,
+ *    con el mismo flujo de confirmación de reemplazo que usa asignarModulos
+ *    y eliminarDistribucion. Se borra (no se suspende) para evitar que,
+ *    si la nueva versión termina con los mismos módulos, el @@unique de
+ *    ClaseProgramada choque contra las filas viejas y bloquee en silencio
+ *    la generación de las clases nuevas.
+ *  - La nueva versión arranca sin módulos, así que NO hay "clases nuevas"
+ *    a las que migrar el reemplazo todavía (igual que en eliminarDistribucion).
+ *    Se informa igual para que el usuario sepa que se perdió, y lo vuelva
+ *    a cargar cuando asigne módulos a la nueva versión.
+ */
 export async function nuevaVersionDistribucion(
   distribucionId: number,
   tenantId: number,
+  body?: { mantenerReemplazo?: boolean }
 ) {
-  // 1. Obtener distribución actual con asignación y módulos
   const actual = await prisma.distribucionHoraria.findFirst({
     where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
-    include: {
-      asignacion: { select: { id: true, unidadId: true, comisionId: true } },
-      distribucionModulos: { include: { moduloHorario: true } },
-    },
+    include: { asignacion: { select: { id: true } } },
   })
   if (!actual) throw new DistribucionNoEncontradaError()
 
-  // 2. Obtener período operativo vigente
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
-  if (!periodo) throw new SinPeriodoOperativoError()
+
+  let clasesEliminadas = 0
+  let avisoReemplazoNoAplica = false
+
+  if (periodo) {
+    const hoy = new Date()
+    hoy.setUTCHours(0, 0, 0, 0)
+    const hasta = periodo.fecha_hasta
+
+    if (hoy <= hasta) {
+      const tramos = await claseProgramadaService.resolverCoberturaDelTramo({
+        asignacionId: actual.asignacion.id, desde: hoy, hasta,
+      })
+
+      if (tramos.length > 0 && body?.mantenerReemplazo === undefined) {
+        return { ok: false, requiereConfirmacion: true, tramos }
+      }
+
+      const r = await claseProgramadaService.eliminarEnRango({
+        asignacionId: actual.asignacion.id, desde: hoy, hasta,
+      })
+      clasesEliminadas = r.eliminadas
+      avisoReemplazoNoAplica = body?.mantenerReemplazo === true && tramos.length > 0
+    }
+  }
 
   const hoy = new Date()
   hoy.setUTCHours(0, 0, 0, 0)
-
   const ayerFin = new Date(hoy)
   ayerFin.setUTCDate(ayerFin.getUTCDate() - 1)
   ayerFin.setUTCHours(23, 59, 59, 999)
 
-  const hasta = new Date(periodo.fecha_hasta)
-  hasta.setUTCHours(23, 59, 59, 999)
-
-  // 3. Marcar SUSPENDIDA las clases PROGRAMADAS futuras (dentro del período)
-  await claseProgramadaRepository.suspenderFuturas(
-    actual.asignacion.id,
-    hoy,
-    hasta
-  )
-
-  // 4. Cerrar la distribución actual
+  // Cerrar la distribución actual
   await prisma.distribucionHoraria.update({
     where: { id: distribucionId },
     data: {
@@ -57,7 +80,7 @@ export async function nuevaVersionDistribucion(
     },
   })
 
-  // 5. Calcular nueva versión
+  // Calcular nueva versión
   const ultima = await prisma.distribucionHoraria.findFirst({
     where:   { asignacionId: actual.asignacionId },
     orderBy: { version: "desc" },
@@ -65,7 +88,7 @@ export async function nuevaVersionDistribucion(
   })
   const nuevaVersion = (ultima?.version ?? 0) + 1
 
-  // 6. Crear nueva distribución sin módulos
+  // Crear nueva distribución sin módulos
   const nueva = await prisma.distribucionHoraria.create({
     data: {
       institucionId:        tenantId,
@@ -80,5 +103,7 @@ export async function nuevaVersionDistribucion(
     ok:             true,
     nuevaVersionId: nueva.id,
     version:        nuevaVersion,
+    clasesEliminadas,
+    avisoReemplazoNoAplica,
   }
 }
