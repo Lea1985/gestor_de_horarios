@@ -85,8 +85,7 @@ export const calendarioEscolarRepository = {
         institucionId: tenantId,
         activo: false,
       },
-
-      select: { id: true },
+      select: { id: true, periodoOperativoId: true },
     })
   },
 

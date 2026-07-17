@@ -2,6 +2,7 @@
 
 import { calendarioEscolarRepository } from "@/lib/repositories/calendarioEscolarRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 
 export class DatosCalendarioEscolarInvalidosError extends Error {
   constructor() {
@@ -18,6 +19,12 @@ export class PeriodoOperativoNoEncontradoError extends Error {
 export class FechaFueraDePeriodoError extends Error {
   constructor() {
     super("La fecha no pertenece al período operativo")
+  }
+}
+
+export class PeriodoCerradoError extends Error {
+  constructor() {
+    super("El período está CERRADO, no se puede modificar su calendario")
   }
 }
 
@@ -61,6 +68,10 @@ export async function crearCalendarioEscolar(
     throw new PeriodoOperativoNoEncontradoError()
   }
 
+  if (periodo.estado === "CERRADO") {
+    throw new PeriodoCerradoError()
+  }
+
   const fechaDate = new Date(fecha)
 
   // Validar rango del período
@@ -71,17 +82,25 @@ export async function crearCalendarioEscolar(
     throw new FechaFueraDePeriodoError()
   }
 
-  return calendarioEscolarRepository.crear({
-
+  const creado = await calendarioEscolarRepository.crear({
     tenantId,
     periodoOperativoId,
-
     fecha: fechaDate,
-
     descripcion: descripcion.trim(),
-
     esFeriado: esFeriado ?? false,
-
     suspendeClases: suspendeClases ?? false,
   })
+
+  // Si marca "suspende clases", revisitar las clases ya generadas en esa
+  // fecha (si las hay) y pasarlas de PROGRAMADA a SUSPENDIDA. No hace
+  // nada si el período todavía no generó clases para esa fecha.
+  if (creado.suspendeClases) {
+    await claseProgramadaService.recalcularSuspendidasPorCalendario({
+      institucionId: tenantId,
+      fecha:         fechaDate,
+      suspende:      true,
+    })
+  }
+
+  return creado
 }

@@ -478,6 +478,8 @@ model ClaseProgramada {
   fecha         DateTime
   estado        EstadoClase @default(PROGRAMADA)
   incidenciaId  Int?
+  calendarioEscolarId Int?
+
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -487,6 +489,7 @@ model ClaseProgramada {
   unidad      UnidadOrganizativa @relation(fields: [unidadId], references: [id])
   comision    Comision?          @relation(fields: [comisionId], references: [id])
   incidencia  Incidencia?        @relation(fields: [incidenciaId], references: [id])
+  calendarioEscolar CalendarioEscolar?  @relation(fields: [calendarioEscolarId], references: [id], onDelete: SetNull)
   reemplazos Reemplazo[] @relation("ClaseProgramadaReemplazos")
 
   @@index([fecha])
@@ -494,6 +497,7 @@ model ClaseProgramada {
   @@index([asignacionId])
   @@index([moduloId])
   @@index([comisionId, fecha])
+  @@index([calendarioEscolarId])
   @@unique([asignacionId, moduloId, fecha], name: "clase_unica_por_modulo_fecha")
 }
 
@@ -539,7 +543,7 @@ model CalendarioEscolar {
 
   institucion Institucion @relation(fields: [institucionId], references: [id])
   periodoOperativo   PeriodoOperativo @relation(fields: [periodoOperativoId], references: [id])
-
+  clasesSuspendidas ClaseProgramada[]
 
   @@index([institucionId, fecha])
   @@index([periodoOperativoId])

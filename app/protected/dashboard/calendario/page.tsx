@@ -5,12 +5,15 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 
 // ── Tipos ────────────────────────────────────────────────────
+type EstadoPeriodo = "BORRADOR" | "ACTIVO" | "CERRADO"
+
 type PeriodoOperativo = {
   id:          number
   nombre:      string
   fecha_desde: string
   fecha_hasta: string
-  vigente:     boolean
+  estado:      EstadoPeriodo
+  deletedAt:   string | null
 }
 
 type CalendarioEscolar = {
@@ -19,7 +22,6 @@ type CalendarioEscolar = {
   descripcion:    string
   esFeriado:      boolean
   suspendeClases: boolean
-  estado:         string
   activo:         boolean
   deletedAt:      string | null
 }
@@ -58,7 +60,6 @@ const s = {
     color:        "var(--color-text-primary)",
     outline:      "none",
   },
-  inputError: { borderColor: "var(--color-error)" },
   th: {
     textAlign:     "left" as const,
     fontSize:      "var(--text-2xs)",
@@ -135,9 +136,13 @@ function ModalConfirmar({
 export default function CalendarioEscolarPage() {
   const { authHeaders } = useAuth()
 
-  const [periodoActivo,  setPeriodoActivo]  = useState<PeriodoOperativo | null | undefined>(undefined)
+  // Todos los períodos de la institución — ya NO solo el activo.
+  const [periodos,        setPeriodos]        = useState<PeriodoOperativo[]>([])
+  const [periodoId,       setPeriodoId]       = useState<number | null>(null)
+  const [loadingPeriodos, setLoadingPeriodos] = useState(true)
+
   const [eventos,        setEventos]        = useState<CalendarioEscolar[]>([])
-  const [loading,        setLoading]        = useState(true)
+  const [loadingEventos, setLoadingEventos] = useState(false)
   const [mostrarForm,    setMostrarForm]    = useState(false)
   const [editando,       setEditando]       = useState<number | null>(null)
   const [form,           setForm]           = useState<FormData>(FORM_VACIO)
@@ -147,6 +152,12 @@ export default function CalendarioEscolarPage() {
   const [busqueda,       setBusqueda]       = useState("")
   const [verEliminados,  setVerEliminados]  = useState(false)
 
+  const periodoSeleccionado = useMemo(
+    () => periodos.find(p => p.id === periodoId) ?? null,
+    [periodos, periodoId]
+  )
+  const soloLectura = periodoSeleccionado?.estado === "CERRADO"
+
   // ── Filtrado ───────────────────────────────────────────────
   const eventosFiltrados = useMemo(() => {
     if (!busqueda.trim()) return eventos
@@ -154,31 +165,37 @@ export default function CalendarioEscolarPage() {
     return eventos.filter(e => e.descripcion.toLowerCase().includes(q))
   }, [eventos, busqueda])
 
-  // ── Carga período activo ───────────────────────────────────
-  async function cargarPeriodoActivo() {
+  // ── Carga de TODOS los períodos (no solo el activo) ─────────
+  async function cargarPeriodos() {
     try {
-      const res = await fetch("/api/periodos-operativos/activo", {
+      const res = await fetch("/api/periodos-operativos", {
         headers: authHeaders,
         cache: "no-store",
       })
-      if (res.status === 404) {
-        setPeriodoActivo(null)
-        return
-      }
       if (!res.ok) throw new Error()
-      setPeriodoActivo(await res.json())
+      const data: PeriodoOperativo[] = await res.json()
+      setPeriodos(data)
+
+      // Preseleccionar: el ACTIVO si existe, sino el más reciente por fecha_desde.
+      if (data.length > 0) {
+        const activo = data.find(p => p.estado === "ACTIVO")
+        setPeriodoId(prev => prev ?? (activo?.id ?? data[0].id))
+      }
     } catch {
-      setError("Error cargando período operativo")
-      setPeriodoActivo(null)
+      setError("Error cargando períodos operativos")
+    } finally {
+      setLoadingPeriodos(false)
     }
   }
 
-  // ── Carga eventos ──────────────────────────────────────────
+  // ── Carga eventos del período seleccionado ──────────────────
   async function cargarEventos() {
+    if (!periodoId) return
+    setLoadingEventos(true)
     try {
       const params = new URLSearchParams({
         inactivos: String(verEliminados),
-        ...(periodoActivo ? { periodoOperativoId: String(periodoActivo.id) } : {}),
+        periodoOperativoId: String(periodoId),
       })
       const res = await fetch(`/api/calendario-escolar?${params}`, {
         headers: authHeaders,
@@ -189,19 +206,18 @@ export default function CalendarioEscolarPage() {
     } catch {
       setError("Error cargando calendario escolar")
     } finally {
-      setLoading(false)
+      setLoadingEventos(false)
     }
   }
 
   // ── Effects ────────────────────────────────────────────────
   useEffect(() => {
-    if (authHeaders.Authorization !== "Bearer ") cargarPeriodoActivo()
+    if (authHeaders.Authorization !== "Bearer ") cargarPeriodos()
   }, [authHeaders.Authorization])
 
-  // Solo carga eventos una vez que periodoActivo se resolvió (null o un objeto)
   useEffect(() => {
-    if (periodoActivo !== undefined) cargarEventos()
-  }, [periodoActivo, verEliminados])
+    if (periodoId !== null) cargarEventos()
+  }, [periodoId, verEliminados])
 
   // ── Form ───────────────────────────────────────────────────
   function abrirCrear() {
@@ -241,7 +257,7 @@ export default function CalendarioEscolarPage() {
 
   // ── Guardar ────────────────────────────────────────────────
   async function guardar() {
-    if (!validar()) return
+    if (!validar() || !periodoId) return
     setGuardando(true)
     setError(null)
     try {
@@ -252,10 +268,7 @@ export default function CalendarioEscolarPage() {
         headers: authHeaders,
         body: JSON.stringify({
           ...form,
-          // Solo en creación: el período viene del contexto activo
-          ...(!editando && periodoActivo
-            ? { periodoOperativoId: periodoActivo.id }
-            : {}),
+          ...(!editando ? { periodoOperativoId: periodoId } : {}),
         }),
       })
       if (!res.ok) {
@@ -294,7 +307,7 @@ export default function CalendarioEscolarPage() {
 
   // ── Reactivar ──────────────────────────────────────────────
   async function reactivar(id: number) {
-    try {
+   try {
       const res = await fetch(`/api/calendario-escolar/${id}/reactivar`, {
         method: "POST",
         headers: authHeaders,
@@ -310,8 +323,8 @@ export default function CalendarioEscolarPage() {
     }
   }
 
-  // ── Loading ────────────────────────────────────────────────
-  if (loading) {
+  // ── Loading períodos ─────────────────────────────────────────
+  if (loadingPeriodos) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
         Cargando calendario escolar...
@@ -319,19 +332,19 @@ export default function CalendarioEscolarPage() {
     )
   }
 
-  // ── Sin período activo ─────────────────────────────────────
-  if (!periodoActivo) {
+  // ── Sin ningún período creado todavía ───────────────────────
+  if (periodos.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-secondary)", fontSize: "var(--text-sm)", textAlign: "center" }}>
         <span style={{ fontSize: "var(--text-base)", color: "var(--color-text-primary)", fontWeight: "var(--font-medium)" }}>
-          No hay período operativo vigente
+          Todavía no hay ningún período operativo
         </span>
         <span>
-          Establecé un período vigente desde{" "}
+          Creá uno desde{" "}
           <a href="/protected/dashboard/periodos-operativos" style={{ color: "var(--color-primary)", textDecoration: "none" }}>
             Períodos Operativos
           </a>{" "}
-          para gestionar el calendario.
+          para poder cargar su calendario.
         </span>
       </div>
     )
@@ -351,22 +364,35 @@ export default function CalendarioEscolarPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-3)" }}>
           <div>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
               Calendario Escolar
             </h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              {periodoActivo.nombre}
-              {" · "}
-              {periodoActivo.fecha_desde.slice(0, 10).split("-").reverse().join("/")}
-              {" → "}
-              {periodoActivo.fecha_hasta.slice(0, 10).split("-").reverse().join("/")}
-              {" · "}
               {eventosFiltrados.length} evento{eventosFiltrados.length !== 1 ? "s" : ""}
             </p>
           </div>
-          {!mostrarForm && (
+
+          {/* Selector de período — el cambio central de este fix */}
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+            <label style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", whiteSpace: "nowrap" as const }}>
+              Período:
+            </label>
+            <select
+              value={periodoId ?? ""}
+              onChange={e => { setPeriodoId(Number(e.target.value)); cancelar() }}
+              style={{ ...s.input, width: "auto", minWidth: 220 }}
+            >
+              {periodos.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} {p.estado === "ACTIVO" ? "· Activo" : p.estado === "CERRADO" ? "· Cerrado" : "· Borrador"}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {!mostrarForm && !soloLectura && (
             <button
               onClick={abrirCrear}
               style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
@@ -375,6 +401,13 @@ export default function CalendarioEscolarPage() {
             </button>
           )}
         </div>
+
+        {/* Aviso de solo lectura */}
+        {soloLectura && (
+          <div style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+            Este período está <strong>CERRADO</strong> — el calendario queda solo para consulta, no admite cambios.
+          </div>
+        )}
 
         {/* Error global */}
         {error && (
@@ -396,7 +429,7 @@ export default function CalendarioEscolarPage() {
         )}
 
         {/* Formulario inline */}
-        {mostrarForm && (
+        {mostrarForm && !soloLectura && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editando ? "Editar evento" : "Nuevo evento"}
@@ -411,6 +444,8 @@ export default function CalendarioEscolarPage() {
                 <input
                   type="date"
                   value={form.fecha}
+                  min={periodoSeleccionado?.fecha_desde.slice(0, 10)}
+                  max={periodoSeleccionado?.fecha_hasta.slice(0, 10)}
                   onChange={e => setForm(prev => ({ ...prev, fecha: e.target.value }))}
                   style={s.input}
                   onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
@@ -510,10 +545,16 @@ export default function CalendarioEscolarPage() {
               </tr>
             </thead>
             <tbody>
-              {eventosFiltrados.length === 0 ? (
+              {loadingEventos ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
-                    No hay eventos{verEliminados ? " eliminados" : ""} registrados
+                    Cargando eventos...
+                  </td>
+                </tr>
+              ) : eventosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                    No hay eventos{verEliminados ? " eliminados" : ""} registrados para este período
                   </td>
                 </tr>
               ) : eventosFiltrados.map(evento => {
@@ -526,7 +567,7 @@ export default function CalendarioEscolarPage() {
                     onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                   >
                     <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>
-                            {evento.fecha.slice(0, 10).split("-").reverse().join("/")}          
+                      {evento.fecha.slice(0, 10).split("-").reverse().join("/")}
                     </td>
                     <td style={s.td}>
                       {evento.descripcion}
@@ -543,31 +584,35 @@ export default function CalendarioEscolarPage() {
                       {evento.suspendeClases ? "Sí" : "No"}
                     </td>
                     <td style={s.td}>
-                      <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                        {eliminado ? (
-                          <button
-                            onClick={() => reactivar(evento.id)}
-                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
-                          >
-                            Restaurar
-                          </button>
-                        ) : (
-                          <>
+                      {soloLectura ? (
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>—</span>
+                      ) : (
+                        <div style={{ display: "flex", gap: "var(--space-3)" }}>
+                          {eliminado ? (
                             <button
-                              onClick={() => abrirEditar(evento)}
-                              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+                              onClick={() => reactivar(evento.id)}
+                              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
                             >
-                              Editar
+                              Restaurar
                             </button>
-                            <button
-                              onClick={() => setConfirmarId(evento.id)}
-                              style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
-                            >
-                              Eliminar
-                            </button>
-                          </>
-                        )}
-                      </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => abrirEditar(evento)}
+                                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-primary)", cursor: "pointer", padding: 0 }}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => setConfirmarId(evento.id)}
+                                style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
+                              >
+                                Eliminar
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )
