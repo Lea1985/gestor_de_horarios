@@ -63,12 +63,12 @@ export type TramoReemplazo = {
     nombre:              string
   } | null
 }
- 
+
 export type EliminarDistribucionResult = {
   ok:                     boolean
   deleted?:               boolean
   requiereConfirmacion?:  boolean
   tramos?:                TramoReemplazo[]
-  clasesEliminadas?:      number
+  clasesSuspendidas?:     number
   avisoReemplazoNoAplica?: boolean
 }

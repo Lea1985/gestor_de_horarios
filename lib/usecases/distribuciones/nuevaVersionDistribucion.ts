@@ -15,16 +15,21 @@ export class DistribucionNoEncontradaError extends Error {
  *
  * Gestión de clases del tramo [hoy, fin de período] de la versión VIEJA:
  *  - Si no hay período ACTIVO: no hay nada que gestionar, se cierra y listo.
- *  - Si hay período ACTIVO: se BORRAN (no se suspenden) las clases futuras,
- *    con el mismo flujo de confirmación de reemplazo que usa asignarModulos
- *    y eliminarDistribucion. Se borra (no se suspende) para evitar que,
- *    si la nueva versión termina con los mismos módulos, el @@unique de
- *    ClaseProgramada choque contra las filas viejas y bloquee en silencio
- *    la generación de las clases nuevas.
+ *  - Si hay período ACTIVO: se SUSPENDEN (causa CAMBIO_DISTRIBUCION) las
+ *    clases futuras, con el mismo flujo de confirmación de reemplazo que
+ *    usa asignarModulos y eliminarDistribucion. Se suspenden, no se borran:
+ *    la nueva versión nace sin módulos (modulosNuevos: []), así que
+ *    suspenderNoVigentes trata el tramo entero como "ya no vigente" y marca
+ *    todo. Cuando el usuario complete la nueva versión con asignarModulos,
+ *    ese mismo mecanismo va a reutilizar (no duplicar, por el @@unique) las
+ *    clases que vuelvan a coincidir con los módulos nuevos.
  *  - La nueva versión arranca sin módulos, así que NO hay "clases nuevas"
  *    a las que migrar el reemplazo todavía (igual que en eliminarDistribucion).
  *    Se informa igual para que el usuario sepa que se perdió, y lo vuelva
  *    a cargar cuando asigne módulos a la nueva versión.
+ *
+ * Nunca se elimina ninguna ClaseProgramada en este flujo — la historia y
+ * la identidad de cada clase se preservan, solo cambia su Estado/Causa.
  */
 export async function nuevaVersionDistribucion(
   distribucionId: number,
@@ -33,13 +38,13 @@ export async function nuevaVersionDistribucion(
 ) {
   const actual = await prisma.distribucionHoraria.findFirst({
     where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
-    include: { asignacion: { select: { id: true } } },
+    include: { asignacion: { select: { id: true, unidadId: true, comisionId: true } } },
   })
   if (!actual) throw new DistribucionNoEncontradaError()
 
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
 
-  let clasesEliminadas = 0
+  let clasesSuspendidas = 0
   let avisoReemplazoNoAplica = false
 
   if (periodo) {
@@ -56,10 +61,15 @@ export async function nuevaVersionDistribucion(
         return { ok: false, requiereConfirmacion: true, tramos }
       }
 
-      const r = await claseProgramadaService.eliminarEnRango({
-        asignacionId: actual.asignacion.id, desde: hoy, hasta,
+      const r = await claseProgramadaService.suspenderNoVigentes({
+        institucionId: tenantId,
+        asignacionId:  actual.asignacion.id,
+        unidadId:      actual.asignacion.unidadId,
+        comisionId:    actual.asignacion.comisionId,
+        modulosNuevos: [], // la nueva versión nace vacía, todo el tramo queda no-vigente
+        desde: hoy, hasta,
       })
-      clasesEliminadas = r.eliminadas
+      clasesSuspendidas = r.suspendidas
       avisoReemplazoNoAplica = body?.mantenerReemplazo === true && tramos.length > 0
     }
   }
@@ -103,7 +113,7 @@ export async function nuevaVersionDistribucion(
     ok:             true,
     nuevaVersionId: nueva.id,
     version:        nuevaVersion,
-    clasesEliminadas,
+    clasesSuspendidas,
     avisoReemplazoNoAplica,
   }
 }

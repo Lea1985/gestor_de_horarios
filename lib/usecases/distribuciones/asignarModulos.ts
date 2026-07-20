@@ -26,7 +26,7 @@ export class SinPeriodoActivoError extends Error {
  * Asignar módulos SIEMPRE es posible, haya o no período ACTIVO — es el paso
  * que completa la distribución (sin esto, no es una distribución real, es
  * una cáscara vacía). La gestión de ClaseProgramada (detectar reemplazo,
- * borrar tramo viejo, generar tramo nuevo) es una consecuencia CONDICIONAL:
+ * suspender tramo viejo, generar tramo nuevo) es una consecuencia CONDICIONAL:
  * solo aplica si hay un período ACTIVO al que referenciar. Sin período
  * activo, se guardan los módulos y no se toca ninguna clase — quedará
  * pendiente para cuando activarPeriodo() recorra las distribuciones
@@ -35,14 +35,17 @@ export class SinPeriodoActivoError extends Error {
  * Orden de operaciones cuando SÍ hay período activo (evita corromper datos):
  *  1. Leer qué reemplazo cubre el tramo ANTES de tocar nada (solo lectura).
  *  2. Si hay reemplazo y no vino confirmación -> cortar y preguntar.
- *  3. Borrar las clases viejas del tramo completo (con `hasta` explícito).
+ *  3. Traer los módulos nuevos completos y SUSPENDER (causa CAMBIO_DISTRIBUCION)
+ *     las clases del tramo que ya no corresponden a la nueva distribución.
+ *     Las que siguen coincidiendo (misma fecha+módulo) quedan intactas.
  *  4. Asignar los módulos nuevos.
- *  5. Generar las clases nuevas para el mismo tramo.
+ *  5. Generar las clases nuevas para el mismo tramo (idempotente: no
+ *     duplica las que ya quedaron intactas en el paso 3).
  *  6. Migrar el reemplazo leído en el paso 1, si el usuario confirmó
  *     mantenerlo y el tramo era 100% migrable.
  *
- * Borrar antes de crear (en vez de al revés) evita que `eliminarEnRango`
- * — que no filtra por moduloId — se lleve puesto lo recién generado.
+ * Nunca se elimina ninguna ClaseProgramada en este flujo — la historia y
+ * la identidad de cada clase se preservan, solo cambia su Estado/Causa.
  */
 export async function asignarModulos(
   distribucionId: number,
@@ -69,7 +72,7 @@ export async function asignarModulos(
     return {
       ok: true,
       total: result.length,
-      clasesEliminadas: 0,
+      clasesSuspendidas: 0,
       clasesCreadas: 0,
       reemplazosMigrados: 0,
       noMigrable: null,
@@ -77,7 +80,7 @@ export async function asignarModulos(
     }
   }
 
-  // ── Con período ACTIVO: flujo completo de reemplazo de clases ──
+// ── Con período ACTIVO: flujo completo de reemplazo de clases ──
   const { asignacion } = distribucion
   const desde = distribucion.fecha_vigencia_desde
   const hasta = periodo.fecha_hasta // límite explícito, siempre
@@ -97,10 +100,23 @@ export async function asignarModulos(
       ? tramos[0].suplente
       : null
 
-  // 3. Borrar las clases viejas del tramo completo (excluye DICTADA por
-  //    defecto). hasta explícito = fin del período ACTIVO.
-  const { eliminadas } = await claseProgramadaService.eliminarEnRango({
-    asignacionId: asignacion.id, desde, hasta,
+  // 3a. Traer los módulos nuevos completos (necesitamos dia_semana para
+  //     poder calcular qué fecha+módulo corresponde con la nueva distribución)
+  const modulosNuevos = await prisma.moduloHorario.findMany({
+    where: { id: { in: body.modulos as number[] }, institucionId: tenantId },
+    select: { id: true, dia_semana: true },
+  })
+
+  // 3b. Suspender (causa CAMBIO_DISTRIBUCION) las clases que ya no
+  //     corresponden a la nueva lista de módulos. Las que siguen
+  //     coincidiendo quedan intactas para ser reutilizadas en el paso 5.
+  const { suspendidas } = await claseProgramadaService.suspenderNoVigentes({
+    institucionId: tenantId,
+    asignacionId:  asignacion.id,
+    unidadId:      asignacion.unidadId,
+    comisionId:    asignacion.comisionId,
+    modulosNuevos,
+    desde, hasta,
   })
 
   // 4. Asignar los módulos nuevos
@@ -134,7 +150,7 @@ export async function asignarModulos(
   return {
     ok: true,
     total: result.length,
-    clasesEliminadas: eliminadas,
+    clasesSuspendidas: suspendidas,
     clasesCreadas: creadas,
     reemplazosMigrados: migradas,
     noMigrable: tramos.length > 0 && !tramos[0].migrable ? tramos[0] : null,

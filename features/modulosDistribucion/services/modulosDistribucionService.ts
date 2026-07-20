@@ -1,9 +1,7 @@
 // features/modulosDistribucion/services/modulosDistribucionService.ts
-
 import type { Modulo, Distribucion, TramoReemplazo } from "../types"
 
 export const modulosDistribucionService = {
-
   async listarModulos(headers: Record<string, string>): Promise<Modulo[]> {
     const res = await fetch("/api/modulosHorarios", { headers })
     if (!res.ok) throw new Error("Error cargando módulos")
@@ -27,7 +25,7 @@ export const modulosDistribucionService = {
     tramos?: TramoReemplazo[]
     total?: number
     clasesCreadas?: number
-    clasesEliminadas?: number
+    clasesSuspendidas?: number
     reemplazosMigrados?: number
     noMigrable?: TramoReemplazo | null
     avisoSinPeriodoActivo?: boolean
@@ -55,7 +53,7 @@ export const modulosDistribucionService = {
     version?: number
     requiereConfirmacion?: boolean
     tramos?: TramoReemplazo[]
-    clasesEliminadas?: number
+    clasesSuspendidas?: number
     avisoReemplazoNoAplica?: boolean
   }> {
     const res = await fetch(`/api/distribuciones/${id}/nueva-version`, {

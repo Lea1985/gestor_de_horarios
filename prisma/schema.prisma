@@ -45,6 +45,16 @@ enum EstadoPeriodo {
   CERRADO
 }
 
+enum Causa {
+  NINGUNA
+  INCIDENCIA
+  CALENDARIO_ESCOLAR
+  PERIODO_OPERATIVO
+  CAMBIO_DISTRIBUCION
+  FIN_ASIGNACION
+  MANUAL
+}
+
 /// ENTIDADES PRINCIPALES
 
 model Usuario {
@@ -477,6 +487,8 @@ model ClaseProgramada {
   comisionId    Int?
   fecha         DateTime
   estado        EstadoClase @default(PROGRAMADA)
+  causa         Causa       @default(NINGUNA)   
+  versionResolucion Int     @default(0)          
   incidenciaId  Int?
   calendarioEscolarId Int?
 
@@ -498,6 +510,7 @@ model ClaseProgramada {
   @@index([moduloId])
   @@index([comisionId, fecha])
   @@index([calendarioEscolarId])
+  @@index([estado, causa])   // ← NUEVO, útil para reportes/filtros por estado+causa
   @@unique([asignacionId, moduloId, fecha], name: "clase_unica_por_modulo_fecha")
 }
 

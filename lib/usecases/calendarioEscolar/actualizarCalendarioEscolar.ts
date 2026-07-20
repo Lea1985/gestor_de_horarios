@@ -1,11 +1,8 @@
 // lib/usecases/calendarioEscolar/actualizarCalendarioEscolar.ts
-
 import { calendarioEscolarRepository }
   from "@/lib/repositories/calendarioEscolarRepository"
-
 import { periodoOperativoRepository }
   from "@/lib/repositories/periodoOperativoRepository"
-
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 
 export class CalendarioEscolarNoEncontradoError extends Error {
@@ -13,19 +10,16 @@ export class CalendarioEscolarNoEncontradoError extends Error {
     super("Evento de calendario escolar no encontrado")
   }
 }
-
 export class SinCamposParaActualizarError extends Error {
   constructor() {
     super("No hay campos para actualizar")
   }
 }
-
 export class FechaFueraDePeriodoError extends Error {
   constructor() {
     super("La fecha no pertenece al período operativo")
   }
 }
-
 export class PeriodoCerradoError extends Error {
   constructor() {
     super("El período está CERRADO, no se puede modificar su calendario")
@@ -35,22 +29,18 @@ export class PeriodoCerradoError extends Error {
 export async function actualizarCalendarioEscolar(
   calendarioId: number,
   tenantId: number,
-
   body: {
     fecha?: Date
     descripcion?: string
-
     esFeriado?: boolean
     suspendeClases?: boolean
   }
 ) {
-
   const registro =
     await calendarioEscolarRepository.obtenerPorId(
       calendarioId,
       tenantId
     )
-
   if (!registro)
     throw new CalendarioEscolarNoEncontradoError()
 
@@ -73,11 +63,9 @@ export async function actualizarCalendarioEscolar(
     "esFeriado",
     "suspendeClases",
   ]
-
   const tieneCampos = campos.some(
     c => body[c as keyof typeof body] !== undefined
   )
-
   if (!tieneCampos)
     throw new SinCamposParaActualizarError()
 
@@ -86,9 +74,7 @@ export async function actualizarCalendarioEscolar(
     if (!periodo) {
       throw new FechaFueraDePeriodoError()
     }
-
     const fecha = new Date(body.fecha)
-
     if (
       fecha < periodo.fecha_desde ||
       fecha > periodo.fecha_hasta
@@ -103,14 +89,17 @@ export async function actualizarCalendarioEscolar(
     body
   )
 
-  // Si el registro quedó (o cambió a) suspendeClases=true, recalcular las
-  // clases de esa fecha. Usa la fecha final del registro actualizado, no
-  // la del body, por si solo se tocó `suspendeClases` sin tocar `fecha`.
+  // Si el registro quedó (o cambió a) suspendeClases=true/false, recalcular
+  // las clases de esa fecha. Usa la fecha final del registro actualizado,
+  // no la del body, por si solo se tocó `suspendeClases` sin tocar `fecha`.
+  // Pasa calendarioId para que la reversión (suspende: false) solo toque
+  // las clases que este evento puntual había suspendido.
   if (actualizado && body.suspendeClases !== undefined) {
     await claseProgramadaService.recalcularSuspendidasPorCalendario({
-      institucionId: tenantId,
-      fecha:         actualizado.fecha,
-      suspende:      actualizado.suspendeClases,
+      institucionId:       tenantId,
+      calendarioEscolarId: calendarioId,
+      fecha:               actualizado.fecha,
+      suspende:            actualizado.suspendeClases,
     })
   }
 
