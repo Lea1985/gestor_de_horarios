@@ -1,36 +1,32 @@
-
-//lib/usecases/clases/actualizarClase.ts
+// lib/usecases/clases/actualizarClase.ts
 import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
-import { EstadoClase } from "@prisma/client"
 
 export class ClaseNoEncontradaError extends Error {
   constructor() { super("Clase no encontrada") }
 }
 
 export class SinCamposError extends Error {
-  constructor() { super("Se requiere al menos: estado o incidenciaId") }
-}
-
-export class EstadoInvalidoError extends Error {
-  constructor(estados: string[]) { super(`Estado inválido. Válidos: ${estados.join(", ")}`) }
+  constructor() { super("Se requiere al menos: incidenciaId") }
 }
 
 export class IncidenciaInvalidaError extends Error {
   constructor() { super("Incidencia no encontrada o no pertenece a la asignación de esta clase") }
 }
 
-const ESTADOS_VALIDOS = Object.values(EstadoClase)
-
+// El estado de una ClaseProgramada es responsabilidad exclusiva del motor
+// de resolución (resolucionClaseService.resolverClase). Este usecase ya NO
+// acepta "estado" -- se sacó tras confirmar que era un bypass sin ningún
+// consumidor real (ver punto-de-partida-clase-programada-2026-07-27.md).
+// Si en el futuro aparece una necesidad real de forzar un estado manual,
+// eso requiere extender el motor para que reconozca una causa MANUAL como
+// estado terminal (igual que ya hace con DICTADA) -- no volver a escribir
+// estado directo acá.
 export async function actualizarClase(id: number, tenantId: number, body: {
-  estado?:       string
   incidenciaId?: number | null
 }) {
-  const { estado, incidenciaId } = body
+  const { incidenciaId } = body
 
-  if (estado === undefined && incidenciaId === undefined) throw new SinCamposError()
-  if (estado && !ESTADOS_VALIDOS.includes(estado as EstadoClase)) {
-    throw new EstadoInvalidoError(ESTADOS_VALIDOS)
-  }
+  if (incidenciaId === undefined) throw new SinCamposError()
 
   const existente = await claseProgramadaRepository.existeEnTenant(id, tenantId)
   if (!existente) throw new ClaseNoEncontradaError()
@@ -40,9 +36,5 @@ export async function actualizarClase(id: number, tenantId: number, body: {
     if (!incidencia) throw new IncidenciaInvalidaError()
   }
 
-  const data: Partial<{ estado: EstadoClase; incidenciaId: number | null }> = {}
-  if (estado       !== undefined) data.estado       = estado as EstadoClase
-  if (incidenciaId !== undefined) data.incidenciaId = incidenciaId
-
-  return claseProgramadaRepository.actualizar(id, data)
+  return claseProgramadaRepository.actualizar(id, { incidenciaId })
 }

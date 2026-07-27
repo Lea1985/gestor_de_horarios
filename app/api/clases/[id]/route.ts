@@ -1,7 +1,7 @@
-//app/api/clases/[id]/route.ts
+// app/api/clases/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerClase, ClaseNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/clases/obtenerClase"
-import { actualizarClase, ClaseNoEncontradaError as ActualizarNotFound, SinCamposError, EstadoInvalidoError, IncidenciaInvalidaError } from "@/lib/usecases/clases/actualizarClase"
+import { actualizarClase, ClaseNoEncontradaError as ActualizarNotFound, SinCamposError, IncidenciaInvalidaError } from "@/lib/usecases/clases/actualizarClase"
 
 function parseId(id: string) {
   const n = Number(id)
@@ -53,7 +53,7 @@ export async function PATCH(
       if (error instanceof ActualizarNotFound) {
         return Response.json({ error: error.message }, { status: 404 })
       }
-      if (error instanceof SinCamposError || error instanceof EstadoInvalidoError || error instanceof IncidenciaInvalidaError) {
+      if (error instanceof SinCamposError || error instanceof IncidenciaInvalidaError) {
         return Response.json({ error: error.message }, { status: 400 })
       }
       console.error("Error actualizando clase:", error)
