@@ -174,8 +174,6 @@ export const reemplazoRepository = {
     })
   },
 
-
-
   verificarAsignacion(asignacionId: number, tenantId: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -235,224 +233,72 @@ export const reemplazoRepository = {
     })
   },
 
+  /**
+   * Crea el registro de Reemplazo. No toca ClaseProgramada -- el usecase
+   * (crearReemplazo.ts) llama a resolverClase() inmediatamente después,
+   * que es quien decide estado/causa/versionResolucion.
+   */
   async crear(
     tenantId: number,
     data: {
       claseId:             number
       asignacionTitularId: number
       agenteSuplenteId:    number
-      incidenciaId?:       number | null   // NUEVO
+      incidenciaId?:       number | null
       observacion?:        string
     }
   ) {
-    return prisma.$transaction(async (tx) => {
-      const clase = await tx.claseProgramada.findFirst({
-        where:  { id: data.claseId, institucionId: tenantId },
-        select: { id: true },
-      })
-      if (!clase) return null
+    const clase = await prisma.claseProgramada.findFirst({
+      where:  { id: data.claseId, institucionId: tenantId },
+      select: { id: true },
+    })
+    if (!clase) return null
 
-      const [reemplazo] = await Promise.all([
-        tx.reemplazo.create({
-          data: {
-            claseId:             data.claseId,
-            asignacionTitularId: data.asignacionTitularId,
-            agenteSuplenteId:    data.agenteSuplenteId,
-            incidenciaId:        data.incidenciaId ?? null,   // NUEVO
-            observacion:         data.observacion,
-            activo:              true,
-          },
-        }),
-        tx.claseProgramada.update({
-          where: { id: data.claseId },
-          data:  { estado: "REEMPLAZADA" },
-        }),
-      ])
-
-      return reemplazo
+    return prisma.reemplazo.create({
+      data: {
+        claseId:             data.claseId,
+        asignacionTitularId: data.asignacionTitularId,
+        agenteSuplenteId:    data.agenteSuplenteId,
+        incidenciaId:        data.incidenciaId ?? null,
+        observacion:         data.observacion,
+        activo:              true,
+      },
     })
   },
-
-  async eliminar(id: number, claseId: number, tenantId: number) {
-    return prisma.$transaction(async (tx) => {
-      const reemplazo = await tx.reemplazo.findFirst({
-        where: {
-          id,
-          claseId,
-          activo: true,
-
-          clase: {
-            institucionId: tenantId,
-          },
-        },
-
-        select: {
-          id: true,
-        },
-      })
-
-      if (!reemplazo) return null
-
-      return Promise.all([
-        tx.reemplazo.update({
-          where: {
-            id,
-          },
-
-          data: {
-            activo: false,
-            deletedAt: new Date(),
-          },
-        }),
-
-        tx.claseProgramada.update({
-          where: {
-            id: claseId,
-          },
-
-          data: {
-            estado: "PROGRAMADA",
-          },
-        }),
-      ])
-    })
-  },
-
 
   /**
-   * Detecta, para las clases futuras (>= desde) de una asignación, qué
-   * incidencias tienen reemplazos activos que se perderían al recrear
-   * la distribución. Si todos los reemplazos de una incidencia usan el
-   * mismo suplente, se marca migrable=true.
+   * Da de baja el Reemplazo. No toca ClaseProgramada -- el usecase
+   * (eliminarReemplazo.ts) llama a resolverClase() inmediatamente después.
    */
-  async detectarReemplazosParaMigrar(asignacionId: number, tenantId: number, desde: Date) {
-    const incidencias = await prisma.incidencia.findMany({
+  async eliminar(id: number, claseId: number, tenantId: number) {
+    const reemplazo = await prisma.reemplazo.findFirst({
       where: {
-        asignacionId,
-        deletedAt: null,
-        fecha_hasta: { gte: desde },
+        id,
+        claseId,
+        activo: true,
+
+        clase: {
+          institucionId: tenantId,
+        },
       },
+
       select: {
         id: true,
-        fecha_desde: true,
-        fecha_hasta: true,
-        observacion: true,
-        codigarioItem: { select: { nombre: true, codigo: true } },
       },
     })
 
-    const resultado = []
+    if (!reemplazo) return null
 
-    for (const inc of incidencias) {
-      const clases = await prisma.claseProgramada.findMany({
-        where: {
-          incidenciaId: inc.id,
-          institucionId: tenantId,
-          fecha: { gte: desde },
-          estado: "REEMPLAZADA",
-        },
-        select: {
-          reemplazos: {
-            where: { activo: true },
-            select: {
-              asignacionTitularId: true,
-              agenteSuplenteId: true,
-              agenteSuplente: { select: { nombre: true, apellido: true } },
-            },
-          },
-        },
-      })
+    return prisma.reemplazo.update({
+      where: {
+        id,
+      },
 
-      const reemplazosActivos = clases.flatMap(c => c.reemplazos)
-      if (reemplazosActivos.length === 0) continue
-
-      const suplentesUnicos = new Set(
-        reemplazosActivos.map(r => `${r.asignacionTitularId}-${r.agenteSuplenteId}`)
-      )
-      const migrable = suplentesUnicos.size === 1
-
-      resultado.push({
-        incidenciaId:            inc.id,
-        fecha_desde:             inc.fecha_desde,
-        fecha_hasta:             inc.fecha_hasta,
-        codigario:               inc.codigarioItem?.nombre ?? null,
-        observacion:             inc.observacion,
-        totalClasesConReemplazo: reemplazosActivos.length,
-        migrable,
-        suplente: migrable
-          ? {
-              asignacionTitularId: reemplazosActivos[0].asignacionTitularId,
-              agenteSuplenteId:    reemplazosActivos[0].agenteSuplenteId,
-              nombre:              `${reemplazosActivos[0].agenteSuplente.apellido}, ${reemplazosActivos[0].agenteSuplente.nombre}`,
-            }
-          : null,
-      })
-    }
-
-    return resultado
-  },
-
-  /**
-   * Aplica el suplente detectado como uniforme a las clases nuevas
-   * (sin incidencia todavía) que caigan dentro del rango de cada
-   * incidencia elegida por el usuario para migrar.
-   */
-  async migrarReemplazosAIncidencias(
-    asignacionId: number,
-    tenantId: number,
-    incidenciaIds: number[],
-    candidatos: Array<{
-      incidenciaId: number
-      migrable: boolean
-      suplente: { asignacionTitularId: number; agenteSuplenteId: number } | null
-    }>
-  ) {
-    let total = 0
-
-    for (const id of incidenciaIds) {
-      const candidato = candidatos.find(c => c.incidenciaId === id)
-      if (!candidato?.migrable || !candidato.suplente) continue
-
-      const incidencia = await prisma.incidencia.findFirst({
-        where: { id, deletedAt: null, asignacion: { institucionId: tenantId } },
-        select: { fecha_desde: true, fecha_hasta: true },
-      })
-      if (!incidencia) continue
-
-      const clasesNuevas = await prisma.claseProgramada.findMany({
-        where: {
-          asignacionId,
-          institucionId: tenantId,
-          incidenciaId: null,
-          estado: "PROGRAMADA",
-          fecha: { gte: incidencia.fecha_desde, lte: incidencia.fecha_hasta },
-        },
-        select: { id: true },
-      })
-      if (clasesNuevas.length === 0) continue
-
-      const ids = clasesNuevas.map(c => c.id)
-
-      await prisma.$transaction(async (tx) => {
-        await tx.claseProgramada.updateMany({
-          where: { id: { in: ids } },
-          data:  { incidenciaId: id, estado: "REEMPLAZADA" },
-        })
-        await tx.reemplazo.createMany({
-          data: ids.map(claseId => ({
-            claseId,
-            asignacionTitularId: candidato.suplente!.asignacionTitularId,
-            agenteSuplenteId:    candidato.suplente!.agenteSuplenteId,
-            observacion:         "Migrado automáticamente al crear nueva versión de la distribución",
-            activo:              true,
-          })),
-        })
-      })
-
-      total += ids.length
-    }
-
-    return total
+      data: {
+        activo: false,
+        deletedAt: new Date(),
+      },
+    })
   },
 
 }

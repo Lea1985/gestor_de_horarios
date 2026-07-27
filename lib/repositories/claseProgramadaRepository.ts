@@ -2,16 +2,6 @@
 import prisma from "@/lib/prisma"
 import { EstadoClase, Prisma } from "@prisma/client"
 
-type ClaseACrear = {
-  institucionId: number
-  asignacionId:  number
-  moduloId:      number | null
-  unidadId:      number
-  comisionId:    number | null
-  fecha:         Date
-  estado:        EstadoClase
-}
-
 const claseIncludeFull = {
   modulo:   true,
   unidad:   true,
@@ -31,7 +21,7 @@ const claseIncludeFull = {
   reemplazos: {
     include: {
       asignacionTitular: { select: { identificadorEstructural: true } },
-      agenteSuplente: { select: { nombre: true, apellido: true, documento: true } }, // ✅ Cambiado
+      agenteSuplente: { select: { nombre: true, apellido: true, documento: true } },
     },
   },
 }
@@ -40,35 +30,35 @@ const claseIncludeList = {
   modulo:    { select: { dia_semana: true, hora_desde: true, hora_hasta: true } },
   unidad:    { select: { nombre: true, codigoUnidad: true } },
   comision:  { select: { id: true, nombre: true } },
-asignacion: {
-  select: {
-    identificadorEstructural: true,
+  asignacion: {
+    select: {
+      identificadorEstructural: true,
 
-    materia: {
-      select: {
-        nombre: true,
-      },
-    },
-
-    titularidades: {
-      where: {
-        activo: true,
-        fecha_hasta: null,
-      },
-
-      select: {
-        agente: {
-          select: {
-            nombre: true,
-            apellido: true,
-          },
+      materia: {
+        select: {
+          nombre: true,
         },
       },
 
-      take: 1,
+      titularidades: {
+        where: {
+          activo: true,
+          fecha_hasta: null,
+        },
+
+        select: {
+          agente: {
+            select: {
+              nombre: true,
+              apellido: true,
+            },
+          },
+        },
+
+        take: 1,
+      },
     },
   },
-},
   incidencia: { select: { id: true, fecha_desde: true, fecha_hasta: true, observacion: true } },
   reemplazos: {
     select: {
@@ -77,7 +67,7 @@ asignacion: {
       agenteSuplenteId: true,
       observacion: true,
       activo: true,
-      agenteSuplente: {  // ✅ Cambiado
+      agenteSuplente: {
         select: {
           id: true,
           nombre: true,
@@ -85,7 +75,7 @@ asignacion: {
           documento: true,
         },
       },
-      asignacionTitular: {  // ✅ Opcional: para más contexto
+      asignacionTitular: {
         select: {
           identificadorEstructural: true,
         },
@@ -104,7 +94,7 @@ const claseIncludeConReemplazos = {
       asignacionTitularId: true,
       observacion:         true,
       activo:              true,
-      agenteSuplente: {  // ✅ Cambiado de asignacionSuplente a agenteSuplente
+      agenteSuplente: {
         select: {
           id: true,
           nombre: true,
@@ -113,7 +103,7 @@ const claseIncludeConReemplazos = {
           email: true,
         },
       },
-      asignacionTitular: {  // ✅ Información de la asignación titular
+      asignacionTitular: {
         select: {
           identificadorEstructural: true,
           materia: {
@@ -196,50 +186,6 @@ export const claseProgramadaRepository = {
     return prisma.incidencia.findFirst({
       where:  { id: incidenciaId, asignacionId, deletedAt: null },
       select: { id: true },
-    })
-  },
-
-  async generarParaDistribucion(clases: ClaseACrear[]) {
-    if (clases.length === 0) return { count: 0 }
-    return prisma.claseProgramada.createMany({
-      data: clases.map(c => ({
-        ...c,
-        moduloId:   c.moduloId   ?? undefined,
-        comisionId: c.comisionId ?? undefined,
-      })),
-      skipDuplicates: false,
-    })
-  },
-
-  async eliminarFuturas(asignacionId: number, desde: Date) {
-    return prisma.$transaction(async (tx) => {
-      const clases = await tx.claseProgramada.findMany({
-        where: {
-          asignacionId,
-          fecha:  { gte: desde },
-          estado: { in: [EstadoClase.PROGRAMADA, EstadoClase.SUSPENDIDA, EstadoClase.REEMPLAZADA] },
-        },
-        select: { id: true },
-      })
-      const ids = clases.map(c => c.id)
-      if (ids.length === 0) return { count: 0 }
-
-      // Sin esto, el delete de abajo rompe por FK si alguna clase
-      // tiene un Reemplazo activo apuntándole (Reemplazo.clase no
-      // tiene onDelete: Cascade en el schema).
-      await tx.reemplazo.deleteMany({ where: { claseId: { in: ids } } })
-
-      return tx.claseProgramada.deleteMany({ where: { id: { in: ids } } })
-    })
-  },
-  async suspenderFuturas(asignacionId: number, desde: Date, hasta: Date) {
-    return prisma.claseProgramada.updateMany({
-      where: {
-        asignacionId,
-        fecha:  { gte: desde, lte: hasta },
-        estado: EstadoClase.PROGRAMADA,
-      },
-      data: { estado: EstadoClase.SUSPENDIDA },
     })
   },
 
