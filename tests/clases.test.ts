@@ -2,38 +2,38 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { authHeaders, BASE_URL } from "./helpers/auth"
-import { createTestTenant, createTestAgente, destroyInstitucion, prisma } from "./helpers/factories"
+import { createTestTenant, destroyInstitucion, prisma } from "./helpers/factories"
 import { randomUUID } from "crypto"
 
-let headers:               Record<string, string>
-let institucionId:         number
-let asignacionId:          number
-let distribucionId:        number
-let moduloId:              number
-let claseId:               number
-let clasesCreadas:         number
+let headers:       Record<string, string>
+let institucionId: number
+let asignacionId:  number
+let moduloId:      number
+let claseId:       number
 
 beforeAll(async () => {
   const tenant  = await createTestTenant()
   institucionId = tenant.institucionId
   headers       = authHeaders(String(institucionId), tenant.token)
 
-  // Agente
-  const agente = await createTestAgente(institucionId)
-
   // Unidad
   const unidad = await prisma.unidadOrganizativa.create({
     data: { institucionId, codigoUnidad: 1, nombre: "Aula Clases Test" },
   })
 
-  // Asignación
+  // Turno (requerido por Asignacion)
+  const turno = await prisma.turno.create({
+    data: { institucionId, nombre: "Mañana", horaInicio: 480, horaFin: 720 },
+  })
+
+  // Asignación (vacante — sin titular, no hace falta para estos tests)
   const asignacion = await prisma.asignacion.create({
     data: {
       institucionId,
-      agenteId:                agente.id,
-      unidadId:                unidad.id,
+      unidadId:                 unidad.id,
+      turnoId:                  turno.id,
       identificadorEstructural: `CLASE-TEST-${randomUUID()}`,
-      fecha_inicio:            new Date("2026-01-01"),
+      fecha_inicio:             new Date("2026-01-01"),
     },
   })
   asignacionId = asignacion.id
@@ -58,155 +58,29 @@ beforeAll(async () => {
       fecha_vigencia_desde: new Date("2026-01-01"),
     },
   })
-  distribucionId = distribucion.id
 
   // Vincular módulo a distribución
   await prisma.distribucionModulo.create({
-    data: { distribucionHorariaId: distribucionId, moduloHorarioId: moduloId },
+    data: { distribucionHorariaId: distribucion.id, moduloHorarioId: modulo.id },
+  })
+
+  // Clases de prueba sembradas directo. La generación real de ClaseProgramada
+  // pasa por los "disparadores" (activarPeriodo, asignarModulos), no por un
+  // endpoint manual -- POST /api/clases/generar nunca existió como ruta
+  // (confirmado: no hay app/api/clases/generar/route.ts, y grep sobre
+  // app/features/components no encuentra ningún consumidor). Probablemente
+  // quedó planeado antes de que se implementara el motor de resolución.
+  await prisma.claseProgramada.createMany({
+    data: [
+      { institucionId, asignacionId, moduloId, unidadId: unidad.id, fecha: new Date("2026-04-05T12:00:00.000Z"), estado: "PROGRAMADA" },
+      { institucionId, asignacionId, moduloId, unidadId: unidad.id, fecha: new Date("2026-04-12T12:00:00.000Z"), estado: "PROGRAMADA" },
+      { institucionId, asignacionId, moduloId, unidadId: unidad.id, fecha: new Date("2026-04-19T12:00:00.000Z"), estado: "PROGRAMADA" },
+    ],
   })
 })
 
 afterAll(async () => {
   await destroyInstitucion(institucionId)
-})
-
-// ─── POST /api/clases/generar ──────────────────────────────────────────────────
-
-describe("POST /api/clases/generar", () => {
-  it("genera clases para el rango indicado", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({
-        distribucionHorariaId: distribucionId,
-        fecha_desde:           "2026-04-01",
-        fecha_hasta:           "2026-04-30",
-      }),
-    })
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.ok).toBe(true)
-    expect(data.creadas).toBeGreaterThan(0)
-    expect(data.omitidas).toBe(0)
-    clasesCreadas = data.creadas
-  })
-
-  it("es idempotente — no duplica clases", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({
-        distribucionHorariaId: distribucionId,
-        fecha_desde:           "2026-04-01",
-        fecha_hasta:           "2026-04-30",
-      }),
-    })
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.creadas).toBe(0)
-    expect(data.omitidas).toBe(clasesCreadas)
-  })
-
-  it("rechaza sin distribucionHorariaId (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({ fecha_desde: "2026-04-01", fecha_hasta: "2026-04-30" }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza sin fecha_desde (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({ distribucionHorariaId: distribucionId, fecha_hasta: "2026-04-30" }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza sin fecha_hasta (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({ distribucionHorariaId: distribucionId, fecha_desde: "2026-04-01" }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza fecha_desde posterior a fecha_hasta (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({
-        distribucionHorariaId: distribucionId,
-        fecha_desde:           "2026-04-30",
-        fecha_hasta:           "2026-04-01",
-      }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza distribución inexistente (404)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({
-        distribucionHorariaId: 999999,
-        fecha_desde:           "2026-04-01",
-        fecha_hasta:           "2026-04-30",
-      }),
-    })
-    expect(res.status).toBe(404)
-  })
-
-  it("rechaza fecha_desde anterior a la vigencia (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify({
-        distribucionHorariaId: distribucionId,
-        fecha_desde:           "2025-01-01",
-        fecha_hasta:           "2025-01-31",
-      }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza JSON inválido (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers,
-      body:    "esto no es json{{{",
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza sin tenant (400)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        distribucionHorariaId: distribucionId,
-        fecha_desde:           "2026-04-01",
-        fecha_hasta:           "2026-04-30",
-      }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it("rechaza con tenant pero sin token (401)", async () => {
-    const res = await fetch(`${BASE_URL}/clases/generar`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json", "x-tenant-id": String(institucionId) },
-      body:    JSON.stringify({
-        distribucionHorariaId: distribucionId,
-        fecha_desde:           "2026-04-01",
-        fecha_hasta:           "2026-04-30",
-      }),
-    })
-    expect(res.status).toBe(401)
-  })
 })
 
 // ─── GET /api/clases ───────────────────────────────────────────────────────────
@@ -296,15 +170,17 @@ describe("GET /api/clases/[id]", () => {
 
   it("no devuelve clases de otro tenant", async () => {
     const otroTenant  = await createTestTenant()
-    const otroAgente  = await createTestAgente(otroTenant.institucionId)
     const otraUnidad  = await prisma.unidadOrganizativa.create({
       data: { institucionId: otroTenant.institucionId, codigoUnidad: 1, nombre: "Aula Otro" },
+    })
+    const otroTurno = await prisma.turno.create({
+      data: { institucionId: otroTenant.institucionId, nombre: "Mañana", horaInicio: 480, horaFin: 720 },
     })
     const otraAsig = await prisma.asignacion.create({
       data: {
         institucionId:            otroTenant.institucionId,
-        agenteId:                 otroAgente.id,
         unidadId:                 otraUnidad.id,
+        turnoId:                  otroTurno.id,
         identificadorEstructural: `OTRO-${randomUUID()}`,
         fecha_inicio:             new Date("2026-01-01"),
       },
@@ -333,33 +209,11 @@ describe("GET /api/clases/[id]", () => {
 // ─── PATCH /api/clases/[id] ────────────────────────────────────────────────────
 
 describe("PATCH /api/clases/[id]", () => {
-  it("actualiza el estado a DICTADA", async () => {
-    const res  = await fetch(`${BASE_URL}/clases/${claseId}`, {
-      method:  "PATCH",
-      headers,
-      body:    JSON.stringify({ estado: "DICTADA" }),
-    })
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.estado).toBe("DICTADA")
-  })
-
-  it("actualiza el estado a SUSPENDIDA", async () => {
-    const res  = await fetch(`${BASE_URL}/clases/${claseId}`, {
-      method:  "PATCH",
-      headers,
-      body:    JSON.stringify({ estado: "SUSPENDIDA" }),
-    })
-    expect(res.status).toBe(200)
-    const data = await res.json()
-    expect(data.estado).toBe("SUSPENDIDA")
-  })
-
-  it("rechaza estado inválido (400)", async () => {
+  it("rechaza intento de setear estado — ya no es un campo soportado (400)", async () => {
     const res = await fetch(`${BASE_URL}/clases/${claseId}`, {
       method:  "PATCH",
       headers,
-      body:    JSON.stringify({ estado: "INVALIDO" }),
+      body:    JSON.stringify({ estado: "DICTADA" }),
     })
     expect(res.status).toBe(400)
   })
@@ -377,7 +231,7 @@ describe("PATCH /api/clases/[id]", () => {
     const res = await fetch(`${BASE_URL}/clases/999999`, {
       method:  "PATCH",
       headers,
-      body:    JSON.stringify({ estado: "DICTADA" }),
+      body:    JSON.stringify({ incidenciaId: null }),
     })
     expect(res.status).toBe(404)
   })
@@ -386,7 +240,7 @@ describe("PATCH /api/clases/[id]", () => {
     const res = await fetch(`${BASE_URL}/clases/abc`, {
       method:  "PATCH",
       headers,
-      body:    JSON.stringify({ estado: "DICTADA" }),
+      body:    JSON.stringify({ incidenciaId: null }),
     })
     expect(res.status).toBe(400)
   })

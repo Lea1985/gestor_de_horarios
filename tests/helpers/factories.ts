@@ -115,11 +115,14 @@ export async function createTestUsuario(
   return usuario
 }
 
+// Agente ahora cuelga directo de institucionId (sin modelo intermedio
+// AgenteInstitucion, que ya no existe en el schema).
 export async function createTestAgente(institucionId: number) {
   const uid = randomUUID()
 
-  const agente = await prisma.agente.create({
+  return prisma.agente.create({
     data: {
+      institucionId,
       nombre:    "Test",
       apellido:  "Agente",
       documento: `DOC-${uid}`,
@@ -127,12 +130,6 @@ export async function createTestAgente(institucionId: number) {
       estado:    Estado.ACTIVO,
     },
   })
-
-  await prisma.agenteInstitucion.create({
-    data: { agenteId: agente.id, institucionId, documento: `DOC-${uid}` },
-  })
-
-  return agente
 }
 
 export async function destroyInstitucion(institucionId: number) {
@@ -152,7 +149,7 @@ export async function destroyInstitucion(institucionId: number) {
   })
   await prisma.distribucionHoraria.deleteMany({ where: { institucionId } })
 
-  // 3. Asignaciones
+  // 3. Asignaciones (TitularAsignacion se borra sola vía onDelete: Cascade)
   await prisma.asignacion.deleteMany({ where: { institucionId } })
 
   // 4. Módulos, Comisiones, Unidades, Cursos, Turnos
@@ -162,47 +159,26 @@ export async function destroyInstitucion(institucionId: number) {
   await prisma.curso.deleteMany({ where: { institucionId } })
   await prisma.turno.deleteMany({ where: { institucionId } })
 
-  // 5. Codigarios, Materias, Calendario
+  // 5. Codigarios, Materias, Calendario, Período operativo
   await prisma.codigarioItem.deleteMany({
     where: { codigario: { institucionId } },
   })
   await prisma.codigario.deleteMany({ where: { institucionId } })
   await prisma.materia.deleteMany({ where: { institucionId } })
   await prisma.calendarioEscolar.deleteMany({ where: { institucionId } })
+  // PeriodoOperativo no tenía limpieza -- sin esto, el institucion.delete
+  // del final falla si algún test creó un período (CalendarioEscolar ya
+  // se borró arriba, así que el orden es seguro).
+  await prisma.periodoOperativo.deleteMany({ where: { institucionId } })
 
-  // 6. Agentes: obtener ids ANTES de desvincular
-  const agentesVinculados = await prisma.agenteInstitucion.findMany({
-    where:  { institucionId },
-    select: { agenteId: true },
-  })
-  const agenteIds = agentesVinculados.map(a => a.agenteId)
+  // 6. Agentes -- ahora cuelgan directo de institucionId, sin join
+  //    intermedio ni chequeo de "huérfano en otras instituciones" (un
+  //    agente pertenece a una sola institución en el schema actual).
+  //    TitularAsignacion, Reemplazo y HorarioAsignado que los referenciaban
+  //    ya se borraron en los pasos 1 a 3.
+  await prisma.agente.deleteMany({ where: { institucionId } })
 
-  await prisma.agenteInstitucion.deleteMany({ where: { institucionId } })
-
-  // Borrar agentes huérfanos (sin ninguna otra institución)
-  if (agenteIds.length > 0) {
-    const aun_vinculados = await prisma.agenteInstitucion.findMany({
-      where:  { agenteId: { in: agenteIds } },
-      select: { agenteId: true },
-    })
-    const idsAunVinculados = new Set(aun_vinculados.map(a => a.agenteId))
-    const idsHuerfanos     = agenteIds.filter(id => !idsAunVinculados.has(id))
-
-    if (idsHuerfanos.length > 0) {
-      await prisma.agente.deleteMany({ where: { id: { in: idsHuerfanos } } })
-    }
-  }
-
-  // 7. Agentes creados vía API con soft delete — email termina en @test.com
-  //    No tienen AgenteInstitucion si fueron soft-deleted antes del cleanup
-  await prisma.agente.deleteMany({
-    where: {
-      email:          { endsWith: "@test.com" },
-      instituciones:  { none: {} },
-    },
-  })
-
-  // 8. Usuarios: obtener ids ANTES de borrar roles
+  // 7. Usuarios: obtener ids ANTES de borrar roles
   const usuariosVinculados = await prisma.usuarioRol.findMany({
     where:  { institucionId },
     select: { usuarioId: true },
@@ -223,7 +199,7 @@ export async function destroyInstitucion(institucionId: number) {
     })
   }
 
-  // 9. Institución
+  // 8. Institución
   await prisma.institucion.delete({ where: { id: institucionId } })
 }
 

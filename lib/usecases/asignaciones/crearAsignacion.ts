@@ -103,17 +103,6 @@ export async function crearAsignacion(tenantId: number, data: Input) {
         comisionId:               data.comisionId ?? null,
         turnoId:                  data.turnoId,
       },
-      include: {
-        unidad:   true,
-        materia:  true,
-        comision: true,
-        turno:    true,
-        titularidades: {
-          where:   { activo: true, fecha_hasta: null },
-          include: { agente: true },
-          take:    1,
-        },
-      },
     })
 
     // Si se especificó agente, crear el primer registro de titularidad.
@@ -129,6 +118,22 @@ export async function crearAsignacion(tenantId: number, data: Input) {
       })
     }
 
-    return asignacion
+    // Re-consultar DESPUÉS de escribir el titular -- si se devolviera el
+    // objeto capturado en el create de arriba, "titularidades" siempre
+    // vendría vacío aunque se haya asignado agenteId.
+    return tx.asignacion.findFirst({
+      where: { id: asignacion.id },
+      include: {
+        unidad:   true,
+        materia:  true,
+        comision: true,
+        turno:    true,
+        titularidades: {
+          where:   { activo: true, fecha_hasta: null },
+          include: { agente: true },
+          take:    1,
+        },
+      },
+    })
   })
 }

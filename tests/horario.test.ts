@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { authHeaders, BASE_URL } from "./helpers/auth"
-import { createTestTenant, createTestAgente, destroyInstitucion, prisma } from "./helpers/factories"
+import { createTestTenant, destroyInstitucion, prisma } from "./helpers/factories"
 import { randomUUID } from "crypto"
 
 let headers:       Record<string, string>
@@ -17,20 +17,22 @@ beforeAll(async () => {
   institucionId = tenant.institucionId
   headers       = authHeaders(String(institucionId), tenant.token)
 
-  const agente = await createTestAgente(institucionId)
-
   const unidad = await prisma.unidadOrganizativa.create({
     data: { institucionId, codigoUnidad: 1, nombre: "Aula Horario Test" },
   })
   unidadId = unidad.id
 
+  const turno = await prisma.turno.create({
+    data: { institucionId, nombre: "Mañana", horaInicio: 480, horaFin: 720 },
+  })
+
   const asignacion = await prisma.asignacion.create({
     data: {
       institucionId,
-      agenteId:                agente.id,
-      unidadId:                unidad.id,
+      unidadId:                 unidad.id,
+      turnoId:                  turno.id,
       identificadorEstructural: `HOR-TEST-${randomUUID()}`,
-      fecha_inicio:            new Date("2026-01-01"),
+      fecha_inicio:             new Date("2026-01-01"),
     },
   })
   asignacionId = asignacion.id

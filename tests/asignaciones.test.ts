@@ -9,6 +9,7 @@ let headers:      Record<string, string>
 let institucionId: number
 let agenteId:      number
 let unidadId:      number
+let turnoId:       number
 
 beforeAll(async () => {
   const tenant  = await createTestTenant()
@@ -28,6 +29,17 @@ beforeAll(async () => {
     },
   })
   unidadId = unidad.id
+
+  // Turno -- obligatorio en Asignacion, el test original nunca lo mandaba
+  const turno = await prisma.turno.create({
+    data: {
+      institucionId,
+      nombre:     "Mañana",
+      horaInicio: 480,
+      horaFin:    720,
+    },
+  })
+  turnoId = turno.id
 })
 
 afterAll(async () => {
@@ -38,6 +50,7 @@ function buildAsignacion(overrides?: Record<string, unknown>) {
   return {
     agenteId,
     unidadId,
+    turnoId,
     identificadorEstructural: `ID-${randomUUID()}`,
     fecha_inicio:             "2025-03-01",
     ...overrides,
@@ -86,8 +99,20 @@ describe("POST /api/asignaciones", () => {
     expect(res.status).toBe(201)
     const data = await res.json()
     expect(data.identificadorEstructural).toBe(body.identificadorEstructural)
-    expect(data.agente.id).toBe(agenteId)
     expect(data.unidad.id).toBe(unidadId)
+    expect(data.titularidades[0].agenteId).toBe(agenteId)
+  })
+
+  it("crea una asignación vacante cuando no se especifica agenteId", async () => {
+    const { agenteId: _, ...sinAgente } = buildAsignacion()
+    const res = await fetch(`${BASE_URL}/asignaciones`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(sinAgente),
+    })
+    expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.titularidades).toHaveLength(0)
   })
 
   it("crea una asignación con fecha_fin", async () => {
@@ -112,22 +137,22 @@ describe("POST /api/asignaciones", () => {
     expect(res.status).toBe(409)
   })
 
-  it("rechaza sin agenteId (400)", async () => {
-    const { agenteId: _, ...sinAgente } = buildAsignacion()
-    const res = await fetch(`${BASE_URL}/asignaciones`, {
-      method:  "POST",
-      headers,
-      body:    JSON.stringify(sinAgente),
-    })
-    expect(res.status).toBe(400)
-  })
-
   it("rechaza sin unidadId (400)", async () => {
     const { unidadId: _, ...sinUnidad } = buildAsignacion()
     const res = await fetch(`${BASE_URL}/asignaciones`, {
       method:  "POST",
       headers,
       body:    JSON.stringify(sinUnidad),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza sin turnoId (400)", async () => {
+    const { turnoId: _, ...sinTurno } = buildAsignacion()
+    const res = await fetch(`${BASE_URL}/asignaciones`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(sinTurno),
     })
     expect(res.status).toBe(400)
   })
@@ -166,6 +191,15 @@ describe("POST /api/asignaciones", () => {
       method:  "POST",
       headers,
       body:    JSON.stringify(buildAsignacion({ unidadId: 999999 })),
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it("rechaza turno inexistente en el tenant (404)", async () => {
+    const res = await fetch(`${BASE_URL}/asignaciones`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(buildAsignacion({ turnoId: 999999 })),
     })
     expect(res.status).toBe(404)
   })
@@ -221,21 +255,27 @@ describe("GET /api/asignaciones/[id]", () => {
   })
 
   it("no devuelve asignaciones de otro tenant", async () => {
-    // Crear otra institución con su propia asignación
-    const otroTenant  = await createTestTenant()
-    const otroAgente  = await createTestAgente(otroTenant.institucionId)
-    const otraUnidad  = await prisma.unidadOrganizativa.create({
+    const otroTenant = await createTestTenant()
+    const otraUnidad = await prisma.unidadOrganizativa.create({
       data: {
         institucionId: otroTenant.institucionId,
         codigoUnidad:  1,
         nombre:        "Aula Otro Tenant",
       },
     })
+    const otroTurno = await prisma.turno.create({
+      data: {
+        institucionId: otroTenant.institucionId,
+        nombre:        "Mañana",
+        horaInicio:    480,
+        horaFin:       720,
+      },
+    })
     const otraAsig = await prisma.asignacion.create({
       data: {
         institucionId:            otroTenant.institucionId,
-        agenteId:                 otroAgente.id,
         unidadId:                 otraUnidad.id,
+        turnoId:                  otroTurno.id,
         identificadorEstructural: `ID-${randomUUID()}`,
         fecha_inicio:             new Date("2025-03-01"),
       },

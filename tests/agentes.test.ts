@@ -38,8 +38,7 @@ async function createAgente() {
   if (res.status !== 201) {
     throw new Error(`Error creando agente: ${res.status}`)
   }
-  const data = await res.json()
-  return data.agente
+  return res.json()
 }
 
 describe("POST /api/agentes", () => {
@@ -52,7 +51,7 @@ describe("POST /api/agentes", () => {
     })
     expect(res.status).toBe(201)
     const data = await res.json()
-    expect(data.agente.documento).toBe(agente.documento)
+    expect(data.documento).toBe(agente.documento)
   })
 
   it("rechaza documento duplicado en la misma institución", async () => {
@@ -131,7 +130,7 @@ describe("GET /api/agentes/[id]", () => {
     const res    = await fetch(`${BASE_URL}/agentes/${agente.id}`, { headers })
     expect(res.status).toBe(200)
     const data = await res.json()
-    expect(data.agente.id).toBe(agente.id)
+    expect(data.id).toBe(agente.id)
   })
 
   it("devuelve 404 para ID inexistente", async () => {

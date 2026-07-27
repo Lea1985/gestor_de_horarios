@@ -2,13 +2,14 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { authHeaders, BASE_URL } from "./helpers/auth"
-import { createTestTenant, createTestAgente, destroyInstitucion, prisma } from "./helpers/factories"
+import { createTestTenant, destroyInstitucion, prisma } from "./helpers/factories"
 import { randomUUID } from "crypto"
 
 let headers:       Record<string, string>
 let institucionId: number
 let asignacionId:  number
 let moduloId:      number
+let turnoId:       number
 let codigoUnidadCounter = 0
 
 beforeAll(async () => {
@@ -16,7 +17,11 @@ beforeAll(async () => {
   institucionId = tenant.institucionId
   headers       = authHeaders(String(institucionId), tenant.token)
 
-  const agente = await createTestAgente(institucionId)
+  const turno = await prisma.turno.create({
+    data: { institucionId, nombre: "Mañana", horaInicio: 480, horaFin: 720 },
+  })
+  turnoId = turno.id
+
   const unidad = await prisma.unidadOrganizativa.create({
     data: { institucionId, codigoUnidad: ++codigoUnidadCounter, nombre: "Aula Dist Test" },
   })
@@ -24,10 +29,10 @@ beforeAll(async () => {
   const asignacion = await prisma.asignacion.create({
     data: {
       institucionId,
-      agenteId:                agente.id,
-      unidadId:                unidad.id,
+      unidadId:                 unidad.id,
+      turnoId,
       identificadorEstructural: `DIST-TEST-${randomUUID()}`,
-      fecha_inicio:            new Date("2026-01-01"),
+      fecha_inicio:             new Date("2026-01-01"),
     },
   })
   asignacionId = asignacion.id
@@ -44,7 +49,6 @@ afterAll(async () => {
 
 // Crea una asignación fresca para tests que necesitan distribuciones independientes
 async function crearAsignacionFresca() {
-  const agente = await createTestAgente(institucionId)
   const unidad = await prisma.unidadOrganizativa.create({
     data: {
       institucionId,
@@ -55,10 +59,10 @@ async function crearAsignacionFresca() {
   return prisma.asignacion.create({
     data: {
       institucionId,
-      agenteId:                agente.id,
-      unidadId:                unidad.id,
+      unidadId:                 unidad.id,
+      turnoId,
       identificadorEstructural: `DIST-FRESH-${randomUUID()}`,
-      fecha_inicio:            new Date("2026-01-01"),
+      fecha_inicio:             new Date("2026-01-01"),
     },
   })
 }
@@ -334,7 +338,16 @@ describe("POST /api/distribuciones/[id]/modulos", () => {
     const data = await res.json()
     expect(data.ok).toBe(true)
     expect(data.total).toBe(1)
-    expect(data.data[0].moduloHorarioId).toBe(moduloId)
+    // Sin período ACTIVO en este fixture, el usecase no gestiona ClaseProgramada
+    // y lo señala explícitamente en vez de fallar en silencio.
+    expect(data.avisoSinPeriodoActivo).toBe(true)
+
+    // El POST no devuelve el detalle de los módulos asignados -- lo confirmamos
+    // por el canal real: GET de la distribución.
+    const check    = await fetch(`${BASE_URL}/distribuciones/${creada.id}`, { headers })
+    const distData = await check.json()
+    expect(distData.distribucionModulos).toHaveLength(1)
+    expect(distData.distribucionModulos[0].moduloHorarioId).toBe(moduloId)
   })
 
   it("es idempotente — reemplaza módulos existentes", async () => {

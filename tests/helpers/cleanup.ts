@@ -2,7 +2,7 @@
 // Orden estricto de FK:
 // Reemplazo → ClaseProgramada → Incidencia → HorarioAsignado
 // → DistribucionModulo → DistribucionHoraria → Asignacion
-// → AgenteInstitucion → Agente
+// → TitularAsignacion (cascade automático al borrar Asignacion) → Agente
 // → UnidadOrganizativa
 // → ModuloHorario
 // → CodigarioItem → Codigario
@@ -46,7 +46,8 @@ export async function cleanupAsignacion(asignacionId: number) {
 
   await prisma.distribucionHoraria.deleteMany({ where: { asignacionId } })
 
-  // 6. Asignación
+  // 6. Asignación -- TitularAsignacion tiene onDelete: Cascade hacia acá,
+  //    se borra sola, no hace falta un paso explícito.
   await prisma.asignacion.deleteMany({ where: { id: asignacionId } })
 }
 
@@ -86,28 +87,35 @@ export async function cleanupUnidad(unidadId: number) {
 }
 
 export async function cleanupAgente(agenteId: number) {
-  await prisma.agenteInstitucion.deleteMany({ where: { agenteId } })
+  // TitularAsignacion, Reemplazo (como suplente) y HorarioAsignado apuntan a
+  // Agente sin onDelete: Cascade -- hay que liberarlos antes de borrar el Agente.
+  await prisma.titularAsignacion.deleteMany({ where: { agenteId } })
+  await prisma.reemplazo.deleteMany({ where: { agenteSuplenteId: agenteId } })
+  await prisma.horarioAsignado.deleteMany({ where: { agenteId } })
   await prisma.agente.deleteMany({ where: { id: agenteId } })
 }
 
-// Limpia agente por documento incluyendo todas sus asignaciones
+// Limpia un agente por documento, incluyendo todas las asignaciones donde fue titular
 export async function cleanupAgenteByDocumento(
   documento: string,
   institucionId = 1
 ) {
   const agente = await prisma.agente.findFirst({
-    where: { documento },
+    where: { documento, institucionId },
   })
 
   if (!agente) return
 
-  const asigs = await prisma.asignacion.findMany({
+  // El vínculo agente -> asignación ya no es un campo directo de Asignacion;
+  // vive en TitularAsignacion (historial de titulares de un cargo).
+  const titularidades = await prisma.titularAsignacion.findMany({
     where: { agenteId: agente.id, institucionId },
-    select: { id: true },
+    select: { asignacionId: true },
   })
+  const asignacionIds = [...new Set(titularidades.map(t => t.asignacionId))]
 
-  for (const a of asigs) {
-    await cleanupAsignacion(a.id)
+  for (const id of asignacionIds) {
+    await cleanupAsignacion(id)
   }
 
   await cleanupAgente(agente.id)
@@ -149,7 +157,6 @@ export async function cleanupUsuario(
   })
 }
 
-// 🔥 CORREGIDO (este era el bug principal)
 export async function cleanupUnidadByCodigo(
   codigoUnidad: number,
   institucionId = 1
@@ -160,7 +167,6 @@ export async function cleanupUnidadByCodigo(
 
   if (!unidad) return
 
-  // 🔥 limpiar asignaciones primero
   const asignaciones = await prisma.asignacion.findMany({
     where: { unidadId: unidad.id },
     select: { id: true },
@@ -170,7 +176,6 @@ export async function cleanupUnidadByCodigo(
     await cleanupAsignacion(a.id)
   }
 
-  // 🔥 ahora sí borrar unidad
   await prisma.unidadOrganizativa.deleteMany({
     where: { id: unidad.id },
   })

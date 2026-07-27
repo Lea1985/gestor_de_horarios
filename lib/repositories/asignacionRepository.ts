@@ -3,18 +3,15 @@
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
-// Incluye el titular vigente como subconsulta anidada.
-// "Vigente" = activo: true, fecha_hasta: null.
-// Un cargo vacante devuelve titularVigente: null.
 const includeBase = {
   unidad: true,
- materia: {
-  select: {
-    id: true,
-    nombre: true,
-    cursoId: true,
+  materia: {
+    select: {
+      id: true,
+      nombre: true,
+      cursoId: true,
+    },
   },
-},
   comision: true,
   turno: true,
   titularidades: {
@@ -27,24 +24,21 @@ const includeBase = {
   },
 }
 
-// Tipo helper para exponer el titular aplanado en capa de use case / API.
-// El repositorio devuelve titularidades[0] | undefined; los use cases
-// pueden aplanarlo antes de serializar si prefieren la forma { agente }.
 export type AsignacionConTitular = Prisma.AsignacionGetPayload<{
   include: typeof includeBase
 }>
 
 export const asignacionRepository = {
- listar(tenantId: number, incluirInactivas = false) {
-  return prisma.asignacion.findMany({
-    where: {
-      institucionId: tenantId,
-      ...(incluirInactivas ? {} : { deletedAt: null }),
-    },
-    include: includeBase,
-    orderBy: { createdAt: "desc" },
-  })
-},
+  listar(tenantId: number, incluirInactivas = false) {
+    return prisma.asignacion.findMany({
+      where: {
+        institucionId: tenantId,
+        ...(incluirInactivas ? {} : { deletedAt: null }),
+      },
+      include: includeBase,
+      orderBy: { createdAt: "desc" },
+    })
+  },
 
   obtenerPorId(id: number, tenantId: number) {
     return prisma.asignacion.findFirst({
@@ -74,13 +68,6 @@ export const asignacionRepository = {
     })
   },
 
-  // Determina si la asignación tiene entidades relacionadas que restringen
-  // la edición de campos estructurales.
-  //
-  // OJO:
-  // TitularAsignacion NO bloquea edición.
-  // Crear una asignación con agente genera inmediatamente una titularidad inicial,
-  // y eso no debe considerarse "historial estructural".
   async tieneEntidadesRelacionadas(id: number): Promise<boolean> {
     const counts = await prisma.asignacion.findUnique({
       where: { id },
@@ -106,42 +93,18 @@ export const asignacionRepository = {
     )
   },
 
-  crear(data: {
-    tenantId: number
-    unidadId: number
-    identificadorEstructural: string
-    fecha_inicio: Date
-    fecha_fin: Date | null
-    materiaId?: number | null
-    comisionId?: number | null
-    turnoId: number
-  }) {
-    return prisma.asignacion.create({
-      data: {
-        institucionId: data.tenantId,
-        unidadId: data.unidadId,
-        identificadorEstructural: data.identificadorEstructural,
-        fecha_inicio: data.fecha_inicio,
-        fecha_fin: data.fecha_fin,
-        materiaId: data.materiaId ?? null,
-        comisionId: data.comisionId ?? null,
-        turnoId: data.turnoId,
+  verificarIdentificador(identificador: string, tenantId: number, excludeId?: number) {
+    return prisma.asignacion.findFirst({
+      where: {
+        identificadorEstructural: identificador,
+        institucionId: tenantId,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
       },
-      include: includeBase,
+      select: { id: true },
     })
   },
 
-  verificarIdentificador(identificador: string, tenantId: number, excludeId?: number) {
-  return prisma.asignacion.findFirst({
-    where: {
-      identificadorEstructural: identificador,
-      institucionId: tenantId,
-      deletedAt: null,
-      ...(excludeId ? { id: { not: excludeId } } : {}),
-    },
-    select: { id: true },
-  })
-},
   async actualizar(
     id: number,
     tenantId: number,
@@ -167,8 +130,6 @@ export const asignacionRepository = {
     })
   },
 
-  // softDelete cierra además el titular vigente en la misma transacción,
-  // evitando que queden TitularAsignacion abiertos apuntando a un cargo cesado.
   async softDelete(id: number, tenantId: number) {
     const existente = await prisma.asignacion.findFirst({
       where: {
@@ -186,7 +147,6 @@ export const asignacionRepository = {
     const ahora = new Date()
 
     return prisma.$transaction([
-      // Cerrar titular vigente si existe
       prisma.titularAsignacion.updateMany({
         where: {
           asignacionId: id,
@@ -199,7 +159,6 @@ export const asignacionRepository = {
         },
       }),
 
-      // Soft delete del cargo
       prisma.asignacion.update({
         where: { id: existente.id },
         data: {
@@ -269,7 +228,7 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-  
+
   existeEliminada(id: number, tenantId: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -281,11 +240,8 @@ export const asignacionRepository = {
     })
   },
 
-  // Reemplazar el método reactivar en asignacionRepository.ts
-
   async reactivar(id: number, tenantId: number) {
     return prisma.$transaction(async (tx) => {
-      // Reactivar la asignación
       await tx.asignacion.update({
         where: { id },
         data: {
@@ -295,7 +251,6 @@ export const asignacionRepository = {
         },
       })
 
-      // Reabrir la última titularidad cerrada
       const ultimaTitularidad = await tx.titularAsignacion.findFirst({
         where: {
           asignacionId: id,
