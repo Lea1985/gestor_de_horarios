@@ -1,5 +1,6 @@
 // lib/usecases/clases/actualizarClase.ts
 import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class ClaseNoEncontradaError extends Error {
   constructor() { super("Clase no encontrada") }
@@ -36,5 +37,14 @@ export async function actualizarClase(id: number, tenantId: number, body: {
     if (!incidencia) throw new IncidenciaInvalidaError()
   }
 
-  return claseProgramadaRepository.actualizar(id, { incidenciaId })
+  await claseProgramadaRepository.actualizar(id, { incidenciaId })
+
+  // Vincular o desvincular una incidencia cambia las condiciones vigentes
+  // de la clase -- el motor decide el estado/causa resultante.
+  await resolverClase(id, tenantId)
+
+  // Releer después de resolverClase: estado/causa/versionResolucion pueden
+  // haber cambiado como consecuencia del vínculo, y el caller necesita ver
+  // el estado real, no el que había antes de resolver.
+  return claseProgramadaRepository.actualizar(id, {})
 }

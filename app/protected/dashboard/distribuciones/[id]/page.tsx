@@ -13,7 +13,7 @@ type Distribucion = {
   estado:                string
   asignacion: {
     identificadorEstructural: string
-    agente?: { nombre: string; apellido: string }
+    titularidades?: { agente: { nombre: string; apellido: string } }[]
   }
 }
 
@@ -161,8 +161,8 @@ export default function EditarDistribucionPage({
             </h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{dist.asignacion.identificadorEstructural}</span>
-              {dist.asignacion.agente && (
-                <span> · {dist.asignacion.agente.apellido}, {dist.asignacion.agente.nombre}</span>
+              {dist.asignacion.titularidades?.[0] && (
+                <span> · {dist.asignacion.titularidades[0].agente.apellido}, {dist.asignacion.titularidades[0].agente.nombre}</span>
               )}
             </p>
           </div>
