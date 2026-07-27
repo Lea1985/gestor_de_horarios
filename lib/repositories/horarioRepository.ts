@@ -24,7 +24,13 @@ const claseInclude = {
   asignacion: {
     select: {
       identificadorEstructural: true,
-      agente: { select: { nombre: true, apellido: true } },
+      titularidades: {
+        where: { activo: true, fecha_hasta: null },
+        select: {
+          agente: { select: { nombre: true, apellido: true } },
+        },
+        take: 1,
+      },
     },
   },
   reemplazos: {
@@ -32,8 +38,8 @@ const claseInclude = {
     select: {
       id:          true,
       observacion: true,
-      asignacionSuplente: {
-        select: { agente: { select: { nombre: true, apellido: true } } },
+      agenteSuplente: {
+        select: { nombre: true, apellido: true },
       },
     },
   },
