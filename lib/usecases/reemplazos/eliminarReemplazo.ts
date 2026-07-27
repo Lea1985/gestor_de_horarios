@@ -1,5 +1,6 @@
 // lib/usecases/reemplazos/eliminarReemplazo.ts
 import { reemplazoRepository } from "@/lib/repositories/reemplazoRepository"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 import prisma from "@/lib/prisma"
 
 export class ReemplazoNoEncontradoError extends Error {
@@ -37,5 +38,8 @@ export async function eliminarReemplazo(id: number, tenantId: number) {
   }
 
   await reemplazoRepository.eliminar(id, reemplazo.claseId, tenantId)
+
+  await resolverClase(reemplazo.claseId, tenantId)
+
   return { ok: true, deleted: true }
 }

@@ -6,10 +6,8 @@
 //
 // Garantías que este servicio ofrece:
 //  1. generarParaRango es idempotente (skipDuplicates + @@unique real en DB).
-//  2. eliminarEnRango SIEMPRE requiere `hasta` explícito, nunca "todo lo futuro".
-//  3. eliminarEnRango nunca toca clases DICTADA salvo que se pida explícitamente.
-//  4. resolverCoberturaDelTramo evalúa el tramo EXACTO pedido, no por incidencia.
-//  5. suspenderNoVigentes nunca elimina: solo cambia Estado/Causa. La historia
+//  2. resolverCoberturaDelTramo evalúa el tramo EXACTO pedido, no por incidencia.
+//  3. suspenderNoVigentes nunca elimina: solo cambia Estado/Causa. La historia
 //     y la identidad de cada ClaseProgramada se preservan siempre.
 
 import prisma from "@/lib/prisma"
@@ -60,10 +58,6 @@ export const claseProgramadaService = {
 
     const modulos = distribucion.distribucionModulos.map(dm => dm.moduloHorario)
 
-    // Si todavía no se asignaron módulos a la distribución, no generamos
-    // nada. En modo "turno" (comisionId null) generarClases() defaultea a
-    // lunes-viernes cuando modulos.length === 0, lo cual generaría clases
-    // fantasma antes de que el usuario termine de configurar la distribución.
     if (modulos.length === 0) return { creadas: 0, saltadasPorExistentes: 0 }
 
     const feriados = await claseProgramadaRepository.listarFeriados(
@@ -96,9 +90,8 @@ export const claseProgramadaService = {
   },
 
   /**
-   * Reemplaza a eliminarEnRango para el caso de cambio de módulos/distribución.
-   * En vez de borrar, reconcilia el tramo contra la nueva lista de módulos
-   * en las dos direcciones:
+   * Reconcilia el tramo contra la nueva lista de módulos cuando cambia la
+   * distribución, en las dos direcciones:
    *   - SUSPENDE (causa CAMBIO_DISTRIBUCION) las clases que ya no corresponden.
    *   - REACTIVA (PROGRAMADA, causa NINGUNA) las que habíamos suspendido por
    *     CAMBIO_DISTRIBUCION en un cambio anterior y que vuelven a corresponder
@@ -116,16 +109,6 @@ export const claseProgramadaService = {
     const { institucionId, asignacionId, unidadId, comisionId, modulosNuevos } = params
     const { desde, hasta } = normalizarRango(params.desde, params.hasta)
 
-    // 1. Calcular qué fecha+módulo generaría la distribución nueva (en memoria,
-    //    sin tocar la base). incidenciaId null porque acá no aplica.
-    //
-    //    Guarda: si no hay módulos nuevos todavía (ej. nuevaVersionDistribucion
-    //    crea la versión vacía, a completar después con asignarModulos), NO
-    //    llamamos a generarClases() -- en modo turno (comisionId null) esa
-    //    función defaultea a lunes-viernes cuando modulos.length === 0, lo cual
-    //    generaría claves falsas y terminaría sin suspender nada. Con el set
-    //    vacío directamente, todas las clases existentes del tramo se marcan
-    //    para suspender, que es el comportamiento correcto acá.
     const clavesEsperadas = modulosNuevos.length === 0
       ? new Set<string>()
       : new Set(
@@ -138,11 +121,10 @@ export const claseProgramadaService = {
             modulos: modulosNuevos,
             desde,
             hasta,
-            diasSuspendidos: [], // el calendario se resuelve aparte, no acá
+            diasSuspendidos: [],
           }).map(c => `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`)
         )
 
-    // 2. Traer las clases existentes del tramo (mismos estados que eliminarEnRango tocaba)
     const existentes = await prisma.claseProgramada.findMany({
       where: {
         asignacionId,
@@ -152,7 +134,6 @@ export const claseProgramadaService = {
       select: { id: true, fecha: true, moduloId: true, estado: true, causa: true },
     })
 
-    // 3. Decidir cuáles ya no corresponden -> esas se suspenden
     const idsASuspender = existentes
       .filter(c => {
         const clave = `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`
@@ -160,13 +141,6 @@ export const claseProgramadaService = {
       })
       .map(c => c.id)
 
-    // 4. Reactivar el caso inverso: clases que hoy están SUSPENDIDA por
-    //    CAMBIO_DISTRIBUCION (o sea, las suspendimos nosotros en un cambio
-    //    anterior) y que vuelven a corresponder con la distribución actual
-    //    (ej. lunes -> martes -> lunes). Solo tocamos las que suspendimos
-    //    por esta misma causa -- si están SUSPENDIDA por INCIDENCIA o
-    //    CALENDARIO_ESCOLAR, esa es responsabilidad del Motor de Resolución,
-    //    no de esta función.
     const idsAReactivar = existentes
       .filter(c => {
         const clave = `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`
@@ -196,47 +170,6 @@ export const claseProgramadaService = {
     ])
 
     return { suspendidas: rSuspender.count, reactivadas: rReactivar.count }
-  },
-
-  /**
-   * Elimina clases de una asignación en un rango EXPLÍCITO [desde, hasta].
-   * Nunca elimina DICTADA salvo que se pida explícitamente en estadosElegibles.
-   * Antes de borrar, quita los Reemplazo asociados (FK sin cascade en schema).
-   *
-   * NOTA: se conserva por compatibilidad con nuevaVersionDistribucion.ts y
-   * eliminarDistribucion.ts, que todavía no fueron migrados a
-   * suspenderNoVigentes. Ver documento de arquitectura, pendiente de migración.
-   */
-  async eliminarEnRango(params: {
-    asignacionId: number
-    desde: Date
-    hasta: Date
-    estadosElegibles?: EstadoClase[]
-  }) {
-    const { desde, hasta } = normalizarRango(params.desde, params.hasta)
-    const estados = params.estadosElegibles ?? [
-      EstadoClase.PROGRAMADA,
-      EstadoClase.SUSPENDIDA,
-      EstadoClase.REEMPLAZADA,
-    ]
-
-    return prisma.$transaction(async (tx) => {
-      const clases = await tx.claseProgramada.findMany({
-        where: {
-          asignacionId: params.asignacionId,
-          fecha:  { gte: desde, lte: hasta },
-          estado: { in: estados },
-        },
-        select: { id: true },
-      })
-      const ids = clases.map(c => c.id)
-      if (ids.length === 0) return { eliminadas: 0 }
-
-      await tx.reemplazo.deleteMany({ where: { claseId: { in: ids } } })
-      const del = await tx.claseProgramada.deleteMany({ where: { id: { in: ids } } })
-
-      return { eliminadas: del.count }
-    })
   },
 
   /**
@@ -281,8 +214,6 @@ export const claseProgramadaService = {
       conReemplazo.map(c => `${c.reemplazos[0].asignacionTitularId}-${c.reemplazos[0].agenteSuplenteId}`)
     )
 
-    // Migrable únicamente si TODAS las clases del tramo (no solo algunas)
-    // tienen el mismo suplente activo.
     const migrable = conReemplazo.length === totalClases && suplentesUnicos.size === 1
 
     if (conReemplazo.length === 0) return []
@@ -352,11 +283,6 @@ export const claseProgramadaService = {
    * modifica un CalendarioEscolar con suspendeClases=true dentro de un
    * período. Solo toca PROGRAMADA -> SUSPENDIDA (no pisa REEMPLAZADA/DICTADA
    * ni clases suspendidas por otra causa de mayor precedencia).
-   *
-   * Ahora que existe `causa`, la reversión (suspende: false) es segura:
-   * solo revierte clases marcadas con causa CALENDARIO_ESCOLAR Y este
-   * calendarioEscolarId puntual -- nunca toca una suspendida por INCIDENCIA
-   * u otra causa distinta.
    */
   async recalcularSuspendidasPorCalendario(params: {
     institucionId: number
@@ -400,5 +326,115 @@ export const claseProgramadaService = {
       })
       return { actualizadas: r.count }
     }
+  },
+
+  /**
+   * Reconcilia TODAS las clases de la institución contra el período recién
+   * activado. No usa el Motor de Resolución clase por clase (por escala
+   * institucional) -- expresa la misma tabla de precedencia en 3
+   * actualizaciones en lote, aprovechando que PERIODO_OPERATIVO solo tiene
+   * dos desenlaces (dentro/fuera de rango) y una posición fija: pierde
+   * contra INCIDENCIA y CAMBIO_DISTRIBUCION, gana contra CALENDARIO_ESCOLAR
+   * y NINGUNA.
+   *
+   * No toca DICTADA -- es historia, el motor nunca la re-resuelve.
+   */
+  async reconciliarPorPeriodoOperativo(params: {
+    institucionId: number
+    desde: Date
+    hasta: Date
+  }) {
+    const { institucionId, desde, hasta } = params
+    const causasQueGanan = [Causa.INCIDENCIA, Causa.CAMBIO_DISTRIBUCION]
+
+    const suspendidas = await prisma.claseProgramada.updateMany({
+      where: {
+        institucionId,
+        estado: { not: EstadoClase.DICTADA },
+        causa:  { notIn: [...causasQueGanan, Causa.PERIODO_OPERATIVO] },
+        OR: [{ fecha: { lt: desde } }, { fecha: { gt: hasta } }],
+      },
+      data: {
+        estado: EstadoClase.SUSPENDIDA,
+        causa:  Causa.PERIODO_OPERATIVO,
+        versionResolucion: { increment: 1 },
+      },
+    })
+
+    const revertidasACalendario = await prisma.claseProgramada.updateMany({
+      where: {
+        institucionId,
+        causa: Causa.PERIODO_OPERATIVO,
+        calendarioEscolarId: { not: null },
+        fecha: { gte: desde, lte: hasta },
+      },
+      data: {
+        estado: EstadoClase.SUSPENDIDA,
+        causa:  Causa.CALENDARIO_ESCOLAR,
+        versionResolucion: { increment: 1 },
+      },
+    })
+
+    const revertidasAProgramada = await prisma.claseProgramada.updateMany({
+      where: {
+        institucionId,
+        causa: Causa.PERIODO_OPERATIVO,
+        calendarioEscolarId: null,
+        fecha: { gte: desde, lte: hasta },
+      },
+      data: {
+        estado: EstadoClase.PROGRAMADA,
+        causa:  Causa.NINGUNA,
+        versionResolucion: { increment: 1 },
+      },
+    })
+
+    return {
+      suspendidasPorPeriodo: suspendidas.count,
+      revertidasACalendario: revertidasACalendario.count,
+      revertidasAProgramada: revertidasAProgramada.count,
+    }
+  },
+
+  async vincularIncidencia(params: {
+    asignacionId: number
+    incidenciaId: number
+    desde: Date
+    hasta: Date
+  }): Promise<{ ids: number[] }> {
+    const { desde, hasta } = normalizarRango(params.desde, params.hasta)
+    const clases = await prisma.claseProgramada.findMany({
+      where: {
+        asignacionId: params.asignacionId,
+        fecha: { gte: desde, lte: hasta },
+        estado: { not: EstadoClase.DICTADA },
+      },
+      select: { id: true },
+    })
+    if (clases.length === 0) return { ids: [] }
+
+    await prisma.claseProgramada.updateMany({
+      where: { id: { in: clases.map(c => c.id) } },
+      data:  { incidenciaId: params.incidenciaId },
+    })
+    return { ids: clases.map(c => c.id) }
+  },
+
+  /**
+   * Desvincula una incidencia (eliminada) de sus ClaseProgramada. El llamador
+   * debe volver a resolver cada clase devuelta (normalmente vía resolverClase).
+   */
+  async desvincularIncidencia(incidenciaId: number): Promise<{ ids: number[] }> {
+    const clases = await prisma.claseProgramada.findMany({
+      where: { incidenciaId, estado: { not: EstadoClase.DICTADA } },
+      select: { id: true },
+    })
+    if (clases.length === 0) return { ids: [] }
+
+    await prisma.claseProgramada.updateMany({
+      where: { id: { in: clases.map(c => c.id) } },
+      data:  { incidenciaId: null },
+    })
+    return { ids: clases.map(c => c.id) }
   },
 }

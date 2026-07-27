@@ -1,5 +1,7 @@
 // lib/usecases/incidencias/eliminarIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 import prisma from "@/lib/prisma"
 
 export class IncidenciaNoEncontradaError extends Error {
@@ -43,6 +45,14 @@ export async function eliminarIncidencia(id: number, tenantId: number) {
   if (tieneReemplazos > 0) throw new TieneReemplazosError()
 
   await incidenciaRepository.eliminar(id, tenantId)
+
+  // Liberar las clases que quedaron vinculadas a esta incidencia y volver a
+  // resolver su estado (normalmente vuelven a PROGRAMADA, o a lo que
+  // corresponda por período/calendario si esas causas siguen vigentes).
+  const { ids } = await claseProgramadaService.desvincularIncidencia(id)
+  for (const claseId of ids) {
+    await resolverClase(claseId, tenantId)
+  }
 
   return { ok: true, deleted: true }
 }

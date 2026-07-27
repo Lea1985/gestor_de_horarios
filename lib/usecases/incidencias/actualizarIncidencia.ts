@@ -1,6 +1,6 @@
 // lib/usecases/incidencias/actualizarIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
-import { generarClasesIncidencia } from "./generarClasesIncidencia"
+import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 import prisma from "@/lib/prisma"
 
 export class IncidenciaNoEncontradaError extends Error {
@@ -98,12 +98,15 @@ export async function actualizarIncidencia(
     observacion:     body.observacion as string | undefined,
   })
 
-  // Si cambió fecha_hasta generamos ClaseProgramada nuevas — idempotente
-  const fechaHastaCambio =
+  // Si cambió el rango de fechas (desde y/o hasta), volvemos a vincular y
+  // resolver las clases del nuevo rango. No des-vincula las que quedaron
+  // afuera si el rango se achicó -- caso pendiente, ver nota aparte.
+  const rangoCambio =
+    nuevaDesde.getTime() !== incidencia.fecha_desde.getTime() ||
     nuevaHasta.getTime() !== incidencia.fecha_hasta.getTime()
 
-  if (fechaHastaCambio) {
-    await generarClasesIncidencia(id, tenantId)
+  if (rangoCambio) {
+    await resolverClasesIncidencia(id, tenantId)
   }
 
   return actualizada

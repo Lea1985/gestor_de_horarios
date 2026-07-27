@@ -1,5 +1,6 @@
 // lib/usecases/reemplazos/reasignarReemplazoAIncidencia.ts
 import prisma from "@/lib/prisma"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class ClaseNoEncontradaError extends Error {
   constructor() { super("Clase no encontrada") }
@@ -14,9 +15,8 @@ export class IncidenciaNoValidaError extends Error {
  *  1. Desactiva el reemplazo anterior (si existe)
  *  2. Mueve la clase a la nueva incidencia (clase.incidenciaId = nuevaIncidenciaId)
  *  3. Crea el nuevo reemplazo
- * Todo en una transacción. De que clase.incidenciaId siempre apunte al
- * dueño ACTUAL depende que eliminarReemplazo pueda bloquear/permitir
- * la baja correctamente, sin importar cuántos niveles tenga la cadena.
+ * El estado/causa final lo decide resolverClase después de la transacción,
+ * no se hardcodea acá.
  */
 export async function reasignarReemplazoAIncidencia(
   tenantId: number,
@@ -46,7 +46,7 @@ export async function reasignarReemplazoAIncidencia(
   })
   if (!incidencia) throw new IncidenciaNoValidaError()
 
-  return prisma.$transaction(async (tx) => {
+  const nuevoReemplazo = await prisma.$transaction(async (tx) => {
     await tx.reemplazo.updateMany({
       where: { claseId, activo: true },
       data:  { activo: false, deletedAt: new Date() },
@@ -54,7 +54,7 @@ export async function reasignarReemplazoAIncidencia(
 
     await tx.claseProgramada.update({
       where: { id: claseId },
-      data:  { incidenciaId: nuevaIncidenciaId, estado: "REEMPLAZADA" },
+      data:  { incidenciaId: nuevaIncidenciaId },
     })
 
     return tx.reemplazo.create({
@@ -62,10 +62,14 @@ export async function reasignarReemplazoAIncidencia(
         claseId,
         asignacionTitularId,
         agenteSuplenteId,
-        incidenciaId: nuevaIncidenciaId,   // NUEVO
+        incidenciaId: nuevaIncidenciaId,
         observacion,
         activo: true,
       },
     })
   })
+
+  await resolverClase(claseId, tenantId)
+
+  return nuevoReemplazo
 }

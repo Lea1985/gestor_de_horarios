@@ -1,5 +1,6 @@
 // lib/usecases/incidencias/reactivarIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
+import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 
 export class IncidenciaNoEncontradaError extends Error {
   constructor() { super("Incidencia no encontrada") }
@@ -33,5 +34,8 @@ export async function reactivarIncidencia(id: number, tenantId: number) {
   if (superposicion) throw new SuperposicionError()
 
   await incidenciaRepository.reactivar(id)
+
+  await resolverClasesIncidencia(id, tenantId)
+
   return { ok: true }
 }

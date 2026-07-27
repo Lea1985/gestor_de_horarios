@@ -1,6 +1,7 @@
 // lib/usecases/incidencias/crearIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import prisma from "@/lib/prisma"
+import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 
 export class DatosIncidenciaInvalidosError extends Error {
   constructor() { super("asignacionId, fecha_desde, fecha_hasta y codigarioItemId son requeridos") }
@@ -100,7 +101,7 @@ export async function crearIncidencia(
   )
   if (conflicto) throw new SuperposicionError(conflicto)
 
-  return incidenciaRepository.crear({
+  const nueva = await incidenciaRepository.crear({
     asignacionId,
     fecha_desde:      fechaDesde,
     fecha_hasta:      fechaHasta,
@@ -108,4 +109,8 @@ export async function crearIncidencia(
     incidenciaPadreId,
     observacion,
   })
+
+  await resolverClasesIncidencia(nueva.id, tenantId)
+
+  return nueva
 }

@@ -1,6 +1,7 @@
 // lib/usecases/reemplazos/crearReemplazo.ts
 import { reemplazoRepository } from "@/lib/repositories/reemplazoRepository"
 import { validarSuperposicionSuplente } from "./validarSuperposicion"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class DatosReemplazoInvalidosError extends Error {
   constructor() { super("claseId y asignacionTitularId son obligatorios") }
@@ -52,11 +53,16 @@ export async function crearReemplazo(
   if (await reemplazoRepository.verificarReemplazoActivo(claseId, tenantId)) {
     throw new ReemplazoActivoExistenteError()
   }
-  return reemplazoRepository.crear(tenantId, {
+
+  const reemplazo = await reemplazoRepository.crear(tenantId, {
     claseId,
     asignacionTitularId,
     agenteSuplenteId,
     incidenciaId,
     observacion,
   })
+
+  await resolverClase(claseId, tenantId)
+
+  return reemplazo
 }
