@@ -1,516 +1,147 @@
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
----
-
 # ALNEXT Development Guide
-## Proyecto
+
 ALNEXT es un sistema de gestión integral para instituciones educativas.
 
-El objetivo principal es mantener:
+Prioridades: arquitectura limpia, reglas de negocio preservadas, mínimas regresiones, cambios incrementales, sin repetir análisis ya hecho.
 
-- arquitectura limpia;
-- reglas de negocio claras;
-- alta mantenibilidad;
-- trazabilidad;
-- bajo riesgo de regresiones.
+## Reglas de oro
 
-La prioridad siempre es la calidad del sistema por sobre la velocidad de implementación.
+**Comprender antes de modificar.** Revisar la instrucción actual, documentación relevante y, si el usuario lo indica, el informe de sesión de continuidad. No repetir una auditoría completa si ya existe análisis documentado suficiente.
 
----
+**Mínima intervención.** Modificar solo lo necesario para el objetivo pedido. Nada de refactors oportunistas, renombres, "mejoras" no solicitadas o cambios en módulos no relacionados. No reemplazar una implementación existente que funciona solo por considerarla más moderna o elegante. No modificar comportamiento existente salvo que sea necesario para cumplir el objetivo solicitado. Si aparece una mejora independiente: documentarla y proponerla aparte, sin mezclarla.
 
-# ALNEXT - Reglas de Oro (Para Claude)
+**No ampliar el alcance.** Resolver el problema pedido, no convertirlo en una auditoría general. Bugs o deuda técnica no relacionados: documentar, no implementar.
 
-**ANTES DE CADA ACCIÓN:**
+**Áreas protegidas — requieren autorización explícita antes de tocar:**
 
-1. **Graphify primero** - Siempre query → explain → path
-2. **Schema protegido** - NO tocar sin aprobación explícita
-3. **Código funcionando** - NO tocar sin necesidad
-4. **Multi-tenant** -NO tocar ningún campo, modelo o lógica relacionada 
-   con institution/tenant/organization (fuera de alcance)
-5. **Cambios grandes** - Dividir en etapas + aprobación
+* `schema.prisma` (modelos, relaciones, FKs, índices, migraciones): no modificar ni crear migraciones sin autorización explícita.
+* Multi-tenant (`tenant`, `institution`, `organization` y cualquier campo o lógica de aislamiento): fuera de alcance actual. Si una solución los requiere: explicar por qué, impacto, alternativas y esperar aprobación antes de implementar.
 
-**SIEMPRE:**
-- Explicar antes de implementar
-- Esperar aprobación si es mediano/grande
-- Usar Graphify después de cambios
+**Cambios grandes, por etapas.** Antes de una etapa: objetivo, alcance, archivos principales e impacto. Una vez aprobada una etapa, ejecutarla completa sin re-pedir aprobación por cada paso interno.
 
-**NUNCA:**
-- Asumir cambios en arquitectura
-- Refactorizar oportunistamente
-- Modificar comportamiento existente sin necesidad
+**Sprints y documentación histórica son contexto, no requerimientos.** Sirven para entender el porqué de decisiones pasadas; no generan trabajo activo salvo instrucción explícita del usuario.
 
-Nunca asumir cambios sobre:
+## Graphify
 
-- arquitectura;
-- modelo de datos;
-- reglas de negocio.
+Usar cuando aporte valor para entender relaciones, localizar flujos o validar hipótesis. No es obligatorio antes de cada acción y no se deben repetir consultas que ya dieron la información necesaria.
 
-Si una modificación afecta alguno de estos puntos:
-- Detener la implementación.
-- Explicar el impacto.
-- Solicitar aprobación explícita antes de continuar.
+```bash
+graphify query "<pregunta>"
+graphify explain "<concepto>"
+graphify path "<A>" "<B>"
+```
 
-# Stack Tecnológico
+* `graphify-out/wiki/index.md`: navegación general, si existe.
+* `graphify-out/GRAPH_REPORT.md`: revisión arquitectónica amplia, cuando las consultas puntuales no alcancen.
 
-- Next.js
-- TypeScript
-- Prisma ORM
-- PostgreSQL
-- Arquitectura por capas
-- Casos de Uso (Use Cases)
-- Services
-- Repositories
-- DTOs
-- Validaciones centralizadas
+Después de modificar código relevante:
 
----
-# Arquitectura
-
-Respetar siempre la arquitectura existente.
-
-Flujo esperado:
-
-API
-↓
-Use Cases
-↓
-Services
-↓
-Repositories
-↓
-Prisma
-
-Las reglas de negocio deben permanecer en los Use Cases y Services.
-
-Evitar colocar lógica de negocio en:
-
-- API Routes
-- Controllers
-- Pages
-- Componentes UI
-
----
-# Principios de Desarrollo
-
-Antes de escribir código:
-
-1. Comprender completamente el problema.
-2. Analizar la arquitectura involucrada.
-3. Utilizar Graphify para identificar relaciones.
-4. Identificar archivos afectados.
-5. Explicar el impacto.
-6. Proponer una estrategia.
-7. Esperar aprobación antes de cambios importantes.
-
-Nunca realizar modificaciones masivas sin justificar previamente la necesidad.
-
----
-# Protección del Modelo de Datos Prisma (CRÍTICO)
-
-El archivo `schema.prisma` representa una parte crítica del sistema.
-
-Reglas obligatorias:
-
-- Nunca modificar `schema.prisma` sin autorización explícita.
-- Nunca crear migraciones automáticamente.
-- Nunca modificar modelos existentes sin explicar el impacto.
-- Nunca agregar, eliminar o modificar:
-  - modelos;
-  - relaciones;
-  - claves foráneas;
-  - índices;
-  - restricciones.
-
-Si una solución requiere cambios en el schema:
-
-1. Explicar por qué es necesario.
-2. Mostrar alternativas posibles.
-3. Explicar impacto funcional.
-4. Explicar impacto técnico.
-5. Proponer la migración necesaria.
-6. Esperar aprobación.
-
-Siempre asumir que el schema está protegido.
-
----
-# Reglas de Negocio Principales
-
-Las entidades principales del sistema son:
-
-PeriodoOperativo
-↓
-Distribucion
-↓
-Asignacion
-↓
-ClaseProgramada
-↓
-Incidencia
-↓
-Reemplazo
-
-Estas relaciones representan el núcleo funcional del sistema.
-
-Antes de modificar cualquiera de estas entidades analizar el impacto completo.
-
----
-# Prioridad Actual (Temporal)
-
-Actualmente la prioridad del desarrollo es finalizar correctamente la arquitectura y comportamiento del módulo:
-
-## ClaseProgramada
-Antes de realizar cambios relacionados con ClaseProgramada:
-
-- revisar la arquitectura existente;
-- analizar el flujo completo;
-- identificar casos de uso involucrados;
-- revisar servicios;
-- revisar repositorios;
-- revisar APIs;
-- analizar impacto sobre:
-  - PeriodoOperativo;
-  - Distribucion;
-  - Asignacion;
-  - Incidencia;
-  - Reemplazo.
-
-No implementar cambios directamente.
-
-Primero realizar una revisión arquitectónica y presentar una propuesta.
-
----
-# Revisión Arquitectónica de ClaseProgramada
-
-ClaseProgramada es una funcionalidad central del sistema.
-
-Antes de modificarla:
-
-- comprender cómo se generan las clases;
-- comprender cómo se actualizan;
-- comprender cómo se cancelan;
-- comprender la relación con incidencias;
-- comprender la relación con reemplazos;
-- identificar posibles inconsistencias.
-
-Las mejoras arquitectónicas deben ser propuestas primero.
-
-No realizar refactorizaciones oportunistas durante una tarea funcional.
-
----
-# Principio de Mínima Intervención
-
-Modificar únicamente los archivos necesarios para cumplir el objetivo solicitado.
-
-No:
-- realizar mejoras no solicitadas;
-- refactorizar código cercano solamente porque fue encontrado;
-- cambiar nombres o estructuras sin necesidad;
-- modificar módulos relacionados sin justificación.
-
-Si se detecta una oportunidad de mejora:
-
-1. Documentarla.
-2. Explicar el beneficio.
-3. Presentarla como propuesta independiente.
-
----
-# Definición del Tamaño de Cambios
-
-## Cambio pequeño
-Características:
-
-- Hasta 3 archivos.
-- Sin cambios arquitectónicos.
-- Sin cambios de schema.
-- Sin cambios importantes de reglas de negocio.
-
-Puede implementarse luego de una explicación breve y confirmación del usuario.
-
----
-## Cambio mediano
-
-Características:
-
-- Entre 3 y 8 archivos.
-- Puede afectar servicios o casos de uso.
-- Puede modificar comportamiento funcional.
-
-Requiere:
-- análisis previo;
-- propuesta;
-- aprobación antes de implementar.
-
----
-## Cambio grande
-
-Características:
-
-- Más de 8 archivos.
-- Cambios arquitectónicos.
-- Cambios de reglas de negocio.
-- Cambios de modelo de datos.
-- Refactorizaciones importantes.
-
-Debe:
-
-- dividirse en etapas;
-- implementarse progresivamente;
-- validarse después de cada etapa.
-
----
-# Checklist Antes de Implementar
-
-Antes de modificar código verificar:
-
-- [ ] Graphify fue utilizado.
-- [ ] El flujo funcional fue comprendido.
-- [ ] Los archivos afectados fueron identificados.
-- [ ] El impacto arquitectónico fue analizado.
-- [ ] Las reglas de negocio fueron revisadas.
-- [ ] Las alternativas fueron consideradas.
-- [ ] El plan fue presentado.
-- [ ] La aprobación fue recibida.
-
----
-# Manejo de Código Legacy
-
-Si se encuentra código que no cumple con las reglas actuales:
-
-- No modificar automáticamente.
-- No refactorizar dentro de otra tarea.
-- Documentar la observación.
-- Proponer una mejora separada.
-
-El objetivo es evolucionar el sistema de manera segura.
-
----
-# Flujo de Trabajo Esperado
-
-Ejemplo:
-
-Usuario:
-
-"Necesito agregar una validación en asignaciones."
-
-Proceso esperado:
-
-1. Ejecutar Graphify:
-
-graphify query "validacion asignaciones"
-
-2. Identificar componentes involucrados.
-3. Explicar dónde debería implementarse.
-4. Analizar impacto.
-5. Proponer solución.
-6. Esperar aprobación.
-7. Implementar solamente los cambios aprobados.
-8. Ejecutar:
+```bash
 graphify update .
+```
 
-9. Informar cambios realizados.
+## Arquitectura
 
----
-# Respuestas Esperadas
+```text
+API → Use Cases → Services → Repositories → Prisma
+```
 
-Antes de escribir código:
+Las reglas de negocio viven en Use Cases y Services.
 
-Explicar:
+No colocar reglas de negocio en:
 
-- qué problema se está resolviendo;
-- qué archivos intervienen;
-- qué impacto tiene;
-- cuál es la estrategia propuesta.
+* API Routes;
+* Controllers;
+* Pages;
+* componentes UI.
 
-No comenzar implementando directamente.
+No introducir arquitectura paralela sin autorización.
 
----
+## Tamaño de cambio y aprobación
 
-# Control de Versiones
+| Tamaño  | Alcance                                                          | Requiere                                      |
+| ------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| Pequeño | ≤3 archivos, sin tocar schema ni arquitectura                    | Explicación breve, luego implementar          |
+| Mediano | 3–8 archivos, impacto en Services/Use Cases                      | Análisis + propuesta + aprobación previa      |
+| Grande  | >8 archivos, cambios arquitectónicos, schema o reglas de negocio | Dividir en etapas, aprobar y validar cada una |
 
-Antes de cambios importantes:
+La cantidad de archivos es orientativa. Cualquier cambio que afecte arquitectura, schema o reglas de negocio se considera al menos mediano, independientemente de la cantidad de archivos.
 
-- verificar estado de Git;
-- recomendar commit previo si corresponde.
+## Fuente de verdad
 
-Después de cambios importantes:
+Orden de prioridad:
 
-- informar archivos modificados;
-- sugerir commit descriptivo.
-
----
-# Testing y Validación
-
-El proyecto posee cobertura de testing parcial.
-
-El objetivo es aumentar progresivamente la confiabilidad del sistema sin introducir complejidad innecesaria.
-
-## Principios
-
-Antes de implementar cambios:
-
-- Revisar si existen tests relacionados con la funcionalidad afectada.
-- Analizar qué escenarios críticos deberían validarse.
-- Identificar riesgos de regresión.
-- No asumir que existe cobertura completa.
-
-## Creación de Tests
-
-No crear nuevos frameworks, herramientas o estructuras de testing sin aprobación explícita.
-
-Antes de agregar tests nuevos:
-
-1. Explicar qué comportamiento se desea validar.
-2. Identificar la capa adecuada para realizar la prueba.
-3. Proponer la estrategia de testing.
-4. Esperar aprobación.
-
-## Prioridad de Testing
-
-Priorizar pruebas sobre reglas de negocio críticas:
-
-- generación de ClaseProgramada;
-- modificación de PeriodoOperativo;
-- cambios de Distribucion;
-- cambios de Asignacion;
-- cancelaciones;
-- incidencias;
-- reemplazos.
-
-Las pruebas deben enfocarse primero en comportamientos de negocio, no solamente en cobertura de líneas.
-
-## Validación Manual
-
-Cuando no existan tests automatizados adecuados:
-
-- indicar qué validaciones manuales deben realizarse;
-- describir los escenarios a probar;
-- identificar posibles impactos.
-
-## Regla importante
-
-Nunca eliminar, modificar o ignorar un test existente solamente para hacer pasar una implementación.
-
-Si un test falla:
-1. Analizar si el error está en el código.
-2. Analizar si el test quedó desactualizado.
-3. Explicar la causa antes de modificarlo.
----
-# Restricción Arquitectónica: Multi-tenant
-
-Importante: La implementación multi-tenant está fuera del alcance actual. No modificar, ni eliminar lo existen. 
-Reglas obligatorias:
-
-- No agregar conceptos de tenant
-- No agregar campos como tenantId, organizationId, institutionId
-- No modificar modelos existentes para soportar múltiples instituciones
-- No crear middleware de aislamiento por tenant
-- No modificar autenticación o autorización con criterios multi-tenant
-- No diseñar repositorios pensando en separación multi-tenant
-- No proponer migraciones relacionadas con multi-tenant
-
-Si durante el análisis aparece una necesidad relacionada con multi-tenant:
-
-1. Explicar el impacto arquitectónico.
-3. No implementarla.
-4. Esperar una decisión explícita del proyecto.
-
-Nunca introducir decisiones arquitectónicas futuras sin aprobación explícita.
-
-Ejemplos de decisiones fuera de alcance actual:
-
-- Multi-tenant.
-- Cambios profundos del modelo de datos.
-- Reemplazo de arquitectura.
-- Migración tecnológica.
-
----
-# Preservación del Sistema Existente (CRÍTICO)
-
-El código, configuraciones y funcionalidades existentes deben considerarse estables salvo evidencia concreta de un problema o una necesidad funcional.
-
-Regla principal:
-
-No modificar comportamiento existente salvo que sea estrictamente necesario para cumplir el objetivo solicitado y exista aprobación explícita.
-
-Esto incluye:
-
-- lógica de negocio existente;
-- modelos Prisma;
-- migraciones;
-- APIs existentes;
-- middleware;
-- proxy;
-- autenticación;
-- autorización;
-- configuración del proyecto;
-- infraestructura;
-- componentes funcionales;
-- flujos operativos.
-
-Antes de modificar cualquier componente existente:
-
-1. Explicar por qué es necesario.
-2. Identificar qué comportamiento puede verse afectado.
-3. Analizar alternativas que eviten la modificación.
-4. Proponer el cambio.
-5. Esperar aprobación.
-
-No realizar mejoras oportunistas sobre código estable.
-
-No reemplazar implementaciones existentes por alternativas nuevas solamente por considerarlas más modernas.
-
-La prioridad es evolucionar el sistema preservando la estabilidad actual.
-
-# Frontend
-
-El frontend debe respetar los contratos existentes.
-
-Antes de modificar componentes:
-
-- verificar APIs existentes;
-- verificar DTOs;
-- verificar validaciones del backend;
-- evitar duplicar reglas de negocio en UI.
-
-No trasladar lógica de negocio al frontend solamente para simplificar componentes.
-
----
-# Jerarquía de Fuentes de Verdad del Proyecto
-
-El proyecto contiene documentación histórica, análisis previos y antiguos planes de desarrollo.
-
-No toda la documentación representa el estado actual del sistema.
-
-La prioridad de información debe ser:
-
-1. Instrucciones explícitas dadas por el usuario durante la tarea actual.
-2. Código existente funcionando actualmente.
-3. Modelo de datos actual (`schema.prisma`).
-4. Reglas de negocio actuales documentadas.
+1. Instrucciones actuales del usuario.
+2. Código actual.
+3. `schema.prisma` actual.
+4. Reglas de negocio vigentes.
 5. Documentación técnica vigente.
-6. Documentación histórica y antiguos sprints.
+6. Informes de sesión indicados explícitamente como continuidad.
+7. Sprints y documentación histórica.
 
-IMPORTANTE: Los documentos históricos dentro de docs/ y carpetas de sprint pueden consultarse para comprender la evolución del proyecto, decisiones anteriores y contexto técnico.
-No representan requerimientos activos salvo confirmación explícita del usuario.
+Ante contradicción: priorizar la fuente de mayor nivel, informar la discrepancia y no cambiar el sistema solo para alinearlo con historia.
 
-No deben utilizarse para:
+## Prioridad actual: ClaseProgramada
 
-- definir nuevas funcionalidades;
-- crear tareas pendientes;
-- continuar planes abandonados;
-- modificar la arquitectura actual;
-- justificar cambios no solicitados.
+```text
+PeriodoOperativo
+→ Distribucion / DistribucionHoraria
+→ Asignacion
+→ ClaseProgramada
+→ Incidencia
+→ Reemplazo
+```
 
-Si una documentación histórica contradice una instrucción actual o el comportamiento existente del sistema:
-- priorizar la instrucción actual;
-- respetar el código vigente;
-- informar la diferencia encontrada.
-Nunca asumir que una tarea mencionada en un sprint antiguo continúa vigente.
+Al tocar estas entidades, considerar el impacto sobre:
 
-Antes de implementar cualquier cambio, validar que el requerimiento proviene de una solicitud actual del usuario.
+* generación;
+* modificación;
+* suspensión/cancelación;
+* calendario;
+* incidencias;
+* reemplazos.
+
+Reutilizar análisis previo disponible antes de re-auditar.
+
+## Testing
+
+Antes de modificar: revisar tests relacionados y escenarios críticos.
+
+Prioridad:
+
+* generación de `ClaseProgramada`;
+* cambios de `PeriodoOperativo`;
+* cambios de `Distribucion`;
+* cambios de módulos;
+* incidencias;
+* reemplazos;
+* cancelaciones.
+
+No crear frameworks de testing nuevos sin autorización.
+
+Si un test falla: analizar la causa (código, datos o test) antes de tocarlo.
+
+Nunca modificar un test solo para hacer pasar una implementación incorrecta.
+
+## Flujo de trabajo
+
+```text
+Contexto existente
+→ análisis de lo que falta
+→ diagnóstico
+→ aprobación (si el tamaño del cambio la requiere)
+→ implementación del alcance acordado
+→ validación (tests + graphify update .)
+→ informe
+```
+
+El informe final debe incluir:
+
+* archivos modificados;
+* comportamiento implementado;
+* pruebas realizadas;
+* resultados de validación;
+* pendientes;
+* hallazgos no relacionados que deban documentarse.
+
+Cuando el cambio requiera aprobación (mediano o grande), no implementar hasta recibirla explícitamente.
