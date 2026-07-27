@@ -2,6 +2,7 @@
 
 import { calendarioEscolarRepository } from "@/lib/repositories/calendarioEscolarRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 
 export class CalendarioEscolarNoEncontradoError extends Error {
   constructor() {
@@ -40,5 +41,17 @@ export async function eliminarCalendarioEscolar(
     calendarioId,
     tenantId
   )
+
+  // Si este evento suspendía clases, borrarlo debe revertirlas -- si no,
+  // quedan SUSPENDIDA por un evento de calendario que ya no existe.
+  if (registro.suspendeClases) {
+    await claseProgramadaService.recalcularSuspendidasPorCalendario({
+      institucionId:       tenantId,
+      calendarioEscolarId: calendarioId,
+      fecha:               registro.fecha,
+      suspende:            false,
+    })
+  }
+
   return { ok: true }
 }

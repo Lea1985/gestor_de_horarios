@@ -28,20 +28,11 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
     throw new YaHayPeriodoActivoError(activoExistente.id, activoExistente.nombre)
   }
 
-  // 1. Activar el período (una sola escritura; el índice único parcial en DB
-  //    garantiza que nunca haya dos ACTIVO aunque haya una carrera de requests)
   const periodoActivo = await prisma.periodoOperativo.update({
     where: { id: periodoId },
     data:  { estado: "ACTIVO" },
   })
 
-  // 2. Recorrer distribuciones cuyo rango se solape con el nuevo período.
-  //    Se filtra por `activo` Y `estado` juntos — son dos campos separados
-  //    en el schema que hoy se mantienen sincronizados a mano (ver
-  //    nuevaVersionDistribucion.ts), pero nada garantiza que sigan así
-  //    siempre. Exigir los dos evita traer una distribución que quedó
-  //    lógicamente inactiva por `estado` aunque `activo` no se haya
-  //    actualizado en algún flujo futuro.
   const distribuciones = await prisma.distribucionHoraria.findMany({
     where: {
       institucionId: tenantId,
@@ -64,10 +55,6 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
   const distribucionesSinModulos: { id: number; identificadorEstructural: string; version: number }[] = []
 
   for (const dist of distribuciones) {
-    // Reporte explícito: si no tiene módulos, no hay nada que generar —
-    // se lo informamos al usuario en vez de dejarlo pasar en silencio
-    // (generarParaRango también lo detecta internamente y devuelve 0,
-    // pero acá lo distinguimos para el mensaje de resultado).
     if (dist._count.distribucionModulos === 0) {
       distribucionesSinModulos.push({
         id: dist.id,
@@ -77,8 +64,6 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
       continue
     }
 
-    // El rango real a generar es la intersección [dist.desde, periodo.hasta] —
-    // nunca antes del inicio de la distribución ni después del fin del período.
     const desde = dist.fecha_vigencia_desde > periodoActivo.fecha_desde
       ? dist.fecha_vigencia_desde
       : periodoActivo.fecha_desde
@@ -96,10 +81,20 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
     totalCreadas += creadas
   }
 
+  // Reconciliar TODAS las clases existentes de la institución contra el
+  // nuevo rango vigente -- las que quedan fuera pasan a SUSPENDIDA por
+  // PERIODO_OPERATIVO, y las que vuelven a caer adentro se revierten.
+  const reconciliacion = await claseProgramadaService.reconciliarPorPeriodoOperativo({
+    institucionId: tenantId,
+    desde:         periodoActivo.fecha_desde,
+    hasta:         periodoActivo.fecha_hasta,
+  })
+
   return {
     periodo: periodoActivo,
     distribucionesProcesadas: distribuciones.length - distribucionesSinModulos.length,
     clasesCreadas: totalCreadas,
     distribucionesSinModulos,
+    ...reconciliacion,
   }
 }

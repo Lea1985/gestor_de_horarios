@@ -2,6 +2,7 @@
 
 import { calendarioEscolarRepository } from "@/lib/repositories/calendarioEscolarRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 
 export class CalendarioEscolarNoEncontradoError extends Error {
   constructor() {
@@ -19,8 +20,6 @@ export async function reactivarCalendarioEscolar(
   calendarioId: number,
   tenantId: number
 ) {
-  // existeEliminado ahora también devuelve periodoOperativoId (ver
-  // ajuste en el repositorio abajo), así no hace falta una query extra.
   const existe = await calendarioEscolarRepository.existeEliminado(
     calendarioId,
     tenantId
@@ -41,5 +40,16 @@ export async function reactivarCalendarioEscolar(
     calendarioId,
     tenantId
   )
+
+  // Si este evento suspende clases, reactivarlo debe volver a suspenderlas.
+  if (existe.suspendeClases) {
+    await claseProgramadaService.recalcularSuspendidasPorCalendario({
+      institucionId:       tenantId,
+      calendarioEscolarId: calendarioId,
+      fecha:               existe.fecha,
+      suspende:            true,
+    })
+  }
+
   return { ok: true }
 }
