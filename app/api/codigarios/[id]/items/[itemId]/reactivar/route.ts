@@ -1,3 +1,4 @@
+//api/codigarios/[id]/items/[itemId]/reactivar/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { reactivarItem, ItemNoEncontradoError } from "@/lib/usecases/codigarios/reactivarItem"
 

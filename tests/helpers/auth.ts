@@ -1,6 +1,6 @@
 // tests/helpers/auth.ts
 
-export const BASE_URL = "http://localhost:3000/api"
+export const BASE_URL = process.env.TEST_BASE_URL ?? "http://localhost:3000/api"
 
 export function authHeaders(tenantId: string, token: string): Record<string, string> {
   return {

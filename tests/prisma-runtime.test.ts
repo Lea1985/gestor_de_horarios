@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import prisma from "@/lib/prisma"
+import prisma from "../lib/prisma"
 
 describe("Prisma runtime safety", () => {
   it("debería estar conectado a la base de test", async () => {
@@ -13,4 +13,4 @@ describe("Prisma runtime safety", () => {
   it("NODE_ENV debe ser test", () => {
     expect(process.env.NODE_ENV).toBe("test")
   })
-})
+}) 
