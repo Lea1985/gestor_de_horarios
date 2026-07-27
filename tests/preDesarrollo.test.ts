@@ -1,3 +1,4 @@
+// tests/preDesarrollo.test.ts
 import { describe, it, expect, afterAll } from "vitest"
 import { execSync } from "child_process"
 import { PrismaClient } from "@prisma/client"
@@ -12,8 +13,19 @@ function runCommand(command: string): string {
   }
 }
 
+function commandExists(cmd: string): boolean {
+  try {
+    execSync(cmd, { encoding: "utf8", stdio: "pipe" })
+    return true
+  } catch {
+    return false
+  }
+}
+
+const dockerCliDisponible = commandExists("docker --version")
+
 describe("Infraestructura (Docker + PostgreSQL)", () => {
-  it("Docker debería estar corriendo", () => {
+  it.skipIf(!dockerCliDisponible)("Docker debería estar corriendo", () => {
     const output = runCommand(
       'docker ps --format "table {{.Names}}\\t{{.Status}}"'
     ).toLowerCase()
