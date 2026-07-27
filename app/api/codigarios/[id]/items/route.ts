@@ -33,14 +33,17 @@
       try {
         const nuevo = await crearItem(codigarioId, tenantId, body)
         return Response.json(nuevo, { status: 201 })
-      } catch (error) {
-        if (error instanceof DatosItemInvalidosError) return Response.json({ error: error.message }, { status: 400 })
-        if (error instanceof CodigarioNoEncontradoError) return Response.json({ error: error.message }, { status: 404 })
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-          return Response.json({ error: "Ya existe un item con ese código en este codigario" }, { status: 409 })
-        }
-        console.error("ERROR COMPLETO:", error)
-        return Response.json({ error: "Error creando item" }, { status: 500 })
+    } catch (error) {
+      if (error instanceof DatosItemInvalidosError) return Response.json({ error: error.message }, { status: 400 })
+      if (error instanceof CodigarioNoEncontradoError) return Response.json({ error: error.message }, { status: 404 })
+      if (error instanceof Error && error.name === "ItemDuplicadoError") {
+        return Response.json({ error: error.message }, { status: 409 })
       }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return Response.json({ error: "Ya existe un item con ese código en este codigario" }, { status: 409 })
+      }
+      console.error("ERROR COMPLETO:", error)
+      return Response.json({ error: "Error creando item" }, { status: 500 })
+    }
     })
   }

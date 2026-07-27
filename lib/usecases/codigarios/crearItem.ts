@@ -1,5 +1,5 @@
-//lib/usecases/codigarios/crearItem.ts
-import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
+// lib/usecases/codigarios/crearItem.ts
+import { codigarioRepository, ItemDuplicadoError } from "@/lib/repositories/codigarioRepository"
 
 export class DatosItemInvalidosError extends Error {
   constructor() { super("codigo y nombre son obligatorios") }
@@ -8,6 +8,8 @@ export class DatosItemInvalidosError extends Error {
 export class CodigarioNoEncontradoError extends Error {
   constructor() { super("Codigario no encontrado") }
 }
+
+export { ItemDuplicadoError }
 
 export async function crearItem(codigarioId: number, tenantId: number, body: { codigo?: string; nombre?: string; descripcion?: string }) {
   if (!body.codigo || !body.nombre) throw new DatosItemInvalidosError()
