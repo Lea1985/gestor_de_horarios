@@ -1,5 +1,4 @@
 "use client"
-
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -10,25 +9,23 @@ type Item = {
   codigo: string
   nombre: string
   descripcion: string | null
+  porcentajeComputable: number
   activo: boolean
   deletedAt: string | null
 }
-
 type Codigario = {
   id: number
   nombre: string
   descripcion: string | null
   items: Item[]
 }
-
 type FormData = {
   codigo: string
   nombre: string
   descripcion: string
+  porcentajeComputable: string
 }
-
-const FORM_VACIO: FormData = { codigo: "", nombre: "", descripcion: "" }
-
+const FORM_VACIO: FormData = { codigo: "", nombre: "", descripcion: "", porcentajeComputable: "100" }
 const s = {
   label: {
     fontSize: "var(--text-xs)",
@@ -69,7 +66,6 @@ const s = {
     verticalAlign: "middle" as const,
   },
 }
-
 function ModalConfirmar({
   mensaje,
   onConfirmar,
@@ -127,12 +123,10 @@ function ModalConfirmar({
     </div>
   )
 }
-
 export default function CodigarioDetallePage() {
   const params = useParams()
   const codigarioId = params.id as string
   const { authHeaders } = useAuth()
-
   const [codigario,    setCodigario]    = useState<Codigario | null>(null)
   const [loading,      setLoading]      = useState(true)
   const [mostrarForm,  setMostrarForm]  = useState(false)
@@ -144,7 +138,6 @@ export default function CodigarioDetallePage() {
   const [editandoId,   setEditandoId]   = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verInactivos, setVerInactivos] = useState(false)
-
 const itemsFiltrados = useMemo(() => {
   const items = codigario?.items ?? []
   if (!busqueda.trim()) return items
@@ -155,7 +148,6 @@ const itemsFiltrados = useMemo(() => {
     (i.descripcion?.toLowerCase().includes(q) ?? false)
   )
 }, [codigario, busqueda])
-
 async function cargar() {
   try {
     setLoading(true)
@@ -170,11 +162,9 @@ async function cargar() {
     setLoading(false)
   }
 }
-
 useEffect(() => {
   if (authHeaders.Authorization !== "Bearer ") cargar()
 }, [authHeaders.Authorization, verInactivos])
-
   function abrirCrear() {
     setEditandoId(null)
     setForm(FORM_VACIO)
@@ -182,15 +172,13 @@ useEffect(() => {
     setMostrarForm(true)
     setError(null)
   }
-
   function abrirEditar(item: Item) {
     setEditandoId(item.id)
-    setForm({ codigo: item.codigo, nombre: item.nombre, descripcion: item.descripcion ?? "" })
+    setForm({ codigo: item.codigo, nombre: item.nombre, descripcion: item.descripcion ?? "", porcentajeComputable: String(item.porcentajeComputable) })
     setFormErrors({})
     setMostrarForm(true)
     setError(null)
   }
-
   function cancelar() {
     setMostrarForm(false)
     setEditandoId(null)
@@ -198,15 +186,17 @@ useEffect(() => {
     setFormErrors({})
     setError(null)
   }
-
   function validar() {
     const errors: Partial<FormData> = {}
     if (!form.codigo.trim()) errors.codigo = "Campo requerido"
     if (!form.nombre.trim()) errors.nombre = "Campo requerido"
+    const pc = Number(form.porcentajeComputable)
+    if (form.porcentajeComputable.trim() === "" || !Number.isInteger(pc) || pc < 0 || pc > 100) {
+      errors.porcentajeComputable = "Entero entre 0 y 100"
+    }
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
-
   async function guardar() {
     if (!validar()) return
     setGuardando(true)
@@ -219,7 +209,7 @@ useEffect(() => {
       const res = await fetch(url, {
         method,
         headers: authHeaders,
-        body: JSON.stringify({ codigo: form.codigo, nombre: form.nombre, descripcion: form.descripcion || null }),
+        body: JSON.stringify({ codigo: form.codigo, nombre: form.nombre, descripcion: form.descripcion || null, porcentajeComputable: Number(form.porcentajeComputable) }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -234,7 +224,6 @@ useEffect(() => {
       setGuardando(false)
     }
   }
-
   async function eliminarItem(itemId: number) {
     try {
       const res = await fetch(`/api/codigarios/${codigarioId}/items/${itemId}`, {
@@ -253,7 +242,6 @@ useEffect(() => {
       setConfirmarId(null)
     }
   }
-
   async function reactivarItem(itemId: number) {
     try {
       const res = await fetch(`/api/codigarios/${codigarioId}/items/${itemId}/reactivar`, {
@@ -273,15 +261,12 @@ useEffect(() => {
       setError("Error de red")
     }
   }
-
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando...
     </div>
   )
-
   if (!codigario) return <div>No encontrado</div>
-
   return (
     <>
       {confirmarId !== null && (
@@ -291,9 +276,7 @@ useEffect(() => {
           onCancelar={() => setConfirmarId(null)}
         />
       )}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -308,7 +291,6 @@ useEffect(() => {
               {!verInactivos && " activo" + (itemsFiltrados.length !== 1 ? "s" : "")}
             </p>
           </div>
-
           {!mostrarForm && (
             <button
               onClick={abrirCrear}
@@ -318,7 +300,6 @@ useEffect(() => {
             </button>
           )}
         </div>
-
         {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
@@ -330,26 +311,27 @@ useEffect(() => {
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }} aria-label="Cerrar">×</button>
           </div>
         )}
-
         {/* Formulario */}
         {mostrarForm && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editandoId === null ? "Nuevo item" : "Editar item"}
             </h2>
-
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
               {[
-                { key: "codigo" as const, label: "Código", required: true },
-                { key: "nombre" as const, label: "Nombre", required: true },
-                { key: "descripcion" as const, label: "Descripción" },
-              ].map(({ key, label, required }) => (
+                { key: "codigo" as const, label: "Código", required: true, type: "text" },
+                { key: "nombre" as const, label: "Nombre", required: true, type: "text" },
+                { key: "descripcion" as const, label: "Descripción", type: "text" },
+                { key: "porcentajeComputable" as const, label: "% Computable", required: true, type: "number" },
+              ].map(({ key, label, required, type }) => (
                 <div key={key} style={{ gridColumn: key === "descripcion" ? "1 / -1" : undefined }}>
                   <label style={s.label}>
                     {label}
                     {required && <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>}
                   </label>
                   <input
+                    type={type}
+                    {...(type === "number" ? { min: 0, max: 100, step: 1 } : {})}
                     value={form[key]}
                     onChange={e => {
                       setForm(prev => ({ ...prev, [key]: e.target.value }))
@@ -363,7 +345,6 @@ useEffect(() => {
                 </div>
               ))}
             </div>
-
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
               <button onClick={cancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>
                 Cancelar
@@ -374,7 +355,6 @@ useEffect(() => {
             </div>
           </div>
         )}
-
         {/* Buscador + toggle */}
         {!mostrarForm && (
           <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
@@ -392,13 +372,12 @@ useEffect(() => {
             </label>
           </div>
         )}
-
         {/* Tabla */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                {["Código", "Nombre", "Descripción", ""].map(col => (
+                {["Código", "Nombre", "Descripción", "% Computable", ""].map(col => (
                   <th key={col} style={s.th}>{col}</th>
                 ))}
               </tr>
@@ -406,7 +385,7 @@ useEffect(() => {
             <tbody>
               {itemsFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                  <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
                     No hay items{!verInactivos ? " activos" : ""} registrados
                   </td>
                 </tr>
@@ -427,6 +406,7 @@ useEffect(() => {
                   </td>
                   <td style={s.td}>{item.nombre}</td>
                   <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{item.descripcion ?? "—"}</td>
+                  <td style={s.td}>{item.porcentajeComputable}%</td>
                   <td style={s.td}>
                     <div style={{ display: "flex", gap: "var(--space-3)" }}>
                       {item.activo ? (
@@ -450,7 +430,6 @@ useEffect(() => {
             </tbody>
           </table>
         </div>
-
       </div>
     </>
   )

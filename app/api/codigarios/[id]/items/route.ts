@@ -1,8 +1,8 @@
-  //app/api/codigarios/[id]/items/route.ts
+//app/api/codigarios/[id]/items/route.ts
   import { withContext } from "@/lib/auth/withContext"
   import { Prisma } from "@prisma/client"
   import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
-  import { crearItem, DatosItemInvalidosError, CodigarioNoEncontradoError } from "@/lib/usecases/codigarios/crearItem"
+  import { crearItem, DatosItemInvalidosError, CodigarioNoEncontradoError, PorcentajeComputableInvalidoError } from "@/lib/usecases/codigarios/crearItem"
 
   function parseId(id: string) {
     const n = Number(id)
@@ -13,7 +13,6 @@
     const { id } = await context.params
     const codigarioId = parseId(id)
     if (!codigarioId) return Response.json({ error: "ID inválido" }, { status: 400 })
-
     return withContext(req, async ({ tenantId }) => {
       const items = await codigarioRepository.listarItems(codigarioId, tenantId)
       return Response.json(items)
@@ -24,7 +23,6 @@
     const { id } = await context.params
     const codigarioId = parseId(id)
     if (!codigarioId) return Response.json({ error: "ID inválido" }, { status: 400 })
-
     return withContext(req, async ({ tenantId }) => {
       let body
       try { body = await req.json() } catch {
@@ -35,6 +33,7 @@
         return Response.json(nuevo, { status: 201 })
     } catch (error) {
       if (error instanceof DatosItemInvalidosError) return Response.json({ error: error.message }, { status: 400 })
+      if (error instanceof PorcentajeComputableInvalidoError) return Response.json({ error: error.message }, { status: 400 })
       if (error instanceof CodigarioNoEncontradoError) return Response.json({ error: error.message }, { status: 404 })
       if (error instanceof Error && error.name === "ItemDuplicadoError") {
         return Response.json({ error: error.message }, { status: 409 })

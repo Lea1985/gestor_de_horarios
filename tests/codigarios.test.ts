@@ -329,6 +329,50 @@ describe("POST /api/codigarios/[id]/items", () => {
     expect(data.nombre).toBe(body.nombre)
   })
 
+  it("usa porcentajeComputable 100 por default si no se manda", async () => {
+    const codigario = await crearCodigario()
+    const res       = await fetch(`${BASE_URL}/codigarios/${codigario.id}/items`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(buildItem()),
+    })
+    expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.porcentajeComputable).toBe(100)
+  })
+
+  it("acepta porcentajeComputable custom", async () => {
+    const codigario = await crearCodigario()
+    const res       = await fetch(`${BASE_URL}/codigarios/${codigario.id}/items`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(buildItem({ porcentajeComputable: 85 })),
+    })
+    expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.porcentajeComputable).toBe(85)
+  })
+
+  it("rechaza porcentajeComputable fuera de rango (400)", async () => {
+    const codigario = await crearCodigario()
+    const res       = await fetch(`${BASE_URL}/codigarios/${codigario.id}/items`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(buildItem({ porcentajeComputable: 150 })),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it("rechaza porcentajeComputable no entero (400)", async () => {
+    const codigario = await crearCodigario()
+    const res       = await fetch(`${BASE_URL}/codigarios/${codigario.id}/items`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify(buildItem({ porcentajeComputable: 85.5 })),
+    })
+    expect(res.status).toBe(400)
+  })
+
   it("rechaza código duplicado en el mismo codigario (409)", async () => {
     const codigario = await crearCodigario()
     const item      = buildItem()
@@ -432,6 +476,36 @@ describe("PATCH /api/codigarios/[id]/items/[itemId]", () => {
     expect(res.status).toBe(200)
     const data = await res.json()
     expect(data.nombre).toBe("Nombre actualizado")
+  })
+
+  it("actualiza porcentajeComputable", async () => {
+    const codigario = await crearCodigario()
+    const item      = await crearItem(codigario.id)
+    const res       = await fetch(
+      `${BASE_URL}/codigarios/${codigario.id}/items/${item.id}`,
+      {
+        method:  "PATCH",
+        headers,
+        body:    JSON.stringify({ porcentajeComputable: 0 }),
+      }
+    )
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.porcentajeComputable).toBe(0)
+  })
+
+  it("rechaza porcentajeComputable inválido (400)", async () => {
+    const codigario = await crearCodigario()
+    const item      = await crearItem(codigario.id)
+    const res       = await fetch(
+      `${BASE_URL}/codigarios/${codigario.id}/items/${item.id}`,
+      {
+        method:  "PATCH",
+        headers,
+        body:    JSON.stringify({ porcentajeComputable: -1 }),
+      }
+    )
+    expect(res.status).toBe(400)
   })
 
   it("rechaza body vacío (400)", async () => {

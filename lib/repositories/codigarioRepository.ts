@@ -182,6 +182,8 @@ export const codigarioRepository = {
       codigo: string
       nombre: string
       descripcion?: string
+      porcentajeComputable?: number
+
     }
   ) {
     const existente = await prisma.codigarioItem.findFirst({
