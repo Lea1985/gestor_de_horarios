@@ -624,6 +624,7 @@ model CodigarioItem {
   codigo      String
   nombre      String
   descripcion String?
+  porcentajeComputable Int @default(100)
   activo      Boolean   @default(true)
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
