@@ -25,6 +25,7 @@ const REPORT_ITEMS = [
   { label: "Ausencias", href: "/protected/dashboard/reportes/ausencias" },
   { label: "Codigarios", href: "/protected/dashboard/reportes/codigarios" },
   { label: "Horarios", href: "/protected/dashboard/reportes/horarios" },
+  { label: "Módulos computables", href: "/protected/dashboard/reportes/modulos-computables" },
   { label: "Profesor", href: "/protected/dashboard/reportes/profesor" },
   { label: "Profesores", href: "/protected/dashboard/reportes/profesores" },
 ]
