@@ -12,14 +12,13 @@
     "format": "prettier --write .",
     "seed": "node --loader ts-node/esm prisma/seed.ts",
     "test": "cross-env NODE_ENV=test vitest",
-    "test:run": "cross-env DATABASE_URL=postgresql://admin:admin123@localhost:5432/gestor_test?schema=public vitest run --reporter=verbose"
+    "test:run": "cross-env DATABASE_URL=postgresql://admin:admin123@localhost:5433/gestor_test?schema=public vitest run --reporter=verbose"
   },
   "prisma": {
     "seed": "node --loader ts-node/esm prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cross-env": "^10.1.0",
     "dotenv-cli": "^11.0.0",
@@ -32,7 +31,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcrypt": "^6.0.0",
     "@types/node": "^20",
     "@types/pdfmake": "^0.3.3",
     "@types/react": "^19",

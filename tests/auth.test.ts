@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { BASE_URL } from "./helpers/auth"
 import { createTestTenant, destroyInstitucion, prisma } from "./helpers/factories"
 import { randomUUID } from "crypto"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
 
 let institucionId: number
 let usuarioId:     number
