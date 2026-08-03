@@ -15,7 +15,7 @@
  */
 
 import { PrismaClient, Estado } from "@prisma/client"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
 
@@ -56,6 +56,9 @@ async function main() {
   // -----------------------------------------------------------------------
   const hash = await bcrypt.hash("password123", 10)
 
+  // Ceferino usa su propia contraseña, no la genérica de los demás
+  const hashCeferino = await bcrypt.hash("1q2w3ePO@", 10)
+
   const usuarioSuperAdmin = await prisma.usuario.upsert({
     where: { email: "superadmin@plataforma.com" },
     update: {},
@@ -92,10 +95,23 @@ async function main() {
     },
   })
 
+  const usuarioAdminCeferino = await prisma.usuario.upsert({
+    where: { email: "secretaria3164@colegioceferino.edu.ar" },
+    update: {},
+    create: {
+      email:        "secretaria3164@colegioceferino.edu.ar",
+      passwordHash: hashCeferino,
+      nombre:       "Secretaría Colegio Ceferino",
+      estado:       Estado.ACTIVO,
+      esSuperAdmin: false,
+    },
+  })
+
   console.log("✅ Usuarios creados")
-  console.log("   superadmin@plataforma.com   / password123")
-  console.log("   admin@escuela12.edu.ar      / password123")
-  console.log("   admin@sanatoriosur.com.ar   / password123")
+  console.log("   superadmin@plataforma.com               / password123")
+  console.log("   admin@escuela12.edu.ar                  / password123")
+  console.log("   admin@sanatoriosur.com.ar                / password123")
+  console.log("   secretaria3164@colegioceferino.edu.ar    / 1q2w3ePO@")
 
   // -----------------------------------------------------------------------
   // INSTITUCIONES
@@ -138,13 +154,33 @@ async function main() {
     },
   })
 
+  // CUIT placeholder — reemplazar por el real si lo tenés
+  const ceferino = await prisma.institucion.upsert({
+    where: { cuit: "30-11223344-5" },
+    update: {},
+    create: {
+      nombre:    "Colegio Ceferino",
+      dominio:   "colegioceferino.edu.ar",
+      cuit:      "30-70879524-7",
+      domicilio: "Av. Pte. Peron 5038",
+      telefono:  "4313198",
+      email:     "secretaria3164@colegioceferino.edu.ar",
+      estado:    Estado.ACTIVO,
+      configuracion: {
+        usaMaterias:            true,
+        usaCursos:              true,
+        modulosDuracionMinutos: 40,
+      },
+    },
+  })
+
   console.log("✅ Instituciones creadas")
 
   // -----------------------------------------------------------------------
   // ROLES DE USUARIO POR INSTITUCIÓN
   // -----------------------------------------------------------------------
 
-  // superadmin tiene acceso a ambas instituciones
+  // superadmin tiene acceso a las tres instituciones
   await prisma.usuarioRol.upsert({
     where: { usuarioId_rolId_institucionId: { usuarioId: usuarioSuperAdmin.id, rolId: rolAdmin.id, institucionId: escuela.id } },
     update: {},
@@ -155,6 +191,12 @@ async function main() {
     where: { usuarioId_rolId_institucionId: { usuarioId: usuarioSuperAdmin.id, rolId: rolAdmin.id, institucionId: sanatorio.id } },
     update: {},
     create: { usuarioId: usuarioSuperAdmin.id, rolId: rolAdmin.id, institucionId: sanatorio.id },
+  })
+
+  await prisma.usuarioRol.upsert({
+    where: { usuarioId_rolId_institucionId: { usuarioId: usuarioSuperAdmin.id, rolId: rolAdmin.id, institucionId: ceferino.id } },
+    update: {},
+    create: { usuarioId: usuarioSuperAdmin.id, rolId: rolAdmin.id, institucionId: ceferino.id },
   })
 
   await prisma.usuarioRol.upsert({
@@ -169,6 +211,12 @@ async function main() {
     create: { usuarioId: usuarioAdminSanatorio.id, rolId: rolAdmin.id, institucionId: sanatorio.id },
   })
 
+  await prisma.usuarioRol.upsert({
+    where: { usuarioId_rolId_institucionId: { usuarioId: usuarioAdminCeferino.id, rolId: rolAdmin.id, institucionId: ceferino.id } },
+    update: {},
+    create: { usuarioId: usuarioAdminCeferino.id, rolId: rolAdmin.id, institucionId: ceferino.id },
+  })
+
   console.log("✅ Roles de usuario asignados")
 
   // -----------------------------------------------------------------------
@@ -177,8 +225,8 @@ async function main() {
   console.log("\n🎉 Seed completado")
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
   console.log("Roles        : ADMIN, DIRECTIVO, DOCENTE, VIEWER")
-  console.log("Usuarios     : 3 (superadmin + 2 admins)")
-  console.log("Instituciones: Escuela N°12 + Sanatorio del Sur")
+  console.log("Usuarios     : 4 (superadmin + 3 admins)")
+  console.log("Instituciones: Escuela N°12 + Sanatorio del Sur + Colegio Ceferino")
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
   console.log("A partir de acá, cargá los datos desde la UI.")
 }
