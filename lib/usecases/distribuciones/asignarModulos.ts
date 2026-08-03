@@ -46,6 +46,11 @@ export class SinPeriodoActivoError extends Error {
  *
  * Nunca se elimina ninguna ClaseProgramada en este flujo — la historia y
  * la identidad de cada clase se preservan, solo cambia su Estado/Causa.
+ *
+ * El tramo a revisar/reconciliar/generar SIEMPRE se acota a la intersección
+ * entre la vigencia de la distribución y el período ACTIVO — nunca se
+ * excede el rango del período, aunque la distribución tenga una vigencia
+ * más amplia (mismo criterio que crearDistribucion.ts).
  */
 export async function asignarModulos(
   distribucionId: number,
@@ -68,7 +73,6 @@ export async function asignarModulos(
       distribucionId, tenantId, body.modulos as number[]
     )
     if (!result) throw new ModulosInvalidosError()
-
     return {
       ok: true,
       total: result.length,
@@ -80,9 +84,14 @@ export async function asignarModulos(
     }
   }
 
-// ── Con período ACTIVO: flujo completo de reemplazo de clases ──
+  // ── Con período ACTIVO: flujo completo de reemplazo de clases ──
   const { asignacion } = distribucion
-  const desde = distribucion.fecha_vigencia_desde
+  // Clampeado: nunca antes del inicio del período ACTIVO, aunque la
+  // distribución tenga una vigencia anterior (mismo criterio que
+  // crearDistribucion.ts — bug corregido acá).
+  const desde = distribucion.fecha_vigencia_desde > periodo.fecha_desde
+    ? distribucion.fecha_vigencia_desde
+    : periodo.fecha_desde
   const hasta = periodo.fecha_hasta // límite explícito, siempre
 
   // 1. Leer cobertura del tramo ANTES de tocar nada
