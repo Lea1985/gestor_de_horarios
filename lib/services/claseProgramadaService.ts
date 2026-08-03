@@ -136,6 +136,11 @@ export const claseProgramadaService = {
 
     const idsASuspender = existentes
       .filter(c => {
+        // Protegidas: una clase cuya causa actual es INCIDENCIA no se toca acá.
+        // INCIDENCIA está por encima de CAMBIO_DISTRIBUCION en la precedencia
+        // del motor -- confirmado con datos reales que sin este filtro se
+        // pisaba silenciosamente la causa real al reasignar módulos.
+        if (c.causa === Causa.INCIDENCIA) return false
         const clave = `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`
         return !clavesEsperadas.has(clave)
       })
