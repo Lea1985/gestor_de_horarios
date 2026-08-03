@@ -1,14 +1,9 @@
 // features/incidencias/components/PasoReemplazos.tsx
-
 import type { ClaseParaReemplazo, ReemplazoConfig } from "../hooks/useNuevaIncidencia"
 import { formatearFecha, formatearModulo } from "../hooks/useNuevaIncidencia"
-
 // ── Tipos ─────────────────────────────────────────────────────
-
 type Agente = { id: number; nombre: string; apellido: string }
-
 // ── Estilos base ──────────────────────────────────────────────
-
 const th = {
   textAlign:     "left" as const,
   fontSize:      "var(--text-2xs)",
@@ -20,7 +15,6 @@ const th = {
   borderBottom:  "1px solid var(--color-border-strong)",
   background:    "var(--color-surface-raised)",
 }
-
 const td = {
   padding:       "10px 12px",
   fontSize:      "var(--text-sm)",
@@ -28,7 +22,6 @@ const td = {
   borderBottom:  "1px solid var(--color-border)",
   verticalAlign: "middle" as const,
 }
-
 const selectStyle = {
   width:        "100%",
   background:   "var(--color-surface)",
@@ -39,9 +32,7 @@ const selectStyle = {
   color:        "var(--color-text-primary)",
   outline:      "none",
 }
-
 // ── Sub-componente: grupo por asignación ──────────────────────
-
 function GrupoAsignacion({
   agente,
   identificador,
@@ -61,22 +52,22 @@ function GrupoAsignacion({
   onToggleClase:      (id: number) => void
   onSetSuplente:      (claseId: number, agenteId: number | null) => void
 }) {
-  const programadas      = clases.filter(c => c.estado === "PROGRAMADA")
-  const todasSeleccionadas = programadas.length > 0 &&
-    programadas.every(c => clasesSeleccionadas.has(c.id))
-
+  // Elegibles para reemplazo = clases que la incidencia ya suspendió.
+  // A esta altura del flujo nunca están en PROGRAMADA (ese era el bug).
+  const elegibles           = clases.filter(c => c.estado === "SUSPENDIDA")
+  const todasSeleccionadas  = elegibles.length > 0 &&
+    elegibles.every(c => clasesSeleccionadas.has(c.id))
   function toggleGrupo() {
     if (todasSeleccionadas) {
-      programadas.forEach(c => {
+      elegibles.forEach(c => {
         if (clasesSeleccionadas.has(c.id)) onToggleClase(c.id)
       })
     } else {
-      programadas.forEach(c => {
+      elegibles.forEach(c => {
         if (!clasesSeleccionadas.has(c.id)) onToggleClase(c.id)
       })
     }
   }
-
   return (
     <div style={{
       background:   "var(--color-surface)",
@@ -97,8 +88,8 @@ function GrupoAsignacion({
           type="checkbox"
           checked={todasSeleccionadas}
           onChange={toggleGrupo}
-          disabled={programadas.length === 0}
-          style={{ cursor: programadas.length > 0 ? "pointer" : "not-allowed" }}
+          disabled={elegibles.length === 0}
+          style={{ cursor: elegibles.length > 0 ? "pointer" : "not-allowed" }}
           title="Seleccionar todas las clases de este agente"
         />
         <div>
@@ -124,14 +115,8 @@ function GrupoAsignacion({
           color:        "var(--color-text-hint)",
         }}>
           {clases.length} clase{clases.length !== 1 ? "s" : ""}
-          {programadas.length < clases.length && (
-            <span style={{ color: "var(--color-text-hint)", marginLeft: "var(--space-1)" }}>
-              · {clases.length - programadas.length} suspendida{clases.length - programadas.length !== 1 ? "s" : ""}
-            </span>
-          )}
         </span>
       </div>
-
       {/* Tabla de clases */}
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
@@ -145,21 +130,20 @@ function GrupoAsignacion({
         </thead>
         <tbody>
           {clases.map(clase => {
-            const esProgramada  = clase.estado === "PROGRAMADA"
+            const esElegible    = clase.estado === "SUSPENDIDA"
             const seleccionada  = clasesSeleccionadas.has(clase.id)
             const config        = reemplazos.get(clase.id)
             const faltaSuplente = seleccionada && (!config || config.agenteSuplenteId === null)
-
             return (
               <tr
                 key={clase.id}
                 style={{
-                  background: !esProgramada
+                  background: !esElegible
                     ? "var(--color-surface-raised)"
                     : seleccionada
                       ? "var(--color-accent-bg, rgba(30,155,184,0.06))"
                       : "transparent",
-                  opacity: !esProgramada ? 0.5 : 1,
+                  opacity: !esElegible ? 0.5 : 1,
                   transition: "background 0.1s",
                 }}
               >
@@ -168,37 +152,22 @@ function GrupoAsignacion({
                   <input
                     type="checkbox"
                     checked={seleccionada}
-                    disabled={!esProgramada}
+                    disabled={!esElegible}
                     onChange={() => onToggleClase(clase.id)}
-                    style={{ cursor: esProgramada ? "pointer" : "not-allowed" }}
+                    style={{ cursor: esElegible ? "pointer" : "not-allowed" }}
                   />
                 </td>
-
                 {/* Fecha */}
                 <td style={{ ...td, whiteSpace: "nowrap" as const }}>
                   {formatearFecha(clase.fecha)}
                 </td>
-
                 {/* Módulo */}
                 <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                   {formatearModulo(clase)}
                 </td>
-
                 {/* Estado */}
                 <td style={td}>
-                  {clase.estado === "PROGRAMADA" ? (
-                    <span style={{
-                      fontSize:     "var(--text-2xs)",
-                      fontWeight:   "var(--font-medium)",
-                      padding:      "2px 6px",
-                      borderRadius: "var(--radius-sm)",
-                      background:   "var(--color-surface-raised)",
-                      color:        "var(--color-text-secondary)",
-                      border:       "1px solid var(--color-border)",
-                    }}>
-                      Programada
-                    </span>
-                  ) : (
+                  {clase.estado === "SUSPENDIDA" ? (
                     <span style={{
                       fontSize:     "var(--text-2xs)",
                       fontWeight:   "var(--font-medium)",
@@ -209,12 +178,23 @@ function GrupoAsignacion({
                     }}>
                       Suspendida
                     </span>
+                  ) : (
+                    <span style={{
+                      fontSize:     "var(--text-2xs)",
+                      fontWeight:   "var(--font-medium)",
+                      padding:      "2px 6px",
+                      borderRadius: "var(--radius-sm)",
+                      background:   "var(--color-surface-raised)",
+                      color:        "var(--color-text-secondary)",
+                      border:       "1px solid var(--color-border)",
+                    }}>
+                      {clase.estado}
+                    </span>
                   )}
                 </td>
-
                 {/* Selector suplente */}
                 <td style={{ ...td, minWidth: 180 }}>
-                  {esProgramada && seleccionada ? (
+                  {esElegible && seleccionada ? (
                     <div>
                       <select
                         value={config?.agenteSuplenteId ?? ""}
@@ -247,7 +227,7 @@ function GrupoAsignacion({
                         </span>
                       )}
                     </div>
-                  ) : esProgramada ? (
+                  ) : esElegible ? (
                     <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
                       Sin reemplazo
                     </span>
@@ -261,9 +241,7 @@ function GrupoAsignacion({
     </div>
   )
 }
-
 // ── Componente principal ──────────────────────────────────────
-
 export function PasoReemplazos({
   grupos,
   clasesSeleccionadas,
@@ -302,11 +280,12 @@ export function PasoReemplazos({
   onGuardar:                  () => void
   onSaltar:                   () => void
 }) {
-  const totalClases      = grupos.flatMap(g => g.clases).filter(c => c.estado === "PROGRAMADA").length
+  // Total de clases elegibles (SUSPENDIDA por esta incidencia) — antes
+  // filtraba por PROGRAMADA y siempre daba 0, aunque hubiera clases reales.
+  const totalClases      = grupos.flatMap(g => g.clases).filter(c => c.estado === "SUSPENDIDA").length
   const seleccionadas    = clasesSeleccionadas.size
   const hayIncompletos   = clasesConSuplenteIncompleto.length > 0
   const haySeleccionadas = seleccionadas > 0
-
   if (loadingClases) {
     return (
       <div style={{
@@ -331,7 +310,6 @@ export function PasoReemplazos({
       </div>
     )
   }
-
   if (grupos.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
@@ -369,10 +347,8 @@ export function PasoReemplazos({
       </div>
     )
   }
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
-
       {/* Descripción y acción global */}
       <div style={{
         display:        "flex",
@@ -383,7 +359,7 @@ export function PasoReemplazos({
       }}>
         <div>
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
-            {totalClases} clase{totalClases !== 1 ? "s" : ""} programada{totalClases !== 1 ? "s" : ""} en el rango de la incidencia.
+            {totalClases} clase{totalClases !== 1 ? "s" : ""} suspendida{totalClases !== 1 ? "s" : ""} por esta incidencia.
             Seleccioná las que necesitan reemplazo y asigná un suplente.
           </p>
           {seleccionadas > 0 && (
@@ -397,7 +373,6 @@ export function PasoReemplazos({
             </p>
           )}
         </div>
-
         {/* Suplente global */}
         {agentes.length > 0 && haySeleccionadas && (
           <div style={{
@@ -445,7 +420,6 @@ export function PasoReemplazos({
           </div>
         )}
       </div>
-
       {/* Grupos por asignación */}
       {grupos.map(grupo => (
         <GrupoAsignacion
@@ -460,7 +434,6 @@ export function PasoReemplazos({
           onSetSuplente={onSetSuplente}
         />
       ))}
-
       {/* Aviso suplentes incompletos */}
       {hayIncompletos && haySeleccionadas && (
         <div style={{
@@ -481,7 +454,6 @@ export function PasoReemplazos({
           {clasesConSuplenteIncompleto.length} clase{clasesConSuplenteIncompleto.length !== 1 ? "s" : ""} seleccionada{clasesConSuplenteIncompleto.length !== 1 ? "s" : ""} sin suplente asignado. Asigná un suplente o destildalas.
         </div>
       )}
-
       {/* Footer */}
       <div style={{
         display:        "flex",
@@ -505,7 +477,6 @@ export function PasoReemplazos({
         >
           Saltar este paso
         </button>
-
         {/* Confirmar reemplazos */}
         <button
           onClick={onGuardar}
@@ -535,7 +506,6 @@ export function PasoReemplazos({
           }
         </button>
       </div>
-
     </div>
   )
 }

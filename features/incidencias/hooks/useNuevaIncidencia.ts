@@ -1,5 +1,4 @@
 // features/incidencias/hooks/useNuevaIncidencia.ts
-
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import {
@@ -24,7 +23,6 @@ export function nombreAgente(a: AsignacionParaIncidencia): string {
 }
 
 // ── Tipos locales para el paso 4 ─────────────────────────────
-
 export type ClaseParaReemplazo = {
   id:          number
   fecha:       string        // ISO date string
@@ -49,7 +47,6 @@ export type ReemplazoConfig = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────
-
 function minutosAHora(min: number): string {
   const h = Math.floor(min / 60).toString().padStart(2, "0")
   const m = (min % 60).toString().padStart(2, "0")
@@ -63,11 +60,10 @@ export function formatearModulo(clase: ClaseParaReemplazo): string {
 
 export function formatearFecha(iso: string): string {
   const d = new Date(iso)
-  return d.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit" })
+  return d.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" })
 }
 
 // ── Hook ──────────────────────────────────────────────────────
-
 export function useNuevaIncidencia() {
   const { authHeaders } = useAuth()
 
@@ -105,9 +101,7 @@ export function useNuevaIncidencia() {
   const [suplenteGlobal,     setSuplenteGlobal]     = useState<number | null>(null)
   const [guardandoReemplazos, setGuardandoReemplazos] = useState(false)
   // Incidencias creadas (necesitamos asignacionId → incidenciaId para buscar clases)
-  const [incidenciasCreadas, setIncidenciasCreadas] = useState<
-    { asignacionId: number; incidenciaId: number }[]
-  >([])
+const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: number; incidenciaId: number }[]>([])
 
   // ── Carga inicial ────────────────────────────────────────────
   useEffect(() => {
@@ -180,7 +174,6 @@ export function useNuevaIncidencia() {
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
   }
-
   function toggleTodos() {
     const idsFiltrados = asignacionesFiltradas.map(a => a.id)
     const todosSeleccionados = idsFiltrados.every(id => seleccionados.includes(id))
@@ -190,7 +183,6 @@ export function useNuevaIncidencia() {
       setSeleccionados(prev => [...new Set([...prev, ...idsFiltrados])])
     }
   }
-
   function quitarDelLote(id: number) {
     setSeleccionados(prev => prev.filter(x => x !== id))
   }
@@ -211,10 +203,8 @@ export function useNuevaIncidencia() {
     if (!validarDatos()) return
     setGuardando(true)
     setError(null)
-
     const resultados: ResultadoCarga[] = []
     const creadas: { asignacionId: number; incidenciaId: number }[] = []
-
     for (const a of asignacionesLote) {
       try {
         const incidencia = await crearIncidencia({
@@ -241,36 +231,28 @@ export function useNuevaIncidencia() {
         })
       }
     }
-
     setGuardando(false)
-
     // Si todo falló, mostrar resultado directamente
     if (creadas.length === 0) {
       setResultado(resultados)
       return
     }
-
     // Guardar incidencias creadas y resultados parciales para el resultado final
     setIncidenciasCreadas(creadas)
     // Guardamos los resultados de incidencias para mostrarlos al final
     setResultado(resultados) // temporal — se pisa al finalizar reemplazos
-
     // Cargar clases reales de cada incidencia creada
     setLoadingClases(true)
     setPaso(4)
-
     try {
       const todasLasClases: ClaseParaReemplazo[] = []
-
       for (const { asignacionId, incidenciaId } of creadas) {
         const asignacion = asignacionesLote.find(a => a.id === asignacionId)
         if (!asignacion) continue
-
         const res = await fetch(`/api/incidencias/${incidenciaId}/clases`, {
           headers: authHeaders,
         })
         if (!res.ok) continue
-
         const clases = await res.json()
         for (const clase of clases) {
           todasLasClases.push({
@@ -280,23 +262,23 @@ export function useNuevaIncidencia() {
           })
         }
       }
-
       // Ordenar por fecha
       todasLasClases.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
       setClasesReemplazo(todasLasClases)
-
-      // Pre-seleccionar todas las clases PROGRAMADAS (no SUSPENDIDAS)
-      const programadas = new Set(
+      // Pre-seleccionar todas las clases SUSPENDIDAS por esta incidencia —
+      // son las que necesitan reemplazo. A esta altura del flujo la
+      // incidencia ya se creó y ya las suspendió: nunca van a estar en
+      // PROGRAMADA (ese filtro era el bug — daba siempre vacío).
+      const elegibles = new Set(
         todasLasClases
-          .filter(c => c.estado === "PROGRAMADA")
+          .filter(c => c.estado === "SUSPENDIDA")
           .map(c => c.id)
       )
-      setClasesSeleccionadas(programadas)
-
+      setClasesSeleccionadas(elegibles)
       // Inicializar configuración de reemplazos vacía
       const configInicial = new Map<number, ReemplazoConfig>()
       todasLasClases
-        .filter(c => c.estado === "PROGRAMADA")
+        .filter(c => c.estado === "SUSPENDIDA")
         .forEach(c => {
           const asignacion = creadas.find(x => x.asignacionId === c.asignacionId)
           configInicial.set(c.id, {
@@ -307,7 +289,6 @@ export function useNuevaIncidencia() {
           })
         })
       setReemplazos(configInicial)
-
     } catch {
       // Si falla la carga de clases, ir directo al resultado
       setPaso(4) // se muestra paso 4 vacío con opción de saltar
@@ -344,17 +325,15 @@ export function useNuevaIncidencia() {
       return next
     })
   }
-
   function toggleTodasClases() {
-    const programadas = clasesReemplazo.filter(c => c.estado === "PROGRAMADA")
-    const todasSeleccionadas = programadas.every(c => clasesSeleccionadas.has(c.id))
+    const elegibles = clasesReemplazo.filter(c => c.estado === "SUSPENDIDA")
+    const todasSeleccionadas = elegibles.every(c => clasesSeleccionadas.has(c.id))
     if (todasSeleccionadas) {
       setClasesSeleccionadas(new Set())
     } else {
-      setClasesSeleccionadas(new Set(programadas.map(c => c.id)))
+      setClasesSeleccionadas(new Set(elegibles.map(c => c.id)))
     }
   }
-
   function setSuplenteClase(claseId: number, agenteSuplenteId: number | null) {
     setReemplazos(prev => {
       const m = new Map(prev)
@@ -365,7 +344,6 @@ export function useNuevaIncidencia() {
       return m
     })
   }
-
   function setObservacionClase(claseId: number, observacion: string) {
     setReemplazos(prev => {
       const m = new Map(prev)
@@ -376,7 +354,6 @@ export function useNuevaIncidencia() {
       return m
     })
   }
-
   // Aplica el suplente global a todas las clases seleccionadas
   function aplicarSuplenteGlobal() {
     if (!suplenteGlobal) return
@@ -395,11 +372,9 @@ export function useNuevaIncidencia() {
   // ── Guardar reemplazos ───────────────────────────────────────
   async function guardarReemplazos() {
     setGuardandoReemplazos(true)
-
     const clasesConReemplazo = Array.from(clasesSeleccionadas)
       .map(id => reemplazos.get(id))
       .filter((r): r is ReemplazoConfig => !!r && r.agenteSuplenteId !== null)
-
     // Crear reemplazos en paralelo
     const promesas = clasesConReemplazo.map(config =>
       fetch("/api/reemplazos", {
@@ -421,7 +396,6 @@ export function useNuevaIncidencia() {
         error:   "Error de red",
       }))
     )
-
     await Promise.all(promesas)
     setGuardandoReemplazos(false)
     // Ir al resultado final (el resultado de incidencias ya está en estado)
