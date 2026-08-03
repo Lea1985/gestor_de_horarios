@@ -1,5 +1,4 @@
 // features/modulosDistribucion/components/ModalNuevaVersion.tsx
-
 type Props = {
   onConfirmar: () => void
   onCancelar:  () => void
@@ -20,7 +19,7 @@ export function ModalNuevaVersion({ onConfirmar, onCancelar, guardando }: Props)
           Nueva versión
         </h3>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>
-          Se cerrará la versión actual desde hoy. Las clases futuras se eliminarán y deberás cargar los nuevos módulos para regenerarlas.
+          Se cerrará la versión actual desde hoy. Las clases futuras quedarán suspendidas (no se eliminan) hasta que asignes los módulos de la nueva versión — las que vuelvan a coincidir se recuperan automáticamente.
         </p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button
