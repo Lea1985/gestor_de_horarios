@@ -9,7 +9,7 @@
 // .suspenderNoVigentes() directamente, sin pasar por acá, porque ese caso
 // ya está probado en producción (asignarModulos, nuevaVersionDistribucion,
 // eliminarDistribucion). Este motor cubre las demás causas: INCIDENCIA,
-// PERIODO_OPERATIVO, CALENDARIO_ESCOLAR, NINGUNA.
+// PERIODO_OPERATIVO, CALENDARIO_ESCOLAR, NINGUNA/DICTADA.
 import { EstadoClase, Causa } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
@@ -17,18 +17,18 @@ import type { CondicionesVigentes, ResultadoResolucion } from "@/lib/types/clase
 
 /**
  * Función pura: aplica la tabla de precedencia definida en el documento de
- * arquitectura. No toca la base. Fácil de testear con tablas de casos.
+ * arquitectura. No toca la base ni el reloj -- recibe "fechaYaPaso" ya
+ * calculado, para que siga siendo fácil de testear con tablas de casos.
  *
  * Orden de precedencia (mayor a menor):
  *   1. INCIDENCIA           -> REEMPLAZADA (si tiene reemplazo) o SUSPENDIDA
  *   2. PERIODO_OPERATIVO    -> SUSPENDIDA (el período ya no cubre esa fecha)
  *   3. CALENDARIO_ESCOLAR   -> SUSPENDIDA
- *   4. NINGUNA              -> PROGRAMADA
+ *   4. Si nada de lo anterior aplica y la fecha ya pasó -> DICTADA
+ *   5. NINGUNA              -> PROGRAMADA
  *
  * NOTA: no evalúa CAMBIO_DISTRIBUCION -- ver comentario de cabecera del
- * archivo. Si en algún momento se unifica todo en este motor, acá es donde
- * se agregaría ese escalón (entre INCIDENCIA y PERIODO_OPERATIVO, según el
- * orden ya acordado en el documento).
+ * archivo.
  */
 export function resolverEstadoYCausa(condiciones: CondicionesVigentes): ResultadoResolucion {
   if (condiciones.tieneIncidenciaActiva) {
@@ -43,6 +43,9 @@ export function resolverEstadoYCausa(condiciones: CondicionesVigentes): Resultad
   if (condiciones.tieneEventoCalendario) {
     return { estado: EstadoClase.SUSPENDIDA, causa: Causa.CALENDARIO_ESCOLAR }
   }
+  if (condiciones.fechaYaPaso) {
+    return { estado: EstadoClase.DICTADA, causa: Causa.NINGUNA }
+  }
   return { estado: EstadoClase.PROGRAMADA, causa: Causa.NINGUNA }
 }
 
@@ -53,16 +56,13 @@ export function resolverEstadoYCausa(condiciones: CondicionesVigentes): Resultad
  * tieneEventoCalendario se consulta EN VIVO contra CalendarioEscolar por
  * fecha (institucionId + periodoOperativoId vigente + fecha + suspendeClases
  * activo), en vez de confiar en el calendarioEscolarId cacheado en la fila
- * de ClaseProgramada. Ese campo solo se seteaba cuando la clase estaba
- * PROGRAMADA en el momento de crear el evento (recalcularSuspendidasPor
- * Calendario filtra por eso) -- una clase que en ese momento estaba
- * SUSPENDIDA/REEMPLAZADA por otra causa (ej. una incidencia) nunca lo
- * recibía, y al re-resolverse más tarde (ej. al borrar la incidencia que
- * la tapaba) el motor no se enteraba de que el feriado existía.
+ * de ClaseProgramada -- ver historial de este archivo, confirmado con datos
+ * reales el 03/08/2026.
  *
- * Confirmado con datos reales el 03/08/2026: incidencia + feriado el mismo
- * día -> al borrar la incidencia, la clase volvía a PROGRAMADA ignorando
- * el feriado activo.
+ * fechaYaPaso: fecha de la clase <= hoy. Es lo único que decide DICTADA
+ * cuando ninguna otra causa aplica -- reemplaza la lógica ad-hoc que antes
+ * vivía en cerrarPeriodo.ts (que marcaba DICTADA sin mirar si la fecha
+ * era futura, bug real confirmado el 03/08/2026).
  */
 export async function obtenerCondicionesVigentes(
   claseId: number,
@@ -77,6 +77,9 @@ export async function obtenerCondicionesVigentes(
     },
   })
   if (!clase) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
+
+  const hoy = new Date()
+  hoy.setUTCHours(0, 0, 0, 0)
 
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
   const periodoOperativoVigente = periodo
@@ -103,6 +106,7 @@ export async function obtenerCondicionesVigentes(
     tieneEventoCalendario:   eventoCalendario !== null,
     eventoCalendarioId:      eventoCalendario?.id ?? null,
     periodoOperativoVigente,
+    fechaYaPaso:             clase.fecha <= hoy,
   }
 }
 
@@ -113,10 +117,9 @@ export async function obtenerCondicionesVigentes(
  *
  * También sincroniza calendarioEscolarId con el resultado real: lo setea
  * cuando la causa final es CALENDARIO_ESCOLAR, y lo limpia en cualquier
- * otro caso -- deja de ser una caché que se puede desactualizar y pasa a
- * reflejar siempre lo que el motor acaba de resolver.
+ * otro caso.
  *
- * No toca DICTADA -- una clase dictada es historia, no se re-resuelve.
+ * No toca DICTADA -- una clase ya dictada es historia, no se re-resuelve.
  */
 export async function resolverClase(
   claseId: number,

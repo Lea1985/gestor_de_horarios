@@ -38,6 +38,7 @@ export type CondicionesVigentes = {
   tieneEventoCalendario:   boolean
   eventoCalendarioId:      number | null
   periodoOperativoVigente: boolean
+  fechaYaPaso:             boolean
 }
 
 /**
