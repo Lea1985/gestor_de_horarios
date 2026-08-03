@@ -36,6 +36,7 @@ export type CondicionesVigentes = {
   tieneIncidenciaActiva:   boolean
   tieneReemplazoAsignado:  boolean
   tieneEventoCalendario:   boolean
+  eventoCalendarioId:      number | null
   periodoOperativoVigente: boolean
 }
 
