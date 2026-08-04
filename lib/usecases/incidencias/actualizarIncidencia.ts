@@ -1,20 +1,19 @@
 // lib/usecases/incidencias/actualizarIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 import prisma from "@/lib/prisma"
 
 export class IncidenciaNoEncontradaError extends Error {
   constructor() { super("Incidencia no encontrada") }
 }
-
 export class RangoFechasInvalidoError extends Error {
   constructor() { super("Rango de fechas inválido") }
 }
-
 export class CodigarioItemNoValidoError extends Error {
   constructor() { super("Código de incidencia no válido para esta institución") }
 }
-
 export class SuperposicionError extends Error {
   constructor(
     public readonly conflicto: {
@@ -26,11 +25,9 @@ export class SuperposicionError extends Error {
     super("Conflicto de fechas con otra incidencia")
   }
 }
-
 export class TieneHijosError extends Error {
   constructor() { super("No se puede editar una incidencia que tiene incidencias hijas en la cadena") }
 }
-
 export class TieneReemplazosError extends Error {
   constructor() { super("No se puede editar una incidencia que tiene reemplazos asignados en sus clases") }
 }
@@ -67,7 +64,6 @@ export async function actualizarIncidencia(
   const nuevaDesde = body.fecha_desde
     ? new Date(body.fecha_desde as string)
     : incidencia.fecha_desde
-
   const nuevaHasta = body.fecha_hasta
     ? new Date(body.fecha_hasta as string)
     : incidencia.fecha_hasta
@@ -98,14 +94,19 @@ export async function actualizarIncidencia(
     observacion:     body.observacion as string | undefined,
   })
 
-  // Si cambió el rango de fechas (desde y/o hasta), volvemos a vincular y
-  // resolver las clases del nuevo rango. No des-vincula las que quedaron
-  // afuera si el rango se achicó -- caso pendiente, ver nota aparte.
+  // Si cambió el rango de fechas (desde y/o hasta), desvinculamos TODO lo
+  // que tenía esta incidencia antes de re-vincular con el rango nuevo --
+  // así una clase que queda afuera al achicar el rango se libera y se
+  // resuelve sola a su estado correcto, en vez de quedar pegada a una
+  // incidencia que ya no la cubre.
   const rangoCambio =
     nuevaDesde.getTime() !== incidencia.fecha_desde.getTime() ||
     nuevaHasta.getTime() !== incidencia.fecha_hasta.getTime()
-
   if (rangoCambio) {
+    const { ids: idsDesvinculados } = await claseProgramadaService.desvincularIncidencia(id)
+    for (const claseId of idsDesvinculados) {
+      await resolverClase(claseId, tenantId)
+    }
     await resolverClasesIncidencia(id, tenantId)
   }
 
