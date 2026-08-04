@@ -402,28 +402,31 @@ export const claseProgramadaService = {
   },
 
   async vincularIncidencia(params: {
-    asignacionId: number
-    incidenciaId: number
-    desde: Date
-    hasta: Date
-  }): Promise<{ ids: number[] }> {
-    const { desde, hasta } = normalizarRango(params.desde, params.hasta)
-    const clases = await prisma.claseProgramada.findMany({
-      where: {
-        asignacionId: params.asignacionId,
-        fecha: { gte: desde, lte: hasta },
-        estado: { not: EstadoClase.DICTADA },
-      },
-      select: { id: true },
-    })
-    if (clases.length === 0) return { ids: [] }
-
-    await prisma.claseProgramada.updateMany({
-      where: { id: { in: clases.map(c => c.id) } },
-      data:  { incidenciaId: params.incidenciaId },
-    })
-    return { ids: clases.map(c => c.id) }
-  },
+      asignacionId: number
+      incidenciaId: number
+      desde: Date
+      hasta: Date
+    }): Promise<{ ids: number[] }> {
+      const { desde, hasta } = normalizarRango(params.desde, params.hasta)
+      const clases = await prisma.claseProgramada.findMany({
+        where: {
+          asignacionId: params.asignacionId,
+          fecha: { gte: desde, lte: hasta },
+          // Sin filtro de estado: incluye también DICTADA -- una incidencia
+          // cargada el mismo día (o retroactiva) tiene que poder cubrir una
+          // clase que ya se resolvió a DICTADA. El motor la protege: mientras
+          // tenga incidenciaId seteado, INCIDENCIA gana siempre en la tabla
+          // de precedencia y nunca vuelve a devolver DICTADA.
+        },
+        select: { id: true },
+      })
+      if (clases.length === 0) return { ids: [] }
+      await prisma.claseProgramada.updateMany({
+        where: { id: { in: clases.map(c => c.id) } },
+        data:  { incidenciaId: params.incidenciaId },
+      })
+      return { ids: clases.map(c => c.id) }
+    },
 
   /**
    * Desvincula una incidencia (eliminada) de sus ClaseProgramada. El llamador

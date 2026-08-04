@@ -38,7 +38,12 @@ export function resolverEstadoYCausa(condiciones: CondicionesVigentes): Resultad
     }
   }
   if (!condiciones.periodoOperativoVigente) {
-    return { estado: EstadoClase.SUSPENDIDA, causa: Causa.PERIODO_OPERATIVO }
+    // Sin período vigente: si la fecha ya pasó, se asume dictada -- no
+    // tiene sentido "suspender por período" algo que ya ocurrió. Si
+    // todavía no pasó, sí queda suspendida por PERIODO_OPERATIVO.
+    return condiciones.fechaYaPaso
+      ? { estado: EstadoClase.DICTADA, causa: Causa.NINGUNA }
+      : { estado: EstadoClase.SUSPENDIDA, causa: Causa.PERIODO_OPERATIVO }
   }
   if (condiciones.tieneEventoCalendario) {
     return { estado: EstadoClase.SUSPENDIDA, causa: Causa.CALENDARIO_ESCOLAR }
@@ -119,7 +124,13 @@ export async function obtenerCondicionesVigentes(
  * cuando la causa final es CALENDARIO_ESCOLAR, y lo limpia en cualquier
  * otro caso.
  *
- * No toca DICTADA -- una clase ya dictada es historia, no se re-resuelve.
+ * Se re-resuelve SIEMPRE, incluso si ya está DICTADA -- una incidencia
+ * cargada después de que una clase quedó dictada (ej: ausencia avisada a
+ * media mañana) tiene que poder revertirla a SUSPENDIDA/REEMPLAZADA. Esto
+ * es seguro porque fechaYaPaso es monótono (una vez true, sigue siendo
+ * true) y pierde contra INCIDENCIA en la tabla de precedencia -- una
+ * DICTADA nunca puede volver sola a PROGRAMADA, solo corregirse hacia
+ * SUSPENDIDA/REEMPLAZADA si aparece una causa real.
  */
 export async function resolverClase(
   claseId: number,
@@ -130,9 +141,6 @@ export async function resolverClase(
     select: { estado: true, causa: true, calendarioEscolarId: true },
   })
   if (!claseActual) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
-  if (claseActual.estado === EstadoClase.DICTADA) {
-    return { estado: claseActual.estado, causa: claseActual.causa, actualizada: false }
-  }
 
   const condiciones = await obtenerCondicionesVigentes(claseId, tenantId)
   const resultado = resolverEstadoYCausa(condiciones)
