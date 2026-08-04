@@ -1,6 +1,6 @@
 // lib/usecases/periodosOperativos/cerrarPeriodo.ts
 import prisma from "@/lib/prisma"
-import { EstadoClase } from "@prisma/client"
+import { EstadoClase, Causa } from "@prisma/client"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class PeriodoNoEncontradoError extends Error {
@@ -17,11 +17,6 @@ export async function cerrarPeriodo(tenantId: number, periodoId: number) {
   if (!periodo) throw new PeriodoNoEncontradoError()
   if (periodo.estado !== "ACTIVO") throw new PeriodoNoEsActivoError()
 
-  // Resolvemos las PROGRAMADA de este rango ANTES de cerrar el período,
-  // mientras el motor todavía lo ve como vigente: las que ya pasaron
-  // (fecha <= hoy) quedan DICTADA, las futuras quedan sin cambios (van a
-  // resolverse solas más adelante, ej. cuando se active un período nuevo
-  // y reconciliarPorPeriodoOperativo las alcance).
   const idsARevisar = (
     await prisma.claseProgramada.findMany({
       where: {
@@ -33,16 +28,21 @@ export async function cerrarPeriodo(tenantId: number, periodoId: number) {
     })
   ).map(c => c.id)
 
-  let clasesMarcadasDictadas = 0
-  for (const claseId of idsARevisar) {
-    const r = await resolverClase(claseId, tenantId)
-    if (r.estado === EstadoClase.DICTADA) clasesMarcadasDictadas++
-  }
-
+  // Cerramos PRIMERO: el motor tiene que ver que este período ya no está
+  // vigente al resolver las clases residuales, para decidir bien entre
+  // DICTADA (fecha ya pasada) y SUSPENDIDA/PERIODO_OPERATIVO (fecha futura).
   const periodoCerrado = await prisma.periodoOperativo.update({
     where: { id: periodoId },
     data:  { estado: "CERRADO" },
   })
 
-  return { periodo: periodoCerrado, clasesMarcadasDictadas }
+  let clasesMarcadasDictadas = 0
+  let clasesSuspendidasPorPeriodo = 0
+  for (const claseId of idsARevisar) {
+    const r = await resolverClase(claseId, tenantId)
+    if (r.estado === EstadoClase.DICTADA) clasesMarcadasDictadas++
+    if (r.causa === Causa.PERIODO_OPERATIVO) clasesSuspendidasPorPeriodo++
+  }
+
+  return { periodo: periodoCerrado, clasesMarcadasDictadas, clasesSuspendidasPorPeriodo }
 }
