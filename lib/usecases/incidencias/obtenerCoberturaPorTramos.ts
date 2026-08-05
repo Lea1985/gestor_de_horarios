@@ -1,5 +1,4 @@
 //lib/usecases/incidencias/obtenerCoberturaPorTramos.ts
-
 import prisma from "@/lib/prisma"
 
 export type TramoCobertura = {
@@ -28,7 +27,14 @@ export async function obtenerCoberturaPorTramos(
     select: {
       fecha: true,
       reemplazos: {
-        where:   { incidenciaId },
+        // Sin filtro por incidenciaId a propósito: dentro del rango de la
+        // incidencia raíz, el reemplazo activo puede pertenecer a una
+        // incidencia hija (ej: el suplente también se ausentó y se
+        // reasignó la cobertura) -- igual corresponde mostrarlo acá, es
+        // parte de la misma cadena. El sistema no permite incidencias
+        // superpuestas sobre la misma asignación salvo padre-hijo, así
+        // que cualquier activo en este rango pertenece a esta cadena.
+        where:   { activo: true },
         take:    1,
         orderBy: { createdAt: "desc" },
         select: {
@@ -39,21 +45,17 @@ export async function obtenerCoberturaPorTramos(
   })
 
   const tramos: TramoCobertura[] = []
-
   for (const clase of clases) {
     const fecha    = clase.fecha.toISOString().slice(0, 10)
     const suplente = clase.reemplazos[0]?.agenteSuplente ?? null
     const ultimo   = tramos[tramos.length - 1]
-
     const mismoSuplente =
       ultimo && (ultimo.suplente?.id ?? null) === (suplente?.id ?? null)
-
     if (mismoSuplente) {
       ultimo.hasta = fecha
     } else {
       tramos.push({ desde: fecha, hasta: fecha, suplente })
     }
   }
-
   return tramos
 }

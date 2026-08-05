@@ -113,8 +113,8 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
         </div>
       )}
 
-      {/* ── Cobertura por tramos (solo incidencias raíz) ── */}
-      {cobertura.length > 1 && (
+       {/* ── Cobertura por tramos (solo incidencias raíz) ── */}
+      {!incidencia.padre && cobertura.length > 0 && (
         <div style={{
           background:    "var(--color-surface)",
           border:        "1px solid var(--color-border)",
