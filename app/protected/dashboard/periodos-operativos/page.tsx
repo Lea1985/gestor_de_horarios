@@ -548,9 +548,9 @@ export default function PeriodosOperativosPage() {
 
                     {/* Vigencia (rango de fechas) */}
                     <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>
-                      {new Date(p.fecha_desde).toLocaleDateString("es-AR")}
+                      {new Date(p.fecha_desde).toLocaleDateString("es-AR", { timeZone: "UTC" })}
                       {" → "}
-                      {new Date(p.fecha_hasta).toLocaleDateString("es-AR")}
+                      {new Date(p.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}
                     </td>
 
                     {/* Estado */}

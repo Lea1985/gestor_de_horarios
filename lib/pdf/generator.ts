@@ -204,7 +204,7 @@ export function formatHora(minutos: number): string {
  */
 export function formatFecha(fecha: Date | string): string {
   const d = new Date(fecha)
-  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
 }
 
 /**

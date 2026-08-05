@@ -56,7 +56,7 @@ type DatosProfesor = {
 type VistaProfesor = { datos: DatosProfesor }
 
 function formatFecha(fecha: string): string {
-  return new Date(fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })
+  return new Date(fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
 }
 
 const th: React.CSSProperties = {

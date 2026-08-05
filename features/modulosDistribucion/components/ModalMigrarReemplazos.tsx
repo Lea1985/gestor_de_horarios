@@ -24,8 +24,7 @@ export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardand
             Reemplazo afectado
           </h3>
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
-            Este cambio va a recrear las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR")} y {new Date(tramo.hasta).toLocaleDateString("es-AR")}.
-          </p>
+            Este cambio va a recrear las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} y {new Date(tramo.hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}.          </p>
         </div>
 
         {tramo.migrable && tramo.suplente ? (

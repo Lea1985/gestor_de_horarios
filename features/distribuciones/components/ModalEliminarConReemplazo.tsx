@@ -27,8 +27,7 @@ export function ModalEliminarConReemplazo({ tramo, onConfirmar, onCancelar, guar
             Esta distribución tiene reemplazos activos
           </h3>
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
-            Eliminarla va a borrar las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR")} y {new Date(tramo.hasta).toLocaleDateString("es-AR")}.
-          </p>
+            Eliminarla va a borrar las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} y {new Date(tramo.hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}.          </p>
         </div>
 
         {tramo.migrable && tramo.suplente ? (
