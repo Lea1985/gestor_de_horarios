@@ -1,19 +1,17 @@
 // lib/usecases/asignaciones/eliminarAsignacion.ts
-
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
+import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import prisma from "@/lib/prisma"
 
 export class TieneIncidenciasActivasError extends Error {
   constructor() { super("No se puede eliminar una asignación con incidencias activas") }
 }
-
 export class TieneReemplazosActivosError extends Error {
   constructor() { super("No se puede eliminar una asignación con reemplazos activos") }
 }
 
 export async function eliminarAsignacion(id: number, tenantId: number) {
   const existe = await asignacionRepository.existeEnTenant(id, tenantId)
-
   if (!existe) {
     return { ok: true, deleted: false }
   }
@@ -43,5 +41,16 @@ export async function eliminarAsignacion(id: number, tenantId: number) {
   // softDelete cierra el titular vigente en la misma transacción
   await asignacionRepository.softDelete(id, tenantId)
 
-  return { ok: true, deleted: true }
+  // Suspender las clases futuras -- ya no hay asignación que las respalde.
+  // Sin incidencias/reemplazos activos posibles acá (bloqueado arriba),
+  // así que es un bulk-update directo, sin pasar por el motor clase por clase.
+  const hoy = new Date()
+  hoy.setUTCHours(0, 0, 0, 0)
+  const { suspendidas } = await claseProgramadaService.suspenderPorFinAsignacion({
+    institucionId: tenantId,
+    asignacionId:  id,
+    desde:         hoy,
+  })
+
+  return { ok: true, deleted: true, clasesSuspendidas: suspendidas }
 }

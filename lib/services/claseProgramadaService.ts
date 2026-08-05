@@ -445,4 +445,33 @@ export const claseProgramadaService = {
     })
     return { ids: clases.map(c => c.id) }
   },
+
+  /**
+   * Suspende en bloque las clases futuras de una asignación cuando esta se
+   * elimina. No hace falta pasar por resolverClase ni proteger INCIDENCIA:
+   * eliminarAsignacion ya bloquea el borrado si hay incidencias o
+   * reemplazos activos, así que para cuando se llega acá no puede quedar
+   * ninguna clase con esas causas. No toca DICTADA -- es historia.
+   */
+  async suspenderPorFinAsignacion(params: {
+    institucionId: number
+    asignacionId:  number
+    desde:         Date
+  }) {
+    const r = await prisma.claseProgramada.updateMany({
+      where: {
+        institucionId: params.institucionId,
+        asignacionId:  params.asignacionId,
+        fecha:         { gte: params.desde },
+        estado:        { not: EstadoClase.DICTADA },
+      },
+      data: {
+        estado:             EstadoClase.SUSPENDIDA,
+        causa:              Causa.FIN_ASIGNACION,
+        versionResolucion:  { increment: 1 },
+      },
+    })
+    return { suspendidas: r.count }
+  },
+  
 }
