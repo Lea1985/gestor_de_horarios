@@ -126,6 +126,8 @@ model Institucion {
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  ultimaResolucionClases   DateTime?
+
 
   unidades      UnidadOrganizativa[]
   modulos       ModuloHorario[]
