@@ -155,38 +155,53 @@ listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
     fechaHasta: Date,
     tenantId: number,
     excludeId?: number,
-    incidenciaPadreId?: number | null
+    excludeIds?: number[]
   ) {
     return prisma.incidencia.findFirst({
       where: {
         asignacionId,
         activo: true,
         deletedAt: null,
-
         asignacion: {
           institucionId: tenantId,
         },
-
         ...(excludeId ? { id: { not: excludeId } } : {}),
-
-        // Permitir superposición solo con el padre directo,
-        // NO con hermanas (hijas del mismo padre).
-        ...(incidenciaPadreId
-          ? { NOT: { id: incidenciaPadreId } }
+        // Permitir superposición con toda la cadena de ancestros
+        // (padre, abuelo, bisabuelo...), NO con hermanas ni incidencias
+        // no relacionadas.
+        ...(excludeIds && excludeIds.length > 0
+          ? { id: { notIn: excludeIds } }
           : {}),
-
         AND: [
           { fecha_desde: { lte: fechaHasta } },
           { fecha_hasta: { gte: fechaDesde } },
         ],
       },
-
       select: {
         id: true,
         fecha_desde: true,
         fecha_hasta: true,
       },
     })
+  },
+  async obtenerAncestros(incidenciaId: number, tenantId: number): Promise<number[]> {
+    const rows = await prisma.$queryRaw<{ id: number }[]>`
+      WITH RECURSIVE ancestros AS (
+        SELECT i.id, i."incidenciaPadreId"
+        FROM "Incidencia" i
+        INNER JOIN "Asignacion" a ON a.id = i."asignacionId"
+        WHERE i.id = ${incidenciaId}
+          AND a."institucionId" = ${tenantId}
+        UNION ALL
+        SELECT i.id, i."incidenciaPadreId"
+        FROM "Incidencia" i
+        INNER JOIN "Asignacion" a ON a.id = i."asignacionId"
+        INNER JOIN ancestros anc ON anc."incidenciaPadreId" = i.id
+        WHERE a."institucionId" = ${tenantId}
+      )
+      SELECT id FROM ancestros
+    `
+    return rows.map(r => r.id)
   },
 
   crear(data: {

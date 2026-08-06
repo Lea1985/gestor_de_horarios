@@ -91,13 +91,17 @@ export async function crearIncidencia(
   })
   if (!claseEnRango) throw new SinClasesProgramadasError()
 
+let excludeIds: number[] | undefined
+  if (incidenciaPadreId) {
+    excludeIds = await incidenciaRepository.obtenerAncestros(incidenciaPadreId, tenantId)
+  }
   const conflicto = await incidenciaRepository.verificarSuperposicion(
     asignacionId,
     fechaDesde,
     fechaHasta,
     tenantId,
     undefined,
-    incidenciaPadreId
+    excludeIds
   )
   if (conflicto) throw new SuperposicionError(conflicto)
 
