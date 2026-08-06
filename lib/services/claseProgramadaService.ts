@@ -15,6 +15,7 @@ import { EstadoClase, Causa, Dias } from "@prisma/client"
 import { generarClases } from "@/lib/helpers/clases"
 import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
 import type { RangoGeneracion } from "@/lib/types/claseProgramada"
+import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class RangoInvalidoError extends Error {
   constructor() { super("desde debe ser menor o igual a hasta") }
@@ -282,55 +283,40 @@ export const claseProgramadaService = {
 
     return { migradas: ids.length }
   },
-
-  /**
-   * Revisita clases ya generadas en una fecha puntual cuando se agrega o
-   * modifica un CalendarioEscolar con suspendeClases=true dentro de un
-   * período. Solo toca PROGRAMADA -> SUSPENDIDA (no pisa REEMPLAZADA/DICTADA
-   * ni clases suspendidas por otra causa de mayor precedencia).
+/**
+   * Re-resuelve todas las clases de una institución en una fecha puntual
+   * cuando se crea, elimina o reactiva un evento de CalendarioEscolar que
+   * suspende clases. Reemplaza la versión anterior (bulk-update manual
+   * limitado a estado: PROGRAMADA, que por eso nunca alcanzaba a las
+   * clases ya DICTADA -- confirmado con datos reales el 06/08/2026).
+   *
+   * Delega en resolverClase por cada clase: ya consulta en vivo contra
+   * CalendarioEscolar (fix de Bug 5) y respeta toda la tabla de
+   * precedencia (INCIDENCIA, PERIODO_OPERATIVO, fechaYaPaso), sin
+   * necesidad de indicarle una dirección "suspende sí/no" -- el motor la
+   * deduce solo a partir del estado actual de la base.
    */
-  async recalcularSuspendidasPorCalendario(params: {
+  async resolverClasesPorCalendario(params: {
     institucionId: number
-    calendarioEscolarId: number
-    fecha: Date
-    suspende: boolean
+    fecha:         Date
   }) {
-    const fecha = new Date(params.fecha)
-    fecha.setUTCHours(0, 0, 0, 0)
-    const finDia = new Date(fecha)
+    const inicioDia = new Date(params.fecha)
+    inicioDia.setUTCHours(0, 0, 0, 0)
+    const finDia = new Date(params.fecha)
     finDia.setUTCHours(23, 59, 59, 999)
-
-    if (params.suspende) {
-      const r = await prisma.claseProgramada.updateMany({
-        where: {
-          institucionId: params.institucionId,
-          fecha: { gte: fecha, lte: finDia },
-          estado: EstadoClase.PROGRAMADA,
-        },
-        data: {
-          estado: EstadoClase.SUSPENDIDA,
-          causa:  Causa.CALENDARIO_ESCOLAR,
-          calendarioEscolarId: params.calendarioEscolarId,
-        },
-      })
-      return { actualizadas: r.count }
-    } else {
-      const r = await prisma.claseProgramada.updateMany({
-        where: {
-          institucionId: params.institucionId,
-          fecha: { gte: fecha, lte: finDia },
-          estado: EstadoClase.SUSPENDIDA,
-          causa:  Causa.CALENDARIO_ESCOLAR,
-          calendarioEscolarId: params.calendarioEscolarId,
-        },
-        data: {
-          estado: EstadoClase.PROGRAMADA,
-          causa:  Causa.NINGUNA,
-          calendarioEscolarId: null,
-        },
-      })
-      return { actualizadas: r.count }
+    const clases = await prisma.claseProgramada.findMany({
+      where: {
+        institucionId: params.institucionId,
+        fecha: { gte: inicioDia, lte: finDia },
+      },
+      select: { id: true },
+    })
+    let actualizadas = 0
+    for (const clase of clases) {
+      const r = await resolverClase(clase.id, params.institucionId)
+      if (r.actualizada) actualizadas++
     }
+    return { actualizadas }
   },
 
   /**

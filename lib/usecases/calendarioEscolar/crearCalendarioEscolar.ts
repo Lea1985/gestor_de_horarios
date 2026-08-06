@@ -83,14 +83,11 @@ export async function crearCalendarioEscolar(
   // fecha (si las hay) y pasarlas de PROGRAMADA a SUSPENDIDA, dejando
   // registrada la causa y el evento que la originó. No hace nada si el
   // período todavía no generó clases para esa fecha.
-  if (creado.suspendeClases) {
-    await claseProgramadaService.recalcularSuspendidasPorCalendario({
-      institucionId:        tenantId,
-      calendarioEscolarId:  creado.id,
-      fecha:                fechaDate,
-      suspende:             true,
+if (creado.suspendeClases) {
+    await claseProgramadaService.resolverClasesPorCalendario({
+      institucionId: tenantId,
+      fecha:         fechaDate,
     })
   }
-
   return creado
 }

@@ -42,14 +42,11 @@ export async function reactivarCalendarioEscolar(
   )
 
   // Si este evento suspende clases, reactivarlo debe volver a suspenderlas.
-  if (existe.suspendeClases) {
-    await claseProgramadaService.recalcularSuspendidasPorCalendario({
-      institucionId:       tenantId,
-      calendarioEscolarId: calendarioId,
-      fecha:               existe.fecha,
-      suspende:            true,
+if (existe.suspendeClases) {
+    await claseProgramadaService.resolverClasesPorCalendario({
+      institucionId: tenantId,
+      fecha:         existe.fecha,
     })
   }
-
   return { ok: true }
 }

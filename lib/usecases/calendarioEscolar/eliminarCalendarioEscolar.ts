@@ -44,14 +44,11 @@ export async function eliminarCalendarioEscolar(
 
   // Si este evento suspendía clases, borrarlo debe revertirlas -- si no,
   // quedan SUSPENDIDA por un evento de calendario que ya no existe.
-  if (registro.suspendeClases) {
-    await claseProgramadaService.recalcularSuspendidasPorCalendario({
-      institucionId:       tenantId,
-      calendarioEscolarId: calendarioId,
-      fecha:               registro.fecha,
-      suspende:            false,
+ if (registro.suspendeClases) {
+    await claseProgramadaService.resolverClasesPorCalendario({
+      institucionId: tenantId,
+      fecha:         registro.fecha,
     })
   }
-
   return { ok: true }
 }
