@@ -1,12 +1,12 @@
 // features/asignaciones/components/ModalConfirmar.tsx
-
 type Props = {
-  mensaje:     string
-  onConfirmar: () => void
-  onCancelar:  () => void
+  mensaje:        string
+  labelConfirmar?: string
+  onConfirmar:    () => void
+  onCancelar:     () => void
 }
-
-export function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: Props) {
+export function ModalConfirmar({ mensaje, labelConfirmar = "Eliminar", onConfirmar, onCancelar }: Props) {
+  const esDestructivo = labelConfirmar === "Eliminar"
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }}
@@ -31,9 +31,13 @@ export function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: Props) {
           </button>
           <button
             onClick={onConfirmar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
+            style={{
+              padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none",
+              background: esDestructivo ? "var(--color-error)" : "var(--color-text-primary)",
+              fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer",
+            }}
           >
-            Eliminar
+            {labelConfirmar}
           </button>
         </div>
       </div>

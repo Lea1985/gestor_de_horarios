@@ -44,7 +44,7 @@ export async function GET(
     }
 
     try {
-      return Response.json(await obtenerAsignacion(id, tenantId))
+      return Response.json(await obtenerAsignacion(id, tenantId, true))
     } catch (error) {
       if (error instanceof ObtenerNoEncontradaError) {
         return Response.json({ error: error.message }, { status: 404 })

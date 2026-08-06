@@ -5,8 +5,8 @@ export class AsignacionNoEncontradaError extends Error {
   constructor() { super("Asignación no encontrada") }
 }
 
-export async function obtenerAsignacion(id: number, tenantId: number) {
-  const asignacion = await asignacionRepository.obtenerPorId(id, tenantId)
+export async function obtenerAsignacion(id: number, tenantId: number, incluirEliminados = false) {
+  const asignacion = await asignacionRepository.obtenerPorId(id, tenantId, incluirEliminados)
   if (!asignacion) throw new AsignacionNoEncontradaError()
   return asignacion
 }

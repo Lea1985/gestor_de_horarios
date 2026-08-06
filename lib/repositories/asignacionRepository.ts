@@ -40,12 +40,12 @@ export const asignacionRepository = {
     })
   },
 
-  obtenerPorId(id: number, tenantId: number) {
+  obtenerPorId(id: number, tenantId: number, incluirEliminados = false) {
     return prisma.asignacion.findFirst({
       where: {
         id,
         institucionId: tenantId,
-        deletedAt: null,
+        ...(incluirEliminados ? {} : { deletedAt: null }),
       },
       include: {
         ...includeBase,

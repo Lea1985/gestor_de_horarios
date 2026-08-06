@@ -25,6 +25,7 @@ export type AsignacionDetalle = {
   fecha_fin:                string | null
   estado:                   string
   activo:                   boolean
+  deletedAt:                string | null
   titularidades:            TitularVigente[]
   unidad:   { id: number; nombre: string; codigoUnidad: number; tipo?: string }
   materia:  { id: number; nombre: string } | null
@@ -54,6 +55,7 @@ export function useAsignacionDetalle(id: string) {
   const [loading,             setLoading]             = useState(true)
   const [error,               setError]               = useState<string | null>(null)
   const [confirmar,           setConfirmar]           = useState(false)
+  const [confirmarReactivar,  setConfirmarReactivar]  = useState(false)
   const [mostrarCambioTitular, setMostrarCambioTitular] = useState(false)
   const [agentes,             setAgentes]             = useState<Agente[]>([])
   const [agenteId,            setAgenteId]            = useState("")
@@ -101,6 +103,25 @@ export function useAsignacionDetalle(id: string) {
       setError("Error de red")
     } finally {
       setConfirmar(false)
+    }
+  }
+
+  async function reactivar() {
+    try {
+      const res = await fetch(`/api/asignaciones/${id}/reactivar`, {
+        method:  "POST",
+        headers: authHeaders,
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? "Error reactivando")
+        return
+      }
+      await cargar()
+    } catch {
+      setError("Error de red")
+    } finally {
+      setConfirmarReactivar(false)
     }
   }
 
@@ -160,6 +181,8 @@ export function useAsignacionDetalle(id: string) {
     ? "Edición estructural bloqueada · tiene historial"
     : null
 
+  const esEliminada = !!asignacion?.deletedAt
+
   return {
     asignacion,
     loading,
@@ -182,5 +205,9 @@ export function useAsignacionDetalle(id: string) {
     abrirCambiarTitular,
     cancelarCambioTitular,
     guardarCambioTitular,
+    esEliminada,
+    confirmarReactivar,
+    setConfirmarReactivar,
+    reactivar,
   }
 }

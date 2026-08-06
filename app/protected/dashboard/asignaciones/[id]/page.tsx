@@ -1,6 +1,5 @@
 // app/protected/dashboard/asignaciones/[id]/page.tsx
 "use client"
-
 import { useParams } from "next/navigation"
 import {
   useAsignacionDetalle,
@@ -17,7 +16,6 @@ import type { AsignacionFormData } from "@/features/asignaciones"
 export default function AsignacionDetallePage() {
   const params = useParams()
   const id     = params?.id as string
-
   const {
     asignacion, loading, error, setError,
     confirmar, setConfirmar,
@@ -26,6 +24,7 @@ export default function AsignacionDetallePage() {
     tieneHistorial, motivoBloqueoEditar,
     mostrarCambioTitular, agentes, agenteId, setAgenteId,
     guardando, abrirCambiarTitular, cancelarCambioTitular, guardarCambioTitular,
+    esEliminada, confirmarReactivar, setConfirmarReactivar, reactivar,
   } = useAsignacionDetalle(id)
 
   if (loading) return (
@@ -33,14 +32,12 @@ export default function AsignacionDetallePage() {
       Cargando asignación...
     </div>
   )
-
   if (!asignacion) return (
     <div style={{ padding: "var(--space-8)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
       {error ?? "Asignación no encontrada"}
     </div>
   )
 
-  // Adaptar agenteId al formato que espera CambiarTitularForm
   const formTitular: AsignacionFormData = {
     agenteId: agenteId,
     unidadId: "", identificadorEstructural: "", fecha_inicio: "",
@@ -56,9 +53,15 @@ export default function AsignacionDetallePage() {
           onCancelar={() => setConfirmar(false)}
         />
       )}
-
+      {confirmarReactivar && (
+        <ModalConfirmar
+          mensaje="¿Reactivar esta asignación?"
+          labelConfirmar="Reactivar"
+          onConfirmar={reactivar}
+          onCancelar={() => setConfirmarReactivar(false)}
+        />
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         <AsignacionDetalleHeader
           asignacion={asignacion}
           titular={titular}
@@ -68,16 +71,16 @@ export default function AsignacionDetallePage() {
           motivoBloqueoEliminar={motivoBloqueoEliminar}
           tieneHistorial={tieneHistorial}
           motivoBloqueoEditar={motivoBloqueoEditar}
+          esEliminada={esEliminada}
+          onReactivar={() => setConfirmarReactivar(true)}
         />
-
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
             {error}
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-
-        {mostrarCambioTitular ? (
+        {!esEliminada && (mostrarCambioTitular ? (
           <CambiarTitularForm
             form={formTitular}
             agentes={agentes}
@@ -91,18 +94,15 @@ export default function AsignacionDetallePage() {
             titular={titular}
             onCambiarTitular={abrirCambiarTitular}
           />
-        )}
-
+        ))}
         <CargoCard asignacion={asignacion} />
         <DistribucionesCard distribuciones={asignacion.distribuciones ?? []} />
         <IncidenciasCard incidencias={asignacion.incidencias ?? []} />
-
         {(asignacion.distribuciones?.length ?? 0) === 0 && (asignacion.incidencias?.length ?? 0) === 0 && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-8)", textAlign: "center", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
             Sin distribuciones ni incidencias registradas
           </div>
         )}
-
       </div>
     </>
   )
