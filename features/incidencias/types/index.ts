@@ -10,8 +10,10 @@ export type Incidencia = {
   asignacion?: {
     identificadorEstructural: string
     titularidades: {
-      agente: { nombre: string; apellido: string }
-    }[]
+          fecha_desde: string
+          fecha_hasta: string | null
+          agente: { nombre: string; apellido: string }
+        }[]
     unidad:   { nombre: string; codigoUnidad: number }
     materia:  { nombre: string } | null
     comision: {
@@ -24,6 +26,7 @@ export type Incidencia = {
   codigarioItem?: { codigo: string; nombre: string }
   padre?:         { id: number } | null
   hijos?:         { id: number }[]
+  agenteMostrado: { nombre: string; apellido: string; documento?: string } | null
 }
 
 export type IncidenciaDetalle = {
@@ -87,7 +90,7 @@ export type CadenaItem = {
 export type ReemplazoClase = {
   id:                  number
   asignacionTitularId: number
-  activo:              boolean        
+  activo:              boolean
   asignacionSuplente?: {
     identificadorEstructural: string
     titularidades: {
@@ -95,9 +98,10 @@ export type ReemplazoClase = {
     }[]
   } | null
   agenteSuplente?: {
-    id:       number
-    nombre:   string
-    apellido: string
+    id:        number
+    nombre:    string
+    apellido:  string
+    documento?: string
   } | null
 }
 

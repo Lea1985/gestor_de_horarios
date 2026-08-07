@@ -3,61 +3,37 @@ import { useRouter } from "next/navigation"
 import type { IncidenciaDetalle, ClaseAfectada, TramoCobertura } from "../types"
 import { Campo } from "./Campo"
 import { LinkIncidencia } from "./LinkIncidencia"
-
-
+import { titularVigenteEn } from "../utils/titularVigenteEn"
 function diasEntre(desde: string, hasta: string): number {
   const d1 = new Date(desde)
   const d2 = new Date(hasta)
   return Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1
 }
-
 const card = {
   background:   "var(--color-surface)",
   border:       "1px solid var(--color-border)",
   borderRadius: "var(--radius-xl)",
 }
-
 export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
   incidencia: IncidenciaDetalle
   clases:     ClaseAfectada[]
   cobertura:  TramoCobertura[]
 }) {
   const router = useRouter()
-  const agente = titularVigenteEn(incidencia.asignacion?.titularidades, incidencia.raizFechaDesde ?? incidencia.fecha_desde)
-  const dias   = diasEntre(incidencia.fecha_desde, incidencia.fecha_hasta)
-  function titularVigenteEn(
-  titularidades: { fecha_desde: string; fecha_hasta: string | null; agente: { nombre: string; apellido: string; documento?: string } }[] | undefined,
-  fecha: string | undefined
-) {
-  if (!titularidades?.length || !fecha) return null
-  const f = new Date(fecha)
-  const vigente = titularidades.find(t => {
-    const desde = new Date(t.fecha_desde)
-    const hasta = t.fecha_hasta ? new Date(t.fecha_hasta) : null
-    return desde <= f && (!hasta || hasta >= f)
-  })
-  return vigente?.agente ?? null
-}
-
-  // Datos del titular original (desde la incidencia padre)
-  const esSuplente       = !!incidencia.padre?.asignacion
+  const esSuplente = !!incidencia.padre?.asignacion
+  const reemplazosOrdenados = [...(clases[0]?.reemplazos ?? [])].sort((a, b) => a.id - b.id)
+  const inactivos = reemplazosOrdenados.filter(r => !r.activo)
+  const suplenteSaliente = inactivos[inactivos.length - 1]?.agenteSuplente ?? null
+  const suplenteEntrante = reemplazosOrdenados.find(r => r.activo)?.agenteSuplente ?? null
+  const agente = esSuplente
+    ? suplenteSaliente
+    : titularVigenteEn(incidencia.asignacion?.titularidades, incidencia.raizFechaDesde ?? incidencia.fecha_desde)
+  const dias = diasEntre(incidencia.fecha_desde, incidencia.fecha_hasta)
   const titularOriginal  = titularVigenteEn(incidencia.padre?.asignacion?.titularidades, incidencia.raizFechaDesde ?? incidencia.padre?.fecha_desde)
   const unidadOriginal   = incidencia.padre?.asignacion?.unidad ?? null
   const comisionOriginal = incidencia.padre?.asignacion?.comision ?? null
-
-  // Reemplazos de la primera clase afectada, ordenados cronológicamente
-  const reemplazosOrdenados = [...(clases[0]?.reemplazos ?? [])].sort((a, b) => a.id - b.id)
-
-  // Suplente que cubría antes (el último desactivado)
-  const inactivos = reemplazosOrdenados.filter(r => !r.activo)
-  const suplenteSaliente = inactivos[inactivos.length - 1]?.agenteSuplente ?? null
-
-  // Suplente que cubre ahora (el activo)
-  const suplenteEntrante = reemplazosOrdenados.find(r => r.activo)?.agenteSuplente ?? null
-
   return (
     <>
-      {/* ── Banner: esta incidencia es de un suplente ── */}
       {esSuplente && (
         <div style={{
           background:    "var(--color-surface)",
@@ -78,7 +54,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
               Incidencia de reemplazante
             </span>
           </div>
-
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", margin: 0 }}>
             {suplenteSaliente
               ? <><strong style={{ color: "var(--color-text-primary)" }}>{suplenteSaliente.apellido}, {suplenteSaliente.nombre}</strong> estaba cubriendo como reemplazante</>
@@ -97,7 +72,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
               <> Ahora <strong style={{ color: "var(--color-text-primary)" }}>{suplenteEntrante.apellido}, {suplenteEntrante.nombre}</strong> reemplaza a <strong style={{ color: "var(--color-text-primary)" }}>{suplenteSaliente.apellido}, {suplenteSaliente.nombre}</strong>.</>
             )}
           </p>
-
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
             <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
               Incidencia del titular:
@@ -125,8 +99,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
           </div>
         </div>
       )}
-
-       {/* ── Cobertura por tramos (solo incidencias raíz) ── */}
       {!incidencia.padre && cobertura.length > 0 && (
         <div style={{
           background:    "var(--color-surface)",
@@ -146,7 +118,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
               Cobertura por tramos
             </span>
           </div>
-
           <div style={{ display: "flex", flexDirection: "column" as const, gap: "var(--space-3)" }}>
             {cobertura.map((t, i) => (
               <div
@@ -172,7 +143,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
                     <> — <strong style={{ color: "var(--color-text-primary)" }}>{incidencia.asignacion.comision.curso?.nombre} {incidencia.asignacion.comision.nombre}</strong></>
                   )}.
                 </p>
-
                 <span style={{
                   fontSize:     "var(--text-xs)",
                   fontWeight:   "var(--font-medium)",
@@ -189,14 +159,17 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
           </div>
         </div>
       )}
-
-      {/* Card: Agente y asignación */}
       <div style={{ ...card, padding: "var(--space-6)" }}>
         <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-5)" }}>
           Agente y asignación
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "var(--space-5)" }}>
-          <Campo label="Agente">
+          {esSuplente && titularOriginal && (
+            <Campo label="Titular">
+              {titularOriginal.apellido}, {titularOriginal.nombre}
+            </Campo>
+          )}
+          <Campo label={esSuplente ? "Agente ausente" : "Agente"}>
             {agente
               ? `${agente.apellido}, ${agente.nombre}`
               : incidencia.asignacion
@@ -222,33 +195,26 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
           </Campo>
         </div>
       </div>
-
-      {/* Card: Datos de la incidencia */}
       <div style={{ ...card, padding: "var(--space-6)" }}>
         <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-5)" }}>
           Datos de la incidencia
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "var(--space-5)" }}>
-
           <Campo label="Tipo">
             {incidencia.codigarioItem
               ? `${incidencia.codigarioItem.codigo} — ${incidencia.codigarioItem.nombre}`
               : "—"
             }
           </Campo>
-
           <Campo label="Fecha desde">
             {incidencia.fecha_desde?.slice(0, 10)}
           </Campo>
-
           <Campo label="Fecha hasta">
             {incidencia.fecha_hasta?.slice(0, 10)}
           </Campo>
-
           <Campo label="Duración">
             {dias} día{dias !== 1 ? "s" : ""}
           </Campo>
-
           <Campo label="Incidencia padre">
             {incidencia.padre?.id
               ? <LinkIncidencia
@@ -259,7 +225,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
               : <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>Sin padre</span>
             }
           </Campo>
-
           <Campo label="Incidencias hijas">
             {!incidencia.hijos?.length
               ? <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>Sin hijos</span>
@@ -277,7 +242,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
               )
             }
           </Campo>
-
           <div style={{ gridColumn: "1 / -1" }}>
             <Campo label="Observación">
               {incidencia.observacion
@@ -286,7 +250,6 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
               }
             </Campo>
           </div>
-
         </div>
       </div>
     </>

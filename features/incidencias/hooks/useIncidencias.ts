@@ -15,13 +15,13 @@ export function useIncidencias() {
   const incidenciasFiltradas = useMemo(() => {
     if (!busqueda.trim()) return incidencias
     const q = busqueda.toLowerCase()
-    return incidencias.filter(i =>
-      i.asignacion?.identificadorEstructural.toLowerCase().includes(q) ||
-      i.codigarioItem?.nombre.toLowerCase().includes(q) ||
-      i.codigarioItem?.codigo.toLowerCase().includes(q) ||
-      (i.asignacion?.titularidades[0]?.agente?.apellido.toLowerCase().includes(q) ?? false) ||
-      (i.asignacion?.titularidades[0]?.agente?.nombre.toLowerCase().includes(q) ?? false)
-    )
+      return incidencias.filter(i =>
+            i.asignacion?.identificadorEstructural.toLowerCase().includes(q) ||
+            i.codigarioItem?.nombre.toLowerCase().includes(q) ||
+            i.codigarioItem?.codigo.toLowerCase().includes(q) ||
+            (i.agenteMostrado?.apellido.toLowerCase().includes(q) ?? false) ||
+            (i.agenteMostrado?.nombre.toLowerCase().includes(q) ?? false)
+          )
   }, [incidencias, busqueda])
 
   async function cargar() {

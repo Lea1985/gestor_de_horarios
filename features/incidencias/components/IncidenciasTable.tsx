@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation"
 import type { Incidencia } from "../types"
 
+
 const th = {
   textAlign:     "left"      as const,
   fontSize:      "var(--text-2xs)",
@@ -57,7 +58,7 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
               {/* Agente */}
               <td style={td}>
                 {(() => {
-                  const agente = i.asignacion?.titularidades[0]?.agente
+                  const agente = i.agenteMostrado      
                   if (!i.asignacion) return `#${i.asignacionId}`
                   if (!agente) return <em>Vacante</em>
                   return `${agente.apellido}, ${agente.nombre}`

@@ -51,8 +51,8 @@ const incidenciaInclude = {
 
 export const incidenciaRepository = {
   
-listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
-  return prisma.incidencia.findMany({
+async listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
+  const incidencias = await prisma.incidencia.findMany({
     where: {
       asignacion: {
         institucionId: tenantId,
@@ -63,6 +63,16 @@ listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
     include: incidenciaInclude,
     orderBy: { fecha_desde: "desc" },
   })
+  return Promise.all(
+    incidencias.map(async (i) => {
+      const agenteMostrado = i.incidenciaPadreId
+        ? await incidenciaRepository.obtenerSuplenteSaliente(i.id, tenantId)
+        : (i.asignacion?.titularidades.find(
+            t => t.fecha_desde <= i.fecha_desde && (!t.fecha_hasta || t.fecha_hasta >= i.fecha_desde)
+          )?.agente ?? null)
+      return { ...i, agenteMostrado }
+    })
+  )
 },
 
 async obtenerPorId(id: number, tenantId: number) {
@@ -226,6 +236,22 @@ async obtenerPorId(id: number, tenantId: number) {
     `
     return rows[0]?.fecha_desde ?? null
   },
+
+  async obtenerSuplenteSaliente(incidenciaId: number, tenantId: number) {
+  const clase = await prisma.claseProgramada.findFirst({
+    where: { incidenciaId, institucionId: tenantId },
+    orderBy: { fecha: "asc" },
+    select: { id: true },
+  })
+  if (!clase) return null
+  const reemplazos = await prisma.reemplazo.findMany({
+    where: { claseId: clase.id },
+    orderBy: { id: "asc" },
+    include: { agenteSuplente: { select: { nombre: true, apellido: true, documento: true } } },
+  })
+  const inactivos = reemplazos.filter(r => !r.activo)
+  return inactivos[inactivos.length - 1]?.agenteSuplente ?? null
+},
 
   crear(data: {
     asignacionId: number
