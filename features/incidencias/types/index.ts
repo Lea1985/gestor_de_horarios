@@ -31,12 +31,15 @@ export type IncidenciaDetalle = {
   asignacionId: number
   fecha_desde:  string
   fecha_hasta:  string
+  raizFechaDesde: string
   observacion:  string | null
   activo:       boolean
   deletedAt:    string | null
   asignacion?: {
     identificadorEstructural: string
     titularidades: {
+      fecha_desde: string
+      fecha_hasta: string | null
       agente: { nombre: string; apellido: string; documento: string }
     }[]
     unidad: { nombre: string; codigoUnidad: number }
@@ -54,6 +57,8 @@ export type IncidenciaDetalle = {
     asignacion?: {
       identificadorEstructural: string
       titularidades: {
+        fecha_desde: string
+        fecha_hasta: string | null
         agente: { nombre: string; apellido: string; documento: string }
       }[]
       unidad: { nombre: string; codigoUnidad: number }

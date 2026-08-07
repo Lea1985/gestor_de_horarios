@@ -1,6 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // lib/usecases/asignaciones/cambiarTitularAsignacion.ts
-// ─────────────────────────────────────────────────────────────────────────────
 
 import prisma from "@/lib/prisma"
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
@@ -29,13 +27,14 @@ export async function cambiarTitularAsignacion(
   }
 
   const desde = fechaDesde ? new Date(fechaDesde) : new Date()
+  desde.setUTCHours(0, 0, 0, 0)
 
   if (isNaN(desde.getTime())) {
     throw new TitularAsignacionError("Fecha inválida")
   }
 
   const cierreAnterior = new Date(desde)
-  cierreAnterior.setDate(cierreAnterior.getDate() - 1)
+  cierreAnterior.setUTCDate(cierreAnterior.getUTCDate() - 1)
 
   return prisma.$transaction(async (tx) => {
     // Cerrar titular vigente si existe

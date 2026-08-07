@@ -11,7 +11,6 @@ const incidenciaInclude = {
           titularidades: {
             orderBy: { fecha_desde: "desc" as const },
             include: { agente: true },
-            take: 1,
           },
           unidad: true,
           comision: { include: { curso: true } },
@@ -41,7 +40,6 @@ const incidenciaInclude = {
       titularidades: {
         orderBy: { fecha_desde: "desc" as const },
         include: { agente: true },
-        take: 1,
       },
       unidad:   true,
       materia:  true,
@@ -67,8 +65,8 @@ listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
   })
 },
 
-  obtenerPorId(id: number, tenantId: number) {
-    return prisma.incidencia.findFirst({
+async obtenerPorId(id: number, tenantId: number) {
+    const incidencia = await prisma.incidencia.findFirst({
       where: {
         id,
         asignacion: {
@@ -77,6 +75,11 @@ listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
       },
       include: incidenciaInclude,
     })
+    if (!incidencia) return null
+    const raizFechaDesde = incidencia.incidenciaPadreId
+      ? await incidenciaRepository.obtenerRaizFechaDesde(id, tenantId)
+      : incidencia.fecha_desde
+    return { ...incidencia, raizFechaDesde }
   },
 
   existeEnTenant(id: number, tenantId: number) {
@@ -202,6 +205,26 @@ listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
       SELECT id FROM ancestros
     `
     return rows.map(r => r.id)
+  },
+
+  async obtenerRaizFechaDesde(incidenciaId: number, tenantId: number): Promise<Date | null> {
+    const rows = await prisma.$queryRaw<{ fecha_desde: Date }[]>`
+      WITH RECURSIVE ancestros AS (
+        SELECT i.id, i."incidenciaPadreId", i.fecha_desde
+        FROM "Incidencia" i
+        INNER JOIN "Asignacion" a ON a.id = i."asignacionId"
+        WHERE i.id = ${incidenciaId}
+          AND a."institucionId" = ${tenantId}
+        UNION ALL
+        SELECT i.id, i."incidenciaPadreId", i.fecha_desde
+        FROM "Incidencia" i
+        INNER JOIN "Asignacion" a ON a.id = i."asignacionId"
+        INNER JOIN ancestros anc ON anc."incidenciaPadreId" = i.id
+        WHERE a."institucionId" = ${tenantId}
+      )
+      SELECT fecha_desde FROM ancestros WHERE "incidenciaPadreId" IS NULL
+    `
+    return rows[0]?.fecha_desde ?? null
   },
 
   crear(data: {

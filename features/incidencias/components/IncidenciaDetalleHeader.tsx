@@ -23,12 +23,25 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
   cobertura:  TramoCobertura[]
 }) {
   const router = useRouter()
-  const agente = incidencia.asignacion?.titularidades[0]?.agente ?? null
+  const agente = titularVigenteEn(incidencia.asignacion?.titularidades, incidencia.raizFechaDesde ?? incidencia.fecha_desde)
   const dias   = diasEntre(incidencia.fecha_desde, incidencia.fecha_hasta)
+  function titularVigenteEn(
+  titularidades: { fecha_desde: string; fecha_hasta: string | null; agente: { nombre: string; apellido: string; documento?: string } }[] | undefined,
+  fecha: string | undefined
+) {
+  if (!titularidades?.length || !fecha) return null
+  const f = new Date(fecha)
+  const vigente = titularidades.find(t => {
+    const desde = new Date(t.fecha_desde)
+    const hasta = t.fecha_hasta ? new Date(t.fecha_hasta) : null
+    return desde <= f && (!hasta || hasta >= f)
+  })
+  return vigente?.agente ?? null
+}
 
   // Datos del titular original (desde la incidencia padre)
   const esSuplente       = !!incidencia.padre?.asignacion
-  const titularOriginal  = incidencia.padre?.asignacion?.titularidades[0]?.agente ?? null
+  const titularOriginal  = titularVigenteEn(incidencia.padre?.asignacion?.titularidades, incidencia.raizFechaDesde ?? incidencia.padre?.fecha_desde)
   const unidadOriginal   = incidencia.padre?.asignacion?.unidad ?? null
   const comisionOriginal = incidencia.padre?.asignacion?.comision ?? null
 
