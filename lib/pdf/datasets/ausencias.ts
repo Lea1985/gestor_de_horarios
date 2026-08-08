@@ -9,20 +9,19 @@ export type FilaAusencia = {
   fechaHasta:        Date
   codigoArt:         string
   nombreArt:         string
-  // Para incidencias raíz: el titular real del cargo.
-  // Para incidencias hijas: el suplente saliente (a quien esta incidencia reemplaza).
   titularDNI:        string
   titularNombre:     string
   identificador:     string
   materia:           string | null
   comision:          string | null
-  distribucion:      string   // resumen de módulos con conteo por día: "MAR (1) 11:10-11:45, MIE (2) 12:35-13:15, 14:00-14:45"
-  // Reemplazo vigente (null si no hubo)
+  distribucion:      string
   reemplazante:      {
     nombre:    string
     documento: string
   } | null
 }
+
+type Agente = { id: number; nombre: string; apellido: string; documento: string }
 
 const ORDEN_DIAS: Record<string, number> = {
   LUNES: 1, MARTES: 2, MIERCOLES: 3,
@@ -34,10 +33,20 @@ function formatHora(min: number): string {
 }
 
 /**
- * Arma el resumen de distribución agrupando los módulos por día y
- * anteponiendo a cada día la cantidad de módulos que tiene.
- * Ej: "MAR (1) 11:10-11:45, MIE (2) 12:35-13:15, 14:00-14:45"
+ * Busca, dentro del historial de titularidades de una asignación, quién
+ * era el titular vigente en una fecha puntual (no simplemente el más
+ * reciente / actualmente activo).
  */
+function titularVigenteEn(
+  titularidades: { fecha_desde: Date; fecha_hasta: Date | null; agente: Agente | null }[],
+  fecha: Date
+): Agente | null {
+  const vigente = titularidades.find(
+    t => t.fecha_desde <= fecha && (!t.fecha_hasta || t.fecha_hasta >= fecha)
+  )
+  return vigente?.agente ?? null
+}
+
 function formatearDistribucion(
   modulos: { dia_semana: string; hora_desde: number; hora_hasta: number }[]
 ): string {
@@ -71,7 +80,13 @@ export async function obtenerDatosAusencias(
   }
 ): Promise<FilaAusencia[]> {
 
-  // Traer incidencias en el rango con sus datos
+  // Traer incidencias en el rango con sus datos.
+  // Ojo: cuando se filtra por agenteId, acá solo se hace un filtro AMPLIO
+  // ("tuvo alguna vez a este agente como titular"), sin importar si estaba
+  // activo o si la fecha coincide -- el filtro preciso (vigente en la
+  // fecha real de cada incidencia) se hace después, en JS, porque Prisma
+  // no puede correlacionar la fecha del titular contra la fecha de la
+  // incidencia padre en un único filtro anidado.
   const incidencias = await prisma.incidencia.findMany({
     where: {
       activo:     true,
@@ -85,11 +100,7 @@ export async function obtenerDatosAusencias(
         ...(filtros.comisionId ? { comisionId: filtros.comisionId } : {}),
         ...(filtros.agenteId   ? {
           titularidades: {
-            some: {
-              agenteId:   filtros.agenteId,
-              activo:     true,
-              fecha_hasta: null,
-            },
+            some: { agenteId: filtros.agenteId },
           },
         } : {}),
       },
@@ -113,10 +124,10 @@ export async function obtenerDatosAusencias(
           materia:  { select: { nombre: true } },
           comision: { select: { nombre: true } },
           titularidades: {
-            where:  { activo: true, fecha_hasta: null },
-            take:   1,
             select: {
-              agente: { select: { nombre: true, apellido: true, documento: true } },
+              fecha_desde: true,
+              fecha_hasta: true,
+              agente: { select: { id: true, nombre: true, apellido: true, documento: true } },
             },
           },
           distribuciones: {
@@ -151,20 +162,23 @@ export async function obtenerDatosAusencias(
 
   if (incidencias.length === 0) return []
 
-  type Agente = { nombre: string; apellido: string; documento: string }
+  // Filtro preciso por agente: se queda solo con las incidencias donde el
+  // titular REALMENTE vigente en la fecha de esa incidencia puntual (no el
+  // titular actual) coincide con el agente buscado.
+  const incidenciasFiltradas = filtros.agenteId
+    ? incidencias.filter(inc => {
+        const titularReal = titularVigenteEn(inc.asignacion.titularidades, inc.fecha_desde)
+        return titularReal?.id === filtros.agenteId
+      })
+    : incidencias
 
-  // Para cada incidencia, buscar entre las ClaseProgramada de su rango
-  // (mismo asignacionId) el reemplazo "saliente" (primer reemplazo
-  // histórico, menor id) y el "entrante/vigente" (activo actual).
-  // - Incidencia RAÍZ: el titular mostrado es el real (de asignacion.titularidades),
-  //   y el reemplazante mostrado es el primer reemplazo histórico de la clase.
-  // - Incidencia HIJA: el "titular" mostrado pasa a ser el suplente saliente
-  //   (primer reemplazo histórico), y el reemplazante es el activo actual.
+  if (incidenciasFiltradas.length === 0) return []
+
   const salienteHistorico = new Map<number, Agente>()
   const entranteActivo    = new Map<number, Agente>()
 
   await Promise.all(
-    incidencias.map(async (inc) => {
+    incidenciasFiltradas.map(async (inc) => {
       const clases = await prisma.claseProgramada.findMany({
         where: {
           institucionId: tenantId,
@@ -177,7 +191,7 @@ export async function obtenerDatosAusencias(
             select: {
               activo: true,
               agenteSuplente: {
-                select: { nombre: true, apellido: true, documento: true },
+                select: { id: true, nombre: true, apellido: true, documento: true },
               },
             },
           },
@@ -187,11 +201,15 @@ export async function obtenerDatosAusencias(
       for (const clase of clases) {
         if (clase.reemplazos.length === 0) continue
 
-        const primero = clase.reemplazos[0]
-        const activo  = clase.reemplazos.find(r => r.activo)
+        // El "saliente" es el último desactivado antes del actual (no el
+        // primero jamás creado) -- en una cadena de 3+ niveles, el primero
+        // histórico y el inmediatamente anterior son personas distintas.
+        const inactivos = clase.reemplazos.filter(r => !r.activo)
+        const saliente   = inactivos[inactivos.length - 1] ?? null
+        const activo     = clase.reemplazos.find(r => r.activo)
 
-        if (primero?.agenteSuplente && !salienteHistorico.has(inc.id)) {
-          salienteHistorico.set(inc.id, primero.agenteSuplente)
+        if (saliente?.agenteSuplente && !salienteHistorico.has(inc.id)) {
+          salienteHistorico.set(inc.id, saliente.agenteSuplente)
         }
         if (activo?.agenteSuplente && !entranteActivo.has(inc.id)) {
           entranteActivo.set(inc.id, activo.agenteSuplente)
@@ -201,9 +219,9 @@ export async function obtenerDatosAusencias(
     })
   )
 
-  const filas: FilaAusencia[] = incidencias.map(inc => {
+  const filas: FilaAusencia[] = incidenciasFiltradas.map(inc => {
     const esRaiz   = !inc.incidenciaPadreId
-    const titular  = inc.asignacion.titularidades[0]?.agente
+    const titular  = titularVigenteEn(inc.asignacion.titularidades, inc.fecha_desde)
     const dist     = inc.asignacion.distribuciones[0]
 
     const modulos = dist?.distribucionModulos.map(dm => dm.moduloHorario) ?? []
