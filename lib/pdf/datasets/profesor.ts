@@ -40,11 +40,27 @@ export type DatosReporteProfesor = {
   }[]
 }
 
+type Agente = { nombre: string; apellido: string; documento: string }
+
+/**
+ * Busca, dentro del historial de titularidades de una asignación, quién
+ * era el titular vigente en una fecha puntual (no simplemente el más
+ * reciente / actualmente activo).
+ */
+function titularVigenteEn(
+  titularidades: { fecha_desde: Date; fecha_hasta: Date | null; agente: Agente | null }[],
+  fecha: Date
+): Agente | null {
+  const vigente = titularidades.find(
+    t => t.fecha_desde <= fecha && (!t.fecha_hasta || t.fecha_hasta >= fecha)
+  )
+  return vigente?.agente ?? null
+}
+
 export async function obtenerDatosProfesor(
   tenantId: number,
   agenteId: number
 ): Promise<DatosReporteProfesor | null> {
-
   const agente = await prisma.agente.findFirst({
     where: { id: agenteId, institucionId: tenantId, deletedAt: null },
     select: {
@@ -69,7 +85,6 @@ export async function obtenerDatosProfesor(
     select: { asignacionId: true },
     distinct: ["asignacionId"],
   })
-
   const asignacionIds = titularidades.map(t => t.asignacionId)
 
   const asignaciones = await prisma.asignacion.findMany({
@@ -112,11 +127,14 @@ export async function obtenerDatosProfesor(
     },
   })
 
-  // Reemplazos como suplente
+  // Reemplazos como suplente -- se traen TODOS (activos e históricos), no
+  // solo los que este agente sigue cubriendo hoy. Un reemplazo que ya
+  // terminó (porque a este agente también lo reemplazaron después) sigue
+  // siendo un hecho real que pasó, y el reporte del profesor debe
+  // mostrarlo igual.
   const reemplazos = await prisma.reemplazo.findMany({
     where: {
       agenteSuplenteId: agenteId,
-      activo:           true,
       clase: { institucionId: tenantId },
     },
     orderBy: { clase: { fecha: "desc" } },
@@ -126,9 +144,9 @@ export async function obtenerDatosProfesor(
         select: {
           identificadorEstructural: true,
           titularidades: {
-            where:  { activo: true, fecha_hasta: null },
-            take:   1,
             select: {
+              fecha_desde: true,
+              fecha_hasta: true,
               agente: { select: { nombre: true, apellido: true, documento: true } },
             },
           },
@@ -169,7 +187,7 @@ export async function obtenerDatosProfesor(
       })),
     })),
     reemplazosComoSuplente: reemplazos.map(r => {
-      const titular = r.asignacionTitular.titularidades[0]?.agente
+      const titular = titularVigenteEn(r.asignacionTitular.titularidades, r.clase.fecha)
       return {
         fecha:         r.clase.fecha,
         asignacion:    r.asignacionTitular.identificadorEstructural,
