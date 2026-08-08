@@ -7,39 +7,49 @@ export type ClaseOperativa = {
   fecha: Date
   estado: string
   coberturaEstado: CoberturaEstado
-
   unidad: {
     id: number
     nombre: string
   } | null
-
   comision: {
     id: number
     nombre: string
   } | null
-
   asignacion: {
     id: number
     identificadorEstructural: string
   } | null
-
   titular: {
     nombre: string
     apellido: string
   } | null
-
   incidencia: {
     id: number
     observacion: string | null
     articulo: string | null
   } | null
-
   reemplazoActivo: boolean
-
   suplente: {
     nombre: string
     apellido: string
   } | null
+}
+
+type Agente = { nombre: string; apellido: string }
+
+/**
+ * Busca, dentro del historial de titularidades de una asignación, quién
+ * era el titular vigente en una fecha puntual (no simplemente el más
+ * reciente / actualmente activo).
+ */
+function titularVigenteEn(
+  titularidades: { fecha_desde: Date; fecha_hasta: Date | null; agente: Agente | null }[],
+  fecha: Date
+): Agente | null {
+  const vigente = titularidades.find(
+    t => t.fecha_desde <= fecha && (!t.fecha_hasta || t.fecha_hasta >= fecha)
+  )
+  return vigente?.agente ?? null
 }
 
 /**
@@ -53,7 +63,6 @@ export async function obtenerClasesOperativas(
   desde: Date,
   hasta: Date
 ): Promise<ClaseOperativa[]> {
-
   const clases = await prisma.claseProgramada.findMany({
     where: {
       institucionId: tenantId,
@@ -72,9 +81,9 @@ export async function obtenerClasesOperativas(
           id: true,
           identificadorEstructural: true,
           titularidades: {
-            where: { activo: true, fecha_hasta: null },
-            take: 1,
             select: {
+              fecha_desde: true,
+              fecha_hasta: true,
               agente: { select: { nombre: true, apellido: true } },
             },
           },
@@ -95,12 +104,10 @@ export async function obtenerClasesOperativas(
       },
     },
   })
-
   return clases.map(clase => {
-    const titular   = clase.asignacion?.titularidades?.[0]?.agente ?? null
+    const titular   = clase.asignacion ? titularVigenteEn(clase.asignacion.titularidades, clase.fecha) : null
     const reemplazo = clase.reemplazos?.[0] ?? null
     const suplente  = reemplazo?.agenteSuplente ?? null
-
     const coberturaEstado: CoberturaEstado =
       clase.estado === "SUSPENDIDA"
         ? "SUSPENDIDA"
@@ -109,25 +116,20 @@ export async function obtenerClasesOperativas(
         : clase.incidencia
         ? "SIN_COBERTURA"
         : "NORMAL"
-
     return {
       id:     clase.id,
       fecha:  clase.fecha,
       estado: clase.estado,
       coberturaEstado,
-
       unidad:   clase.unidad,
       comision: clase.comision,
-
       asignacion: clase.asignacion
         ? {
             id: clase.asignacion.id,
             identificadorEstructural: clase.asignacion.identificadorEstructural,
           }
         : null,
-
       titular,
-
       incidencia: clase.incidencia
         ? {
             id:          clase.incidencia.id,
@@ -135,7 +137,6 @@ export async function obtenerClasesOperativas(
             articulo:    clase.incidencia.codigarioItem?.codigo ?? null,
           }
         : null,
-
       reemplazoActivo: !!reemplazo,
       suplente,
     }
@@ -153,6 +154,5 @@ export async function obtenerClasesOperativasHoy(
   const manana = new Date(hoy)
   manana.setDate(manana.getDate() + 1)
   manana.setMilliseconds(manana.getMilliseconds() - 1)
-
   return obtenerClasesOperativas(tenantId, hoy, manana)
 }
