@@ -156,3 +156,62 @@ export async function obtenerClasesOperativasHoy(
   manana.setMilliseconds(manana.getMilliseconds() - 1)
   return obtenerClasesOperativas(tenantId, hoy, manana)
 }
+
+export type ClaseSinCobertura = {
+  claseId:       number
+  incidenciaId:  number | null
+  unidad:        string | null
+  comision:      string | null
+  identificador: string | null
+  titular:       string
+  articulo:      string | null
+}
+
+export type ClaseReemplazoActivo = {
+  claseId:       number
+  incidenciaId:  number | null
+  unidad:        string | null
+  comision:      string | null
+  identificador: string | null
+  titular:       string
+  suplente:      string
+}
+
+/**
+ * Mapea clases operativas (típicamente las de hoy) a las dos listas que
+ * consumen tanto el Dashboard en pantalla como el PDF exportado: clases
+ * sin cobertura y reemplazos activos. Antes esta lógica vivía duplicada
+ * en app/api/dashboard/overview/route.ts y lib/pdf/datasets/dashboard.ts
+ * -- centralizada acá para que ambos compartan exactamente el mismo
+ * criterio (si se corrige algo, se corrige una sola vez).
+ */
+export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
+  sinCobertura: ClaseSinCobertura[]
+  reemplazosActivos: ClaseReemplazoActivo[]
+} {
+  const sinCobertura = clasesHoy
+    .filter(c => c.coberturaEstado === "SIN_COBERTURA")
+    .map(c => ({
+      claseId:       c.id,
+      incidenciaId:  c.incidencia?.id ?? null,
+      unidad:        c.unidad?.nombre ?? null,
+      comision:      c.comision?.nombre ?? null,
+      identificador: c.asignacion?.identificadorEstructural ?? null,
+      titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
+      articulo:      c.incidencia?.articulo ?? null,
+    }))
+
+  const reemplazosActivos = clasesHoy
+    .filter(c => c.coberturaEstado === "REEMPLAZADA")
+    .map(c => ({
+      claseId:       c.id,
+      incidenciaId:  c.incidencia?.id ?? null,
+      unidad:        c.unidad?.nombre ?? null,
+      comision:      c.comision?.nombre ?? null,
+      identificador: c.asignacion?.identificadorEstructural ?? null,
+      titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
+      suplente:      c.suplente ? `${c.suplente.apellido}, ${c.suplente.nombre}` : "—",
+    }))
+
+  return { sinCobertura, reemplazosActivos }
+}
