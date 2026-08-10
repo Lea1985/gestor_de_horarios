@@ -81,6 +81,7 @@ export async function obtenerClasesOperativas(
           id: true,
           identificadorEstructural: true,
           titularidades: {
+            orderBy: { fecha_desde: "desc" },
             select: {
               fecha_desde: true,
               fecha_hasta: true,
@@ -104,10 +105,12 @@ export async function obtenerClasesOperativas(
       },
     },
   })
+
   return clases.map(clase => {
     const titular   = clase.asignacion ? titularVigenteEn(clase.asignacion.titularidades, clase.fecha) : null
     const reemplazo = clase.reemplazos?.[0] ?? null
     const suplente  = reemplazo?.agenteSuplente ?? null
+
     const coberturaEstado: CoberturaEstado =
       clase.estado === "SUSPENDIDA"
         ? "SUSPENDIDA"
@@ -116,6 +119,7 @@ export async function obtenerClasesOperativas(
         : clase.incidencia
         ? "SIN_COBERTURA"
         : "NORMAL"
+
     return {
       id:     clase.id,
       fecha:  clase.fecha,

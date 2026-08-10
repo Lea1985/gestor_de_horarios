@@ -124,6 +124,7 @@ export async function obtenerDatosAusencias(
           materia:  { select: { nombre: true } },
           comision: { select: { nombre: true } },
           titularidades: {
+            orderBy: { fecha_desde: "desc" },
             select: {
               fecha_desde: true,
               fecha_hasta: true,

@@ -144,6 +144,7 @@ export async function obtenerDatosProfesor(
         select: {
           identificadorEstructural: true,
           titularidades: {
+            orderBy: { fecha_desde: "desc" },
             select: {
               fecha_desde: true,
               fecha_hasta: true,
