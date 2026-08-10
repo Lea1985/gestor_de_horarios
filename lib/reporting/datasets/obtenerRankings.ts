@@ -29,6 +29,18 @@ function calcularPeriodo(rango: RangoRankings): { desde: Date | null; hasta: Dat
   return { desde, hasta }
 }
 
+// ── Titular vigente en una fecha (mismo patrón que ausencias.ts / profesor.ts / obtenerClasesOperativas.ts) ──
+type Agente = { id: number; nombre: string; apellido: string }
+type TitularHistorial = { fecha_desde: Date; fecha_hasta: Date | null; agente: Agente }
+
+function titularVigenteEn(titularidades: TitularHistorial[] | undefined, fecha: Date): Agente | null {
+  if (!titularidades?.length) return null
+  const vigente = titularidades.find(t =>
+    t.fecha_desde <= fecha && (!t.fecha_hasta || t.fecha_hasta >= fecha)
+  )
+  return vigente?.agente ?? null
+}
+
 export async function obtenerRankings(
   tenantId: number,
   rango:    RangoRankings = "anio",
@@ -41,36 +53,60 @@ export async function obtenerRankings(
     : undefined
 
   // ── 1. Agentes con más licencias ─────────────────────────────────────────
-  const rawAgentes = await prisma.incidencia.groupBy({
-    by: ["asignacionId"],
+  // Se trae cada incidencia individual (no agrupada en la DB) porque el titular
+  // a atribuir depende de la fecha_desde de CADA incidencia, no de un único
+  // titular "actual" por asignación -- si el titular de la asignación cambió
+  // dentro del período, incidencias antes y después del cambio pertenecen a
+  // agentes distintos.
+  const incidenciasParaRanking = await prisma.incidencia.findMany({
     where: {
       activo:     true,
       deletedAt:  null,
       asignacion: { institucionId: tenantId },
       ...(filtroDates ? { fecha_desde: filtroDates } : {}),
     } satisfies Prisma.IncidenciaWhereInput,
-    _count: { id: true },
-    orderBy: { _count: { id: "desc" } },
-    take: limite * 3,
+    select: {
+      id:           true,
+      asignacionId: true,
+      fecha_desde:  true,
+    },
   })
 
-  const titulares = await prisma.titularAsignacion.findMany({
+  const asignacionIdsConIncidencias = Array.from(
+    new Set(incidenciasParaRanking.map(i => i.asignacionId))
+  )
+
+  const historialTitulares = await prisma.titularAsignacion.findMany({
     where: {
-      asignacionId: { in: rawAgentes.map(r => r.asignacionId) },
-      activo:       true,
+      asignacionId: { in: asignacionIdsConIncidencias },
       deletedAt:    null,
     },
-    include: { agente: { select: { id: true, nombre: true, apellido: true } } },
-    distinct: ["asignacionId"],
+    orderBy: { fecha_desde: "desc" },
+    select: {
+      asignacionId: true,
+      fecha_desde:  true,
+      fecha_hasta:  true,
+      agente:       { select: { id: true, nombre: true, apellido: true } },
+    },
   })
 
+  const historialPorAsignacion = new Map<number, TitularHistorial[]>()
+  for (const t of historialTitulares) {
+    const arr = historialPorAsignacion.get(t.asignacionId) ?? []
+    arr.push(t)
+    historialPorAsignacion.set(t.asignacionId, arr)
+  }
+
   const totalPorAgente = new Map<number, { nombre: string; apellido: string; total: number }>()
-  for (const row of rawAgentes) {
-    const titular = titulares.find(t => t.asignacionId === row.asignacionId)
-    if (!titular) continue
-    const { id, nombre, apellido } = titular.agente
-    const prev = totalPorAgente.get(id)
-    totalPorAgente.set(id, { nombre, apellido, total: (prev?.total ?? 0) + row._count.id })
+  for (const inc of incidenciasParaRanking) {
+    const titular = titularVigenteEn(historialPorAsignacion.get(inc.asignacionId), inc.fecha_desde)
+    if (!titular) continue // asignación sin ningún titular vigente en esa fecha (ej. quedó vacante ya en ese momento)
+    const prev = totalPorAgente.get(titular.id)
+    totalPorAgente.set(titular.id, {
+      nombre:   titular.nombre,
+      apellido: titular.apellido,
+      total:    (prev?.total ?? 0) + 1,
+    })
   }
 
   const agentesConMasLicencias: RankingItem[] = Array.from(totalPorAgente.entries())

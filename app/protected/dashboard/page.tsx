@@ -677,8 +677,8 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Cards secundarias ───────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-3)" }}>
-        {cardsSecundarias.map(({ label, value, path }) => (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--space-3)" }}>    
+    {cardsSecundarias.map(({ label, value, path }) => (
           <div
             key={label}
             onClick={() => router.push(path)}

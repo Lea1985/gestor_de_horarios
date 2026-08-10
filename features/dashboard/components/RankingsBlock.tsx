@@ -1,6 +1,5 @@
 // features/dashboard/components/RankingsBlock.tsx
 "use client"
-
 import { Fragment, useState } from "react"
 import { useRankings } from "../hooks/useRankings"
 import { RangoRankings, RankingItem } from "../types/rankings"
@@ -118,14 +117,13 @@ function Skeleton() {
 }
 
 // ── Columna ──────────────────────────────────────────────────────────────────
-function Columna({ titulo, items, loading, color, onVerTodos }: {
+function Columna({ titulo, items, loading, color, onVerTodos, cargando }: {
   titulo: string; items: RankingItem[]; loading: boolean
-  color: string; onVerTodos?: () => void
+  color: string; onVerTodos?: () => void; cargando?: boolean
 }) {
   // Máximo visual: el mayor valor real. Si hay un solo ítem con total alto,
   // mostramos la barra proporcional al total global (no siempre 100%).
   const max = items[0]?.total ?? 1
-
   return (
     <div style={{
       flex: "1 1 0",
@@ -141,7 +139,6 @@ function Columna({ titulo, items, loading, color, onVerTodos }: {
           {titulo}
         </span>
       </div>
-
       {/* Ítems */}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", flex: 1 }}>
         {loading
@@ -153,11 +150,11 @@ function Columna({ titulo, items, loading, color, onVerTodos }: {
               ))
         }
       </div>
-
       {/* Ver todos */}
       {!loading && items.length > 0 && onVerTodos && (
         <button
           onClick={onVerTodos}
+          disabled={cargando}
           style={{
             background: "none",
             border: "none",
@@ -166,9 +163,11 @@ function Columna({ titulo, items, loading, color, onVerTodos }: {
             paddingBottom: 0,
             paddingLeft: 0,
             paddingRight: 0,
+            cursor: cargando ? "default" : "pointer",
+            opacity: cargando ? 0.5 : 1,
           }}
         >
-          Ver todos →
+          {cargando ? "Cargando..." : "Ver todos →"}
         </button>
       )}
     </div>
@@ -215,24 +214,33 @@ function ModalVerTodos({ titulo, items, color, onClose }: {
 }
 
 // ── Bloque principal ─────────────────────────────────────────────────────────
+type ClaveRanking = "agentesConMasLicencias" | "articulosMasUsados" | "comisionesConMasAusencias"
+
 interface ModalState { titulo: string; items: RankingItem[]; color: string }
 
 export function RankingsBlock() {
-  const { data, loading, error, rango, setRango } = useRankings("anio")
+  const { data, loading, error, rango, setRango, fetchCompleto } = useRankings("anio")
   const [modal, setModal] = useState<ModalState | null>(null)
+  const [cargandoModal, setCargandoModal] = useState<string | null>(null)
 
-  const columnas = [
-    { titulo: "Agentes con más licencias",    items: data?.agentesConMasLicencias ?? [],    color: ACENTOS[0] },
-    { titulo: "Artículos más usados",         items: data?.articulosMasUsados ?? [],         color: ACENTOS[1] },
-    { titulo: "Comisiones con más ausencias", items: data?.comisionesConMasAusencias ?? [], color: ACENTOS[2] },
+  const columnas: { titulo: string; key: ClaveRanking; items: RankingItem[]; color: string }[] = [
+    { titulo: "Agentes con más licencias",    key: "agentesConMasLicencias",    items: data?.agentesConMasLicencias ?? [],    color: ACENTOS[0] },
+    { titulo: "Artículos más usados",         key: "articulosMasUsados",        items: data?.articulosMasUsados ?? [],        color: ACENTOS[1] },
+    { titulo: "Comisiones con más ausencias", key: "comisionesConMasAusencias", items: data?.comisionesConMasAusencias ?? [], color: ACENTOS[2] },
   ]
+
+  async function abrirVerTodos(col: typeof columnas[number]) {
+    setCargandoModal(col.titulo)
+    const completo = await fetchCompleto()
+    setCargandoModal(null)
+    setModal({ titulo: col.titulo, items: completo?.[col.key] ?? col.items, color: col.color })
+  }
 
   return (
     <>
       {modal && (
         <ModalVerTodos titulo={modal.titulo} items={modal.items} color={modal.color} onClose={() => setModal(null)} />
       )}
-
       {/* Card contenedor */}
       <div style={{
         background: "#FFFFFF",
@@ -243,7 +251,6 @@ export function RankingsBlock() {
         flexDirection: "column",
         gap: "var(--space-5)",
       }}>
-
         {/* Header del bloque */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-4)", flexWrap: "wrap" }}>
           <div>
@@ -254,7 +261,6 @@ export function RankingsBlock() {
               Licencias, artículos y comisiones con mayor impacto
             </p>
           </div>
-
           {/* Selector de rango — segmented control discreto */}
           <div style={{
             display: "inline-flex",
@@ -290,14 +296,12 @@ export function RankingsBlock() {
             })}
           </div>
         </div>
-
         {/* Error */}
         {error && (
           <div style={{ padding: "8px 12px", borderRadius: "var(--radius-md)", background: "#FDE8E8", border: "1px solid #E5484D", fontSize: "var(--text-xs)", color: "#E5484D" }}>
             {error}
           </div>
         )}
-
         {/* Grid de tres columnas con separadores verticales */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr 1px 1fr", gap: 0 }}>
           {columnas.map((col, i) => (
@@ -308,7 +312,8 @@ export function RankingsBlock() {
                   items={col.items}
                   loading={loading}
                   color={col.color}
-                  onVerTodos={() => setModal({ titulo: col.titulo, items: col.items, color: col.color })}
+                  onVerTodos={() => abrirVerTodos(col)}
+                  cargando={cargandoModal === col.titulo}
                 />
               </div>
               {i < 2 && (
@@ -317,7 +322,6 @@ export function RankingsBlock() {
             </Fragment>
           ))}
         </div>
-
       </div>
     </>
   )

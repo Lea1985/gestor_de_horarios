@@ -1,18 +1,18 @@
 // features/dashboard/hooks/useRankings.ts
 "use client"
-
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { fetchRankings } from "../services/rankingsService"
 import { RangoRankings, RankingsData } from "../types/rankings"
 
 interface UseRankingsReturn {
-  data:     RankingsData | null
-  loading:  boolean
-  error:    string | null
-  rango:    RangoRankings
-  setRango: (r: RangoRankings) => void
-  refetch:  () => void
+  data:          RankingsData | null
+  loading:       boolean
+  error:         string | null
+  rango:         RangoRankings
+  setRango:      (r: RangoRankings) => void
+  refetch:       () => void
+  fetchCompleto: () => Promise<RankingsData | null>
 }
 
 export function useRankings(initialRango: RangoRankings = "anio"): UseRankingsReturn {
@@ -44,5 +44,18 @@ export function useRankings(initialRango: RangoRankings = "anio"): UseRankingsRe
 
   useEffect(() => { fetch_() }, [fetch_])
 
-  return { data, loading, error, rango, setRango, refetch: fetch_ }
+  // Fetch bajo demanda con límite alto, para el modal "Ver todos" de RankingsBlock.
+  // No toca el estado `data` (que alimenta las columnas de top-5) -- devuelve
+  // el resultado directamente a quien lo pida, para no romper la vista principal
+  // si el fetch tarda o falla.
+  const fetchCompleto = useCallback(async (): Promise<RankingsData | null> => {
+    if (token === "Bearer ") return null
+    try {
+      return await fetchRankings(rango, headersRef.current, 100)
+    } catch {
+      return null
+    }
+  }, [token, rango])
+
+  return { data, loading, error, rango, setRango, refetch: fetch_, fetchCompleto }
 }

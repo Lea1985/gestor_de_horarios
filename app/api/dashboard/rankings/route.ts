@@ -17,7 +17,7 @@ export async function GET(req: Request) {
       const rango: RangoRankings = esRangoValido(rangoRaw) ? rangoRaw : "anio"
 
       const limiteRaw = Number(searchParams.get("limite"))
-      const limite = limiteRaw >= 1 && limiteRaw <= 20 ? limiteRaw : 5
+      const limite = limiteRaw >= 1 && limiteRaw <= 100 ? limiteRaw : 5
 
       const data = await obtenerRankings(tenantId, rango, limite)
 
