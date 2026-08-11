@@ -1,5 +1,4 @@
 // lib/reporting/datasets/obtenerRankings.ts
-
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 
@@ -47,7 +46,6 @@ export async function obtenerRankings(
   limite:   number        = 5,
 ): Promise<RankingsResult> {
   const { desde, hasta } = calcularPeriodo(rango)
-
   const filtroDates = desde && hasta
     ? { gte: desde, lte: hasta }
     : undefined
@@ -149,6 +147,7 @@ export async function obtenerRankings(
     where: {
       institucionId: tenantId,
       estado:        { in: ["SUSPENDIDA", "REEMPLAZADA"] },
+      causa:         "INCIDENCIA",   // ← solo ausencias reales, no feriados ni cambios de distribución
       comisionId:    { not: null },
       ...(filtroDates ? { fecha: filtroDates } : {}),
     } satisfies Prisma.ClaseProgramadaWhereInput,
