@@ -60,8 +60,12 @@ export async function obtenerCoberturaPorComision(
 ): Promise<CoberturaPorComision[]> {
   const hasta = new Date()
   const desde = new Date(hasta)
-  desde.setDate(hasta.getDate() - (diasRango - 1))
-  desde.setHours(0, 0, 0, 0)
+  // UTC explícito: ClaseProgramada.fecha se guarda como medianoche UTC.
+  // setDate/setHours locales corrían el rango en cualquier servidor con
+  // TZ != UTC, y además desalineaban este timeline por comisión respecto
+  // del timeline institucional (generarTimelineCobertura), que ya usa UTC.
+  desde.setUTCDate(hasta.getUTCDate() - (diasRango - 1))
+  desde.setUTCHours(0, 0, 0, 0)
 
   // 1. Traer clases con incidencia y reemplazos para calcular cobertura real
   const clases = await prisma.claseProgramada.findMany({
@@ -109,7 +113,6 @@ export async function obtenerCoberturaPorComision(
 
   // 3. Calcular métricas por comisión
   const resultados: CoberturaPorComision[] = []
-
   for (const [cId, clasesComision] of porComision.entries()) {
     const meta = clasesComision[0].comision
     if (!meta) continue
@@ -130,7 +133,6 @@ export async function obtenerCoberturaPorComision(
         let suspendidas  = 0
         let sinCobertura = 0
         let cubiertas    = 0
-
         for (const clase of clasesDia) {
           if (clase.estado === "SUSPENDIDA") {
             suspendidas++
@@ -145,14 +147,12 @@ export async function obtenerCoberturaPorComision(
             cubiertas++
           }
         }
-
         const total = clasesDia.length
         // Las suspendidas no cuentan en el denominador
         const denominador = total - suspendidas
         const pct = denominador > 0
           ? Math.round((cubiertas / denominador) * 100)
           : 100  // si solo hay suspendidas o no hay clases → 100%
-
         return { fecha, total, cubiertas, sinCobertura, suspendidas, coberturaPorcentaje: pct }
       })
 
