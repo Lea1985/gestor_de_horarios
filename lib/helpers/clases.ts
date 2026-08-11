@@ -1,5 +1,5 @@
 //lib/helpers/clases.ts
-import { EstadoClase, Dias } from "@prisma/client"
+import { EstadoClase, Dias, Causa } from "@prisma/client"
 
 const DIA_JS: Record<Dias, number> = {
   LUNES:     1,
@@ -27,9 +27,9 @@ type ClaseACrear = {
   unidadId:      number
   comisionId:    number | null
   incidenciaId:  number | null
-
   fecha:         Date
   estado:        EstadoClase
+  causa:         Causa
 }
 
 export function generarClases(params: {
@@ -76,6 +76,7 @@ export function generarClases(params: {
           incidenciaId,
           fecha:  new Date(cursor),
           estado: suspendida ? EstadoClase.SUSPENDIDA : EstadoClase.PROGRAMADA,
+          causa:  suspendida ? Causa.CALENDARIO_ESCOLAR : Causa.NINGUNA,
         })
       }
       cursor.setUTCDate(cursor.getUTCDate() + 1)
@@ -99,6 +100,7 @@ export function generarClases(params: {
           incidenciaId,
           fecha:  new Date(cursor),
           estado: suspendida ? EstadoClase.SUSPENDIDA : EstadoClase.PROGRAMADA,
+          causa:  suspendida ? Causa.CALENDARIO_ESCOLAR : Causa.NINGUNA,
         })
       }
     }
