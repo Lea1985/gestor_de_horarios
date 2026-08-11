@@ -18,13 +18,18 @@ export interface RankingsResult {
   periodo: { desde: string | null; hasta: string | null }
 }
 
+// UTC explícito: fecha_desde/fecha_hasta de Incidencia se guardan como
+// fecha pura (medianoche UTC), igual que ClaseProgramada.fecha. Usar
+// getFullYear/setFullYear/getMonth/setMonth locales corría el corte de
+// período en un servidor con TZ != UTC, aunque acá el impacto solo se
+// nota si la query corre justo en el límite de un mes/semestre/año.
 function calcularPeriodo(rango: RangoRankings): { desde: Date | null; hasta: Date | null } {
   if (rango === "todo") return { desde: null, hasta: null }
   const hasta = new Date()
   const desde = new Date(hasta)
-  if (rango === "anio")     desde.setFullYear(hasta.getFullYear() - 1)
-  if (rango === "semestre") desde.setMonth(hasta.getMonth() - 6)
-  if (rango === "mes")      desde.setMonth(hasta.getMonth() - 1)
+  if (rango === "anio")     desde.setUTCFullYear(hasta.getUTCFullYear() - 1)
+  if (rango === "semestre") desde.setUTCMonth(hasta.getUTCMonth() - 6)
+  if (rango === "mes")      desde.setUTCMonth(hasta.getUTCMonth() - 1)
   return { desde, hasta }
 }
 
