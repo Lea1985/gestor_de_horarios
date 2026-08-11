@@ -149,15 +149,19 @@ export async function obtenerClasesOperativas(
 
 /**
  * Atajo para obtener las clases operativas de hoy (rango de un solo día).
+ * Usa UTC explícito porque ClaseProgramada.fecha se guarda como medianoche
+ * UTC -- si se usara la timezone local del proceso (setHours en vez de
+ * setUTCHours), el rango de "hoy" se correría un día entero en cualquier
+ * entorno donde el servidor no corra en TZ=UTC.
  */
 export async function obtenerClasesOperativasHoy(
   tenantId: number
 ): Promise<ClaseOperativa[]> {
   const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
+  hoy.setUTCHours(0, 0, 0, 0)
   const manana = new Date(hoy)
-  manana.setDate(manana.getDate() + 1)
-  manana.setMilliseconds(manana.getMilliseconds() - 1)
+  manana.setUTCDate(manana.getUTCDate() + 1)
+  manana.setUTCMilliseconds(manana.getUTCMilliseconds() - 1)
   return obtenerClasesOperativas(tenantId, hoy, manana)
 }
 
@@ -218,4 +222,4 @@ export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
     }))
 
   return { sinCobertura, reemplazosActivos }
-}
+} 

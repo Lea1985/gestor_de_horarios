@@ -11,13 +11,14 @@ function esRangoValido(n: number): n is RangoDias {
   return RANGOS_VALIDOS.includes(n as RangoDias)
 }
 
-/** Cobertura de ayer para calcular delta */
+/** Cobertura de ayer para calcular delta. UTC explícito -- ver nota en
+ *  obtenerClasesOperativasHoy sobre por qué no se usa setHours local. */
 async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
   const ayer = new Date()
-  ayer.setDate(ayer.getDate() - 1)
-  ayer.setHours(0, 0, 0, 0)
+  ayer.setUTCDate(ayer.getUTCDate() - 1)
+  ayer.setUTCHours(0, 0, 0, 0)
   const ayerFin = new Date(ayer)
-  ayerFin.setHours(23, 59, 59, 999)
+  ayerFin.setUTCHours(23, 59, 59, 999)
   const clases = await prisma.claseProgramada.findMany({
     where: {
       institucionId: tenantId,
@@ -41,17 +42,19 @@ async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
   return Math.round((cubiertas / denominador) * 100)
 }
 
-/** Próximos vencimientos: incidencias que vencen en los próximos N días */
+/** Próximos vencimientos: incidencias que vencen en los próximos N días.
+ *  UTC explícito, mismo motivo que las funciones anteriores. */
 async function obtenerProximosVencimientos(tenantId: number) {
   const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
+  hoy.setUTCHours(0, 0, 0, 0)
   const manana = new Date(hoy)
-  manana.setDate(hoy.getDate() + 1)
+  manana.setUTCDate(hoy.getUTCDate() + 1)
   const mananaFin = new Date(manana)
-  mananaFin.setHours(23, 59, 59, 999)
+  mananaFin.setUTCHours(23, 59, 59, 999)
   const semanaFin = new Date(hoy)
-  semanaFin.setDate(hoy.getDate() + 7)
-  semanaFin.setHours(23, 59, 59, 999)
+  semanaFin.setUTCDate(hoy.getUTCDate() + 7)
+  semanaFin.setUTCHours(23, 59, 59, 999)
+
   const [vencenHoy, vencenManana, vencenEstaSemana, reemplazosVencenSemana] =
     await Promise.all([
       prisma.incidencia.count({
@@ -88,6 +91,7 @@ async function obtenerProximosVencimientos(tenantId: number) {
         },
       }),
     ])
+
   return { vencenHoy, vencenManana, vencenEstaSemana, reemplazosVencenSemana }
 }
 
@@ -114,7 +118,9 @@ export async function GET(req: Request) {
       const hasta = hoy.toISOString().split("T")[0]
       const desde = (() => {
         const d = new Date()
-        d.setDate(hoy.getDate() - (dias - 1))
+        // UTC explícito: getDate/setDate locales corrían el rango si el
+        // servidor no está en TZ=UTC (mismo bug que las funciones de arriba).
+        d.setUTCDate(hoy.getUTCDate() - (dias - 1))
         return d.toISOString().split("T")[0]
       })()
       const desdeDate = new Date(desde)
