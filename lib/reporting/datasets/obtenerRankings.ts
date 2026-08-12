@@ -147,14 +147,19 @@ export async function obtenerRankings(
   })
 
   // ── 3. Comisiones con más ausencias ──────────────────────────────────────
+  // El rango se aplica sobre fecha_desde de la INCIDENCIA (misma semántica
+  // que los bloques 1 y 2), no sobre la fecha de cada ClaseProgramada. Si se
+  // filtrara por fecha de clase, una incidencia multi-día ya activa quedaría
+  // parcialmente contada según qué días de la clase ya pasaron -- inestable
+  // e inconsistente con el resto de la función.
   const rawComisiones = await prisma.claseProgramada.groupBy({
     by: ["comisionId"],
     where: {
       institucionId: tenantId,
       estado:        { in: ["SUSPENDIDA", "REEMPLAZADA"] },
-      causa:         "INCIDENCIA",   // ← solo ausencias reales, no feriados ni cambios de distribución
+      causa:         "INCIDENCIA",
       comisionId:    { not: null },
-      ...(filtroDates ? { fecha: filtroDates } : {}),
+      ...(filtroDates ? { incidencia: { fecha_desde: filtroDates } } : {}),
     } satisfies Prisma.ClaseProgramadaWhereInput,
     _count: { id: true },
     orderBy: { _count: { id: "desc" } },
