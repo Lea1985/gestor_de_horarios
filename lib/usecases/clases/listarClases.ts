@@ -5,7 +5,6 @@ import { EstadoClase } from "@prisma/client"
 export class FiltrosInsuficientesError extends Error {
   constructor() { super("Se requiere al menos uno de: asignacionId, unidadId, comisionId, fecha_desde") }
 }
-
 export class EstadoInvalidoError extends Error {
   constructor(estados: string[]) { super(`Estado inválido. Válidos: ${estados.join(", ")}`) }
 }
@@ -15,8 +14,8 @@ const ESTADOS_VALIDOS = Object.values(EstadoClase)
 function normalizarRango(fechaDesde?: string | null, fechaHasta?: string | null) {
   let gte: Date | undefined
   let lte: Date | undefined
-  if (fechaDesde) { gte = new Date(fechaDesde); gte.setHours(0, 0, 0, 0) }
-  if (fechaHasta) { lte = new Date(fechaHasta); lte.setHours(23, 59, 59, 999) }
+  if (fechaDesde) { gte = new Date(fechaDesde); gte.setUTCHours(0, 0, 0, 0) }
+  if (fechaHasta) { lte = new Date(fechaHasta); lte.setUTCHours(23, 59, 59, 999) }
   return { gte, lte }
 }
 
@@ -30,17 +29,13 @@ export async function listarClases(tenantId: number, params: {
   fecha_hasta?:  string | null
 }) {
   const { asignacionId, moduloId, unidadId, comisionId, estado, fecha_desde, fecha_hasta } = params
-
   if (!asignacionId && !unidadId && !comisionId && !fecha_desde) {
     throw new FiltrosInsuficientesError()
   }
-
   if (estado && !ESTADOS_VALIDOS.includes(estado as EstadoClase)) {
     throw new EstadoInvalidoError(ESTADOS_VALIDOS)
   }
-
   const { gte, lte } = normalizarRango(fecha_desde, fecha_hasta)
-
   return claseProgramadaRepository.listar(tenantId, {
     asignacionId: asignacionId ? parseInt(asignacionId) : undefined,
     moduloId:     moduloId     ? parseInt(moduloId)     : undefined,

@@ -18,6 +18,9 @@ export type ClaseOperativa = {
   asignacion: {
     id: number
     identificadorEstructural: string
+    materia: {
+      nombre: string
+    } | null
   } | null
   titular: {
     nombre: string
@@ -32,6 +35,10 @@ export type ClaseOperativa = {
   suplente: {
     nombre: string
     apellido: string
+  } | null
+  modulo: {
+    hora_desde: number
+    hora_hasta: number
   } | null
 }
 
@@ -76,10 +83,16 @@ export async function obtenerClasesOperativas(
       comision: {
         select: { id: true, nombre: true },
       },
+      modulo: {
+        select: { hora_desde: true, hora_hasta: true },
+      },
       asignacion: {
         select: {
           id: true,
           identificadorEstructural: true,
+          materia: {
+            select: { nombre: true },
+          },
           titularidades: {
             orderBy: { fecha_desde: "desc" },
             select: {
@@ -127,10 +140,16 @@ export async function obtenerClasesOperativas(
       coberturaEstado,
       unidad:   clase.unidad,
       comision: clase.comision,
+      modulo: clase.modulo
+        ? { hora_desde: clase.modulo.hora_desde, hora_hasta: clase.modulo.hora_hasta }
+        : null,
       asignacion: clase.asignacion
         ? {
             id: clase.asignacion.id,
             identificadorEstructural: clase.asignacion.identificadorEstructural,
+            materia: clase.asignacion.materia
+              ? { nombre: clase.asignacion.materia.nombre }
+              : null,
           }
         : null,
       titular,
@@ -222,4 +241,4 @@ export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
     }))
 
   return { sinCobertura, reemplazosActivos }
-} 
+}
