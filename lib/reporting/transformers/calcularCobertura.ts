@@ -54,12 +54,18 @@ export function calcularCobertura(
   const denominador =
     resumen.total -
     resumen.suspendidas
+  // Si el denominador da 0 (todas las clases del día están suspendidas, o
+  // directamente no hay clases ese día), no hay nada que cubrir -- 100%,
+  // no 0%. Antes devolvía 0, lo que mostraba "0% de cobertura" en un día
+  // sin nada para cubrir (ej. un feriado institucional completo), algo
+  // engañoso y además inconsistente con obtenerCoberturaPorComision.ts,
+  // que ya usaba 100% en este mismo caso límite.
   resumen.coberturaPorcentaje =
     denominador > 0
       ? Math.round(
           (cubiertas / denominador) * 100
         )
-      : 0
+      : 100
 
   return resumen
 }
