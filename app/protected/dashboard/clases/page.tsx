@@ -91,7 +91,7 @@ export default function ClasesPage() {
         {[
           { label: "Clases del día",     value: metricas.total,        color: undefined as string | undefined },
           { label: "Reemplazos activos", value: metricas.reemplazadas, color: undefined as string | undefined },
-          { label: "Suspendidas",        value: metricas.suspendidas,  color: metricas.suspendidas  > 0 ? "#dc2626" : "#16a34a" },
+          { label: "Suspendidas",        value: metricas.suspendidas,  color: undefined as string | undefined },
           { label: "Sin cobertura",      value: metricas.sinCobertura, color: metricas.sinCobertura > 0 ? "#dc2626" : "#16a34a" },
         ].map(card => (
           <div key={card.label} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-4)" }}>
