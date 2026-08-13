@@ -37,16 +37,17 @@ export type ClaseSinCobertura = {
   incidenciaId:  number | null
   unidad:        string | null
   comision:      string | null
+  materia:       string | null
   identificador: string | null
   titular:       string
   articulo:      string | null
 }
-
 export type ReemplazoActivoHoy = {
   claseId:       number
   incidenciaId:  number | null
   unidad:        string | null
   comision:      string | null
+  materia:       string | null
   identificador: string | null
   titular:       string
   suplente:      string

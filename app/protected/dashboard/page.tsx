@@ -590,13 +590,15 @@ export default function DashboardPage() {
             <div style={cuerpoScroll}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr>{["Unidad", "Identificador", "Titular", ""].map(col => <th key={col} style={th}>{col}</th>)}</tr>
+                  <tr>{["Unidad", "Identificador", "Materia", "Comisión", "Titular", ""].map(col => <th key={col} style={th}>{col}</th>)}</tr>
                 </thead>
                 <tbody>
                   {sinCobertura.map(c => (
                     <tr key={c.claseId}>
                       <td style={td}>{c.unidad ?? "-"}</td>
                       <td style={td}>{c.identificador ?? "-"}</td>
+                      <td style={td}>{c.materia ?? "-"}</td>
+                      <td style={td}>{c.comision ?? "-"}</td>
                       <td style={td}>{c.titular}</td>
                       <td style={td}>
                         {c.incidenciaId && (
@@ -645,12 +647,15 @@ export default function DashboardPage() {
             <div style={cuerpoScroll}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr>{["Unidad", "Titular", "Suplente", ""].map(col => <th key={col} style={th}>{col}</th>)}</tr>
+                  <tr>{["Unidad", "Identificador", "Materia", "Comisión", "Titular", "Suplente", ""].map(col => <th key={col} style={th}>{col}</th>)}</tr>
                 </thead>
                 <tbody>
                   {reemplazosActivos.map(r => (
                     <tr key={r.claseId}>
                       <td style={td}>{r.unidad ?? "-"}</td>
+                      <td style={td}>{r.identificador ?? "-"}</td>
+                      <td style={td}>{r.materia ?? "-"}</td>
+                      <td style={td}>{r.comision ?? "-"}</td>
                       <td style={td}>{r.titular}</td>
                       <td style={{ ...td, fontWeight: "var(--font-medium)", color: "var(--color-accent)" }}>{r.suplente}</td>
                       <td style={td}>

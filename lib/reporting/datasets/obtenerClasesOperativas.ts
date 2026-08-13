@@ -180,6 +180,7 @@ export type ClaseSinCobertura = {
   incidenciaId:  number | null
   unidad:        string | null
   comision:      string | null
+  materia:       string | null
   identificador: string | null
   titular:       string
   articulo:      string | null
@@ -189,6 +190,7 @@ export type ClaseReemplazoActivo = {
   incidenciaId:  number | null
   unidad:        string | null
   comision:      string | null
+  materia:       string | null
   identificador: string | null
   titular:       string
   suplente:      string
@@ -205,13 +207,14 @@ export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
   sinCobertura: ClaseSinCobertura[]
   reemplazosActivos: ClaseReemplazoActivo[]
 } {
-  const sinCobertura = clasesHoy
+const sinCobertura = clasesHoy
     .filter(c => c.coberturaEstado === "SIN_COBERTURA")
     .map(c => ({
       claseId:       c.id,
       incidenciaId:  c.incidencia?.id ?? null,
       unidad:        c.unidad?.nombre ?? null,
       comision:      c.comision?.nombre ?? null,
+      materia:       c.asignacion?.materia?.nombre ?? null,
       identificador: c.asignacion?.identificadorEstructural ?? null,
       titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
       articulo:      c.incidencia?.articulo ?? null,
@@ -223,6 +226,7 @@ export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
       incidenciaId:  c.incidencia?.id ?? null,
       unidad:        c.unidad?.nombre ?? null,
       comision:      c.comision?.nombre ?? null,
+      materia:       c.asignacion?.materia?.nombre ?? null,
       identificador: c.asignacion?.identificadorEstructural ?? null,
       titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
       suplente:      c.suplente ? `${c.suplente.apellido}, ${c.suplente.nombre}` : "—",
