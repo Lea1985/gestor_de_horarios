@@ -1,6 +1,7 @@
 //protected/dashboard/clases/page.tsx
 "use client"
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 
 type CoberturaEstado = "NORMAL" | "REEMPLAZADA" | "SIN_COBERTURA" | "SUSPENDIDA"
@@ -30,6 +31,7 @@ function formatHora(minutos?: number | null) {
 }
 
 export default function ClasesPage() {
+  const router = useRouter()
   const { authHeaders } = useAuth()
   const [loading, setLoading] = useState(true)
   const [clases, setClases] = useState<Clase[]>([])
@@ -139,7 +141,20 @@ export default function ClasesPage() {
                       {clase.suplente ? `${clase.suplente.apellido}, ${clase.suplente.nombre}` : "—"}
                     </td>
                     <td style={{ padding: "var(--space-3)" }}>
-                      {clase.incidencia ? `#${clase.incidencia.id}` : "—"}
+                      {clase.incidencia ? (
+                        <button
+                          onClick={() => router.push(`/protected/dashboard/incidencias/${clase.incidencia!.id}`)}
+                          style={{
+                            background: "none", border: "none",
+                            fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)",
+                            color: "var(--color-accent)", cursor: "pointer", padding: 0, whiteSpace: "nowrap",
+                          }}
+                        >
+                          #{clase.incidencia.id} {clase.coberturaEstado === "SIN_COBERTURA" ? "· Asignar →" : "· Ver →"}
+                        </button>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))
