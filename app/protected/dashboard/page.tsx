@@ -521,7 +521,7 @@ export default function DashboardPage() {
           delta={toNum(kpis?.deltaCobertura) ?? undefined}
           meta={95}
           loading={loading}
-          onClick={() => router.push("/protected/dashboard/reportes")}
+          onClick={() => router.push("/protected/dashboard/clases")}
           colorValor={(() => {
             const n = toNum(kpis?.coberturaPorcentaje)
             if (n === undefined) return undefined
