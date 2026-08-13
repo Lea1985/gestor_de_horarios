@@ -5,10 +5,9 @@
 // Las más variables son las más problemáticas operativamente.
 //
 // Lógica de cobertura (igual que calcularCobertura / obtenerClasesOperativas):
-//   SUSPENDIDA              → suspendida (no cuenta para cobertura)
-//   con reemplazo activo    → cubierta (REEMPLAZADA)
-//   con incidencia sin reemplazo → sin cobertura
-//   sin incidencia          → normal (cubierta)
+//   SUSPENDIDA + causa INCIDENCIA → sin cobertura (nada la cubrió)
+//   SUSPENDIDA por otro motivo    → suspendida (no cuenta para cobertura)
+//   cualquier otro estado         → cubierta (reemplazada, dictada o programada)
 
 import prisma from "@/lib/prisma"
 
@@ -67,7 +66,7 @@ export async function obtenerCoberturaPorComision(
   desde.setUTCDate(hasta.getUTCDate() - (diasRango - 1))
   desde.setUTCHours(0, 0, 0, 0)
 
-  // 1. Traer clases con incidencia y reemplazos para calcular cobertura real
+  // 1. Traer clases con causa/estado y comisión para calcular cobertura real
   const clases = await prisma.claseProgramada.findMany({
     where: {
       institucionId: tenantId,
@@ -77,6 +76,7 @@ export async function obtenerCoberturaPorComision(
     select: {
       fecha:      true,
       estado:     true,
+      causa:      true,
       comisionId: true,
       comision: {
         select: {
@@ -85,16 +85,6 @@ export async function obtenerCoberturaPorComision(
           curso:  { select: { nombre: true } },
           turno:  { select: { nombre: true } },
         },
-      },
-      // Necesario para saber si hay incidencia activa
-      incidencia: {
-        select: { id: true },
-      },
-      // Necesario para saber si la incidencia tiene reemplazo asignado
-      reemplazos: {
-        where:  { activo: true },
-        select: { id: true },
-        take:   1,
       },
     },
     orderBy: { fecha: "asc" },
@@ -135,16 +125,13 @@ export async function obtenerCoberturaPorComision(
         let cubiertas    = 0
         for (const clase of clasesDia) {
           if (clase.estado === "SUSPENDIDA") {
-            suspendidas++
-          } else if (clase.reemplazos.length > 0) {
-            // Incidencia con reemplazo asignado → cubierta
-            cubiertas++
-          } else if (clase.incidencia !== null) {
-            // Incidencia sin reemplazo → sin cobertura
-            sinCobertura++
+            if (clase.causa === "INCIDENCIA") {
+              sinCobertura++ // suspendida por incidencia real, sin reemplazo
+            } else {
+              suspendidas++  // feriado, período operativo, etc. -- no cuenta
+            }
           } else {
-            // Sin incidencia → normal, cubierta
-            cubiertas++
+            cubiertas++ // reemplazada, dictada o programada -- cubierta
           }
         }
         const total = clasesDia.length

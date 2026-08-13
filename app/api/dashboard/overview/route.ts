@@ -26,16 +26,20 @@ async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
     },
     select: {
       estado: true,
-      incidencia: { select: { id: true } },
-      reemplazos: { where: { activo: true }, select: { id: true }, take: 1 },
+      causa:  true,
     },
   })
   if (clases.length === 0) return null
   let cubiertas = 0
   let suspendidas = 0
   for (const c of clases) {
-    if (c.estado === "SUSPENDIDA") { suspendidas++; continue }
-    if (c.reemplazos.length > 0 || c.incidencia === null) cubiertas++
+    if (c.estado === "SUSPENDIDA") {
+      if (c.causa !== "INCIDENCIA") suspendidas++
+      // SUSPENDIDA + causa INCIDENCIA: sin cobertura -- no suma a
+      // cubiertas ni a suspendidas, pero sí cuenta en el denominador.
+      continue
+    }
+    cubiertas++
   }
   const denominador = clases.length - suspendidas
   if (denominador === 0) return null

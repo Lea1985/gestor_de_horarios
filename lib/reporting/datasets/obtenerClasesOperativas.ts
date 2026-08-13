@@ -1,7 +1,6 @@
 // lib/reporting/datasets/obtenerClasesOperativas.ts
 import prisma from "@/lib/prisma"
 import { CoberturaEstado } from "../transformers/calcularCobertura"
-
 export type ClaseOperativa = {
   id: number
   fecha: Date
@@ -41,9 +40,7 @@ export type ClaseOperativa = {
     hora_hasta: number
   } | null
 }
-
 type Agente = { nombre: string; apellido: string }
-
 /**
  * Busca, dentro del historial de titularidades de una asignación, quién
  * era el titular vigente en una fecha puntual (no simplemente el más
@@ -58,7 +55,6 @@ function titularVigenteEn(
   )
   return vigente?.agente ?? null
 }
-
 /**
  * Trae las clases programadas de un rango de fechas con su estado de
  * cobertura calculado. Sirve tanto para el timeline (rango de varios días)
@@ -118,21 +114,18 @@ export async function obtenerClasesOperativas(
       },
     },
   })
-
   return clases.map(clase => {
     const titular   = clase.asignacion ? titularVigenteEn(clase.asignacion.titularidades, clase.fecha) : null
     const reemplazo = clase.reemplazos?.[0] ?? null
     const suplente  = reemplazo?.agenteSuplente ?? null
-
     const coberturaEstado: CoberturaEstado =
       clase.estado === "SUSPENDIDA"
-        ? "SUSPENDIDA"
+        ? clase.causa === "INCIDENCIA"
+          ? "SIN_COBERTURA" // suspendida por una incidencia real, sin reemplazo -- esto es lo que hay que cubrir
+          : "SUSPENDIDA"    // suspendida por otro motivo (feriado, período operativo, etc.) -- no hay nada que cubrir
         : reemplazo
         ? "REEMPLAZADA"
-        : clase.incidencia
-        ? "SIN_COBERTURA"
-        : "NORMAL"
-
+        : "NORMAL"          // DICTADA o PROGRAMADA -- cubierta, tenga o no un vínculo histórico a una incidencia
     return {
       id:     clase.id,
       fecha:  clase.fecha,
@@ -165,7 +158,6 @@ export async function obtenerClasesOperativas(
     }
   })
 }
-
 /**
  * Atajo para obtener las clases operativas de hoy (rango de un solo día).
  * Usa UTC explícito porque ClaseProgramada.fecha se guarda como medianoche
@@ -183,7 +175,6 @@ export async function obtenerClasesOperativasHoy(
   manana.setUTCMilliseconds(manana.getUTCMilliseconds() - 1)
   return obtenerClasesOperativas(tenantId, hoy, manana)
 }
-
 export type ClaseSinCobertura = {
   claseId:       number
   incidenciaId:  number | null
@@ -193,7 +184,6 @@ export type ClaseSinCobertura = {
   titular:       string
   articulo:      string | null
 }
-
 export type ClaseReemplazoActivo = {
   claseId:       number
   incidenciaId:  number | null
@@ -203,7 +193,6 @@ export type ClaseReemplazoActivo = {
   titular:       string
   suplente:      string
 }
-
 /**
  * Mapea clases operativas (típicamente las de hoy) a las dos listas que
  * consumen tanto el Dashboard en pantalla como el PDF exportado: clases
@@ -227,7 +216,6 @@ export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
       titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
       articulo:      c.incidencia?.articulo ?? null,
     }))
-
   const reemplazosActivos = clasesHoy
     .filter(c => c.coberturaEstado === "REEMPLAZADA")
     .map(c => ({
@@ -239,6 +227,5 @@ export function mapearCoberturaHoy(clasesHoy: ClaseOperativa[]): {
       titular:       c.titular ? `${c.titular.apellido}, ${c.titular.nombre}` : "Vacante",
       suplente:      c.suplente ? `${c.suplente.apellido}, ${c.suplente.nombre}` : "—",
     }))
-
   return { sinCobertura, reemplazosActivos }
 }
