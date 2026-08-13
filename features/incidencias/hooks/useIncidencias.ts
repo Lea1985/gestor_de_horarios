@@ -4,7 +4,7 @@ import { useAuth } from "@/app/hooks/useAuth"
 import { fetchIncidencias, deleteIncidencia, reactivarIncidencia } from "../services/incidenciasService"
 import type { Incidencia } from "../types"
 
-export function useIncidencias(soloHoyInicial: boolean = false) {
+export function useIncidencias(soloHoyInicial: boolean = false, soloVenceMananaInicial: boolean = false) {
   const { authHeaders }               = useAuth()
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
   const [loading,     setLoading]     = useState(true)
@@ -12,16 +12,20 @@ export function useIncidencias(soloHoyInicial: boolean = false) {
   const [busqueda,    setBusqueda]    = useState("")
   const [verEliminadas, setVerEliminadas] = useState(false)
   const [soloHoy,     setSoloHoy]     = useState(soloHoyInicial)
+  const [soloVenceManana, setSoloVenceManana] = useState(soloVenceMananaInicial)
   const incidenciasFiltradas = useMemo(() => {
     let resultado = incidencias
     if (soloHoy) {
-      // Comparación por string ISO (YYYY-MM-DD), no por Date -- evita el
-      // mismo problema de timezone local que ya corregimos en el backend
-      // del Dashboard (fecha_desde/fecha_hasta se guardan como medianoche UTC).
       const hoyStr = new Date().toISOString().split("T")[0]
       resultado = resultado.filter(i =>
         i.fecha_desde.split("T")[0] <= hoyStr && hoyStr <= i.fecha_hasta.split("T")[0]
       )
+    }
+    if (soloVenceManana) {
+      const manana = new Date()
+      manana.setUTCDate(manana.getUTCDate() + 1)
+      const mananaStr = manana.toISOString().split("T")[0]
+      resultado = resultado.filter(i => i.fecha_hasta.split("T")[0] === mananaStr)
     }
     if (!busqueda.trim()) return resultado
     const q = busqueda.toLowerCase()
@@ -32,7 +36,7 @@ export function useIncidencias(soloHoyInicial: boolean = false) {
             (i.agenteMostrado?.apellido.toLowerCase().includes(q) ?? false) ||
             (i.agenteMostrado?.nombre.toLowerCase().includes(q) ?? false)
           )
-  }, [incidencias, busqueda, soloHoy])
+  }, [incidencias, busqueda, soloHoy, soloVenceManana])
 
   async function cargar() {
     try {
@@ -77,17 +81,19 @@ export function useIncidencias(soloHoyInicial: boolean = false) {
   }
 
   return {
-      incidenciasFiltradas,
-      loading,
-      error,
-      busqueda,
-      setBusqueda,
-      verEliminadas,
-      setVerEliminadas,
-      soloHoy,
-      setSoloHoy,
-      eliminar,
-      reactivar,
-      clearError: () => setError(null),
-    }
+    incidenciasFiltradas,
+    loading,
+    error,
+    busqueda,
+    setBusqueda,
+    verEliminadas,
+    setVerEliminadas,
+    soloHoy,
+    setSoloHoy,
+    soloVenceManana,
+    setSoloVenceManana,
+    eliminar,
+    reactivar,
+    clearError: () => setError(null),
+  }
 }

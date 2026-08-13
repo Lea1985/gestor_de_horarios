@@ -100,7 +100,7 @@ function BloquePendientes({
     vencenManana > 0 && {
       texto:  `${vencenManana} incidencia${vencenManana > 1 ? "s" : ""} vence${vencenManana === 1 ? "" : "n"} mañana`,
       color:  "#d97706",
-      path:   "/protected/dashboard/incidencias",
+      path:   "/protected/dashboard/incidencias?vence=manana",
       accion: "Ver",
     },
   ].filter(Boolean) as Array<{ texto: string; color: string; path: string; accion: string }>
