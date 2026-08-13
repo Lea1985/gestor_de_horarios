@@ -545,7 +545,7 @@ export default function DashboardPage() {
           label="Incidencias activas"
           valor={toNum(kpis?.incidenciasActivas) !== undefined ? String(toNum(kpis?.incidenciasActivas)) : VALOR_VACIO}
           loading={loading}
-          onClick={() => router.push("/protected/dashboard/incidencias")}
+          onClick={() => router.push("/protected/dashboard/incidencias?hoy=1")}
         />
         <KpiHero
           label="Continuidad pedagógica"

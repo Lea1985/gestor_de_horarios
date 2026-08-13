@@ -1,11 +1,10 @@
 "use client"
-
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useIncidencias, IncidenciasTable, IncidenciaFilters, ModalConfirmar } from "@/features/incidencias"
-
 export default function IncidenciasPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const {
     incidenciasFiltradas,
     loading,
@@ -14,10 +13,12 @@ export default function IncidenciasPage() {
     setBusqueda,
     verEliminadas,
     setVerEliminadas,
+    soloHoy,
+    setSoloHoy,
     eliminar,
     reactivar,
     clearError,
-  } = useIncidencias()
+  } = useIncidencias(searchParams.get("hoy") === "1")
 
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
 
@@ -45,7 +46,17 @@ export default function IncidenciasPage() {
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>Incidencias</h1>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
               {incidenciasFiltradas.length} incidencia{incidenciasFiltradas.length !== 1 ? "s" : ""}
-              {!verEliminadas && (" activa" + (incidenciasFiltradas.length !== 1 ? "s" : ""))}
+              {soloHoy
+                ? (" vigente" + (incidenciasFiltradas.length !== 1 ? "s" : "") + " hoy")
+                : (!verEliminadas && (" activa" + (incidenciasFiltradas.length !== 1 ? "s" : "")))}
+              {soloHoy && (
+                <button
+                  onClick={() => setSoloHoy(false)}
+                  style={{ marginLeft: 10, background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)" }}
+                >
+                  Ver todas →
+                </button>
+              )}
             </p>
           </div>
           <button
