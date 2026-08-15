@@ -24,7 +24,7 @@ function buildItems(p: PendientesDashboard): ItemVencimiento[] {
       icono: "🔄",
       texto: `${p.reemplazosVencenSemana} reemplazo${p.reemplazosVencenSemana > 1 ? "s" : ""} vence${p.reemplazosVencenSemana === 1 ? "" : "n"} esta semana`,
       color: "#d97706",
-      path:  "/protected/dashboard/incidencias",
+      path:  "/protected/dashboard/incidencias?vence=7dias",
     })
 
   if (p.vencenHoy > 0)
@@ -32,7 +32,7 @@ function buildItems(p: PendientesDashboard): ItemVencimiento[] {
       icono: "⚠",
       texto: `${p.vencenHoy} incidencia${p.vencenHoy > 1 ? "s" : ""} vence${p.vencenHoy === 1 ? "" : "n"} hoy`,
       color: "#dc2626",
-      path:  "/protected/dashboard/incidencias",
+      path:  "/protected/dashboard/incidencias?vence=hoy",
     })
 
   if (p.vencenManana > 0)
@@ -40,7 +40,7 @@ function buildItems(p: PendientesDashboard): ItemVencimiento[] {
       icono: "📅",
       texto: `${p.vencenManana} incidencia${p.vencenManana > 1 ? "s" : ""} vence${p.vencenManana === 1 ? "" : "n"} mañana`,
       color: "#d97706",
-      path:  "/protected/dashboard/incidencias",
+      path:  "/protected/dashboard/incidencias?vence=manana",
     })
 
   if (p.vencenEstaSemana > 0)
@@ -48,7 +48,7 @@ function buildItems(p: PendientesDashboard): ItemVencimiento[] {
       icono: "📆",
       texto: `${p.vencenEstaSemana} incidencia${p.vencenEstaSemana > 1 ? "s" : ""} vence${p.vencenEstaSemana === 1 ? "" : "n"} esta semana`,
       color: "#6B7280",
-      path:  "/protected/dashboard/incidencias",
+      path:  "/protected/dashboard/incidencias?vence=resto-semana",
     })
 
   return items

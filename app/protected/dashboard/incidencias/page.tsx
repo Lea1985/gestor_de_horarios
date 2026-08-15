@@ -2,6 +2,14 @@
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useIncidencias, IncidenciasTable, IncidenciaFilters, ModalConfirmar } from "@/features/incidencias"
+import type { VenceFiltro } from "@/features/incidencias/hooks/useIncidencias"
+
+const VENCE_VALORES: VenceFiltro[] = ["hoy", "manana", "resto-semana", "7dias"]
+
+function parseVence(valor: string | null): VenceFiltro {
+  return VENCE_VALORES.includes(valor as VenceFiltro) ? (valor as VenceFiltro) : null
+}
+
 export default function IncidenciasPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -15,21 +23,24 @@ export default function IncidenciasPage() {
     setVerEliminadas,
     soloHoy,
     setSoloHoy,
-    soloVenceManana,
-    setSoloVenceManana,
+    venceFiltro,
+    setVenceFiltro,
     eliminar,
     reactivar,
     clearError,
-  } = useIncidencias(searchParams.get("hoy") === "1", searchParams.get("vence") === "manana")
-
+  } = useIncidencias(searchParams.get("hoy") === "1", parseVence(searchParams.get("vence")))
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
-
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando incidencias...
     </div>
   )
-
+  const etiquetaVence: Record<NonNullable<VenceFiltro>, string> = {
+    "hoy":          "que vencen hoy",
+    "manana":       "que vencen mañana",
+    "resto-semana": "que vencen esta semana",
+    "7dias":        "que vencen en los próximos 7 días",
+  }
   return (
     <>
       {confirmarId !== null && (
@@ -39,9 +50,7 @@ export default function IncidenciasPage() {
           onCancelar={() => setConfirmarId(null)}
         />
       )}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -49,11 +58,11 @@ export default function IncidenciasPage() {
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
               {incidenciasFiltradas.length} incidencia{incidenciasFiltradas.length !== 1 ? "s" : ""}
               {soloHoy && (" vigente" + (incidenciasFiltradas.length !== 1 ? "s" : "") + " hoy")}
-              {soloVenceManana && (" que vence" + (incidenciasFiltradas.length !== 1 ? "n" : "") + " mañana")}
-              {!soloHoy && !soloVenceManana && !verEliminadas && (" activa" + (incidenciasFiltradas.length !== 1 ? "s" : ""))}
-              {(soloHoy || soloVenceManana) && (
+              {venceFiltro && (" " + etiquetaVence[venceFiltro])}
+              {!soloHoy && !venceFiltro && !verEliminadas && (" activa" + (incidenciasFiltradas.length !== 1 ? "s" : ""))}
+              {(soloHoy || venceFiltro) && (
                 <button
-                  onClick={() => { setSoloHoy(false); setSoloVenceManana(false) }}
+                  onClick={() => { setSoloHoy(false); setVenceFiltro(null) }}
                   style={{ marginLeft: 10, background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)" }}
                 >
                   Ver todas →
@@ -68,7 +77,6 @@ export default function IncidenciasPage() {
             + Nueva incidencia
           </button>
         </div>
-
         {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
@@ -77,21 +85,18 @@ export default function IncidenciasPage() {
             <button onClick={clearError} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-
         <IncidenciaFilters
           busqueda={busqueda}
           setBusqueda={setBusqueda}
           verEliminadas={verEliminadas}
           setVerEliminadas={setVerEliminadas}
         />
-
         <IncidenciasTable
           incidencias={incidenciasFiltradas}
           verEliminadas={verEliminadas}
           onEliminar={setConfirmarId}
           onReactivar={reactivar}
         />
-
       </div>
     </>
   )
