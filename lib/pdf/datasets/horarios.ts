@@ -97,10 +97,13 @@ export async function obtenerDatosHorarios(
   let reemplazosHoy: Map<number, { nombre: string; apellido: string; documento: string }> = new Map()
 
   if (conACargoAhora) {
+    // UTC explícito -- ClaseProgramada.fecha se guarda como medianoche UTC.
+    // setHours/setDate locales corrían el rango en cualquier servidor con
+    // TZ != UTC, mismo patrón ya corregido 8 veces en el Dashboard.
     const hoy = new Date()
-    hoy.setHours(0, 0, 0, 0)
+    hoy.setUTCHours(0, 0, 0, 0)
     const manana = new Date(hoy)
-    manana.setDate(manana.getDate() + 1)
+    manana.setUTCDate(manana.getUTCDate() + 1)
 
     const clasesHoy = await prisma.claseProgramada.findMany({
       where: {
