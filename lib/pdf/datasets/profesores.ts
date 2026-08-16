@@ -8,12 +8,21 @@ export type FilaProfesor = {
   documento: string
   email:     string | null
   telefono:  string | null
-  esPlanta:  boolean   // true = tiene titularidad activa, false = solo suplente
+  esPlanta:    boolean   // tiene titularidad activa hoy
+  esSuplente:  boolean   // hizo al menos un reemplazo activo (no es "no es planta")
   asignaciones: {
     identificador: string
     materia:       string | null
     comision:      string | null
     turno:         string
+  }[]
+  reemplazosActivos: {
+    identificador: string
+    materia:       string | null
+    comision:      string | null
+    turno:         string
+    fechaDesde:    string | null
+    fechaHasta:    string | null
   }[]
 }
 
@@ -51,14 +60,60 @@ export async function obtenerDatosProfesores(
     },
   })
 
-  // 2. Agentes que aparecen como suplentes (puede ser distinto de planta)
-  const suplentesIds = new Set(
-    (await prisma.reemplazo.findMany({
-      where:  { activo: true, agenteSuplente: { institucionId: tenantId } },
-      select: { agenteSuplenteId: true },
-      distinct: ["agenteSuplenteId"],
-    })).map(r => r.agenteSuplenteId)
-  )
+  // 2. Reemplazos activos por agente suplente -- de dónde sale esSuplente
+  // y también qué está cubriendo, para no dejar la etiqueta sin detalle.
+  const reemplazos = await prisma.reemplazo.findMany({
+    where:  { activo: true, agenteSuplente: { institucionId: tenantId } },
+    select: {
+      agenteSuplenteId: true,
+      clase: {
+        select: {
+          asignacion: {
+            select: {
+              identificadorEstructural: true,
+              materia:  { select: { nombre: true } },
+              comision: { select: { nombre: true } },
+              turno:    { select: { nombre: true } },
+            },
+          },
+          incidencia: {
+            select: { fecha_desde: true, fecha_hasta: true },
+          },
+        },
+      },
+    },
+  })
+  const fmtFecha = (d: Date | null) => d ? d.toISOString().split("T")[0] : null
+  const reemplazosPorAgente = new Map<number, FilaProfesor["reemplazosActivos"]>()
+  for (const r of reemplazos) {
+    if (!r.clase.asignacion) continue
+    if (!reemplazosPorAgente.has(r.agenteSuplenteId)) {
+      reemplazosPorAgente.set(r.agenteSuplenteId, [])
+    }
+    const lista      = reemplazosPorAgente.get(r.agenteSuplenteId)!
+    const a          = r.clase.asignacion
+    const fechaDesde = fmtFecha(r.clase.incidencia?.fecha_desde ?? null)
+    const fechaHasta = fmtFecha(r.clase.incidencia?.fecha_hasta ?? null)
+    // Evitar duplicados -- un mismo reemplazo puede generar varias
+    // ClaseProgramada (una por módulo/día). Se dedupe por asignación +
+    // período: si el mismo suplente cubrió la misma asignación en dos
+    // períodos distintos, sí queremos verlos como dos filas separadas.
+    const yaExiste = lista.some(x =>
+      x.identificador === a.identificadorEstructural &&
+      x.fechaDesde === fechaDesde && x.fechaHasta === fechaHasta
+    )
+    if (!yaExiste) {
+      lista.push({
+        identificador: a.identificadorEstructural,
+        materia:       a.materia?.nombre ?? null,
+        comision:      a.comision?.nombre ?? null,
+        turno:         a.turno.nombre,
+        fechaDesde,
+        fechaHasta,
+      })
+    }
+  }
+  const suplentesIds = new Set(reemplazosPorAgente.keys())
 
   // 3. Para agentes de planta, traer todas sus asignaciones vigentes
   const titularidadesCompletas = await prisma.titularAsignacion.findMany({
@@ -96,7 +151,6 @@ export async function obtenerDatosProfesores(
   const filas: FilaProfesor[] = agentes.map(a => {
     const esPlanta   = (asignacionesPorAgente.get(a.id)?.length ?? 0) > 0
     const esSuplente = suplentesIds.has(a.id)
-
     return {
       id:        a.id,
       apellido:  a.apellido,
@@ -105,11 +159,13 @@ export async function obtenerDatosProfesores(
       email:     a.email,
       telefono:  a.telefono,
       esPlanta,
-      asignaciones: asignacionesPorAgente.get(a.id) ?? [],
+      esSuplente,
+      asignaciones:      asignacionesPorAgente.get(a.id) ?? [],
+      reemplazosActivos: reemplazosPorAgente.get(a.id) ?? [],
     }
   }).filter(a => {
     if (filtro === "planta")    return a.esPlanta
-    if (filtro === "suplentes") return !a.esPlanta
+    if (filtro === "suplentes") return a.esSuplente
     return true
   })
 

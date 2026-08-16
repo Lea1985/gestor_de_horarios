@@ -11,7 +11,10 @@ type AsignacionProfesor = {
   comision:      string | null
   turno:         string
 }
-
+type ReemplazoActivo = AsignacionProfesor & {
+  fechaDesde: string | null
+  fechaHasta: string | null
+}
 type FilaProfesor = {
   id:        number
   apellido:  string
@@ -19,8 +22,15 @@ type FilaProfesor = {
   documento: string
   email:     string | null
   telefono:  string | null
-  esPlanta:  boolean
-  asignaciones: AsignacionProfesor[]
+  esPlanta:    boolean
+  esSuplente:  boolean
+  asignaciones:      AsignacionProfesor[]
+  reemplazosActivos: ReemplazoActivo[]
+}
+function formatFecha(f: string | null): string {
+  if (!f) return "?"
+  const [, mes, dia] = f.split("-")
+  return `${dia}/${mes}`
 }
 
 type VistaProfesores = { datos: FilaProfesor[]; filtro: Filtro }
@@ -44,7 +54,7 @@ export default function ReporteProfesoresPage() {
   const opciones: { value: Filtro; label: string }[] = [
     { value: "todos",      label: "Todos los profesores" },
     { value: "planta",     label: "Solo planta (con asignación titular)" },
-    { value: "suplentes",  label: "Solo suplentes (sin asignación titular)" },
+    { value: "suplentes",  label: "Solo suplentes (con reemplazos activos)" },
   ]
 
   const armarUrl = () => `/api/reportes/profesores?filtro=${filtro}`
@@ -126,7 +136,7 @@ export default function ReporteProfesoresPage() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      {["Apellido, Nombre", "DNI", "Email", "Teléfono", "Tipo", "Asignaciones"].map(col => (
+                      {["Apellido, Nombre", "DNI", "Email", "Teléfono", "Tipo", "Asignaciones", "Reemplaza en"].map(col => (
                         <th key={col} style={th}>{col}</th>
                       ))}
                     </tr>
@@ -138,8 +148,12 @@ export default function ReporteProfesoresPage() {
                         <td style={td}>{p.documento}</td>
                         <td style={td}>{p.email ?? "-"}</td>
                         <td style={td}>{p.telefono ?? "-"}</td>
-                        <td style={{ ...td, color: p.esPlanta ? "var(--color-success-text, #16a34a)" : "#d97706", fontWeight: "var(--font-medium)" }}>
-                          {p.esPlanta ? "Planta" : "Suplente"}
+                        <td style={{
+                          ...td,
+                          color: p.esPlanta ? "var(--color-success-text, #16a34a)" : p.esSuplente ? "#d97706" : "var(--color-text-hint)",
+                          fontWeight: "var(--font-medium)",
+                        }}>
+                          {p.esPlanta ? "Planta" : p.esSuplente ? "Suplente" : "Sin asignación"}
                         </td>
                         <td style={td}>
                           {p.asignaciones.length === 0
@@ -151,12 +165,25 @@ export default function ReporteProfesoresPage() {
                               ))
                           }
                         </td>
+                        <td style={td}>
+                          {p.reemplazosActivos.length === 0
+                            ? "—"
+                            : p.reemplazosActivos.map((a, i) => (
+                                <div key={i} style={{ fontSize: "var(--text-xs)" }}>
+                                  {a.identificador}{a.materia ? ` · ${a.materia}` : ""}
+                                  <span style={{ color: "var(--color-text-hint)" }}>
+                                    {" "}({formatFecha(a.fechaDesde)} - {formatFecha(a.fechaHasta)})
+                                  </span>
+                                </div>
+                              ))
+                          }
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginTop: "var(--space-3)" }}>
-                  Total: {datos.datos.length}  |  Planta: {datos.datos.filter(p => p.esPlanta).length}  |  Suplentes: {datos.datos.filter(p => !p.esPlanta).length}
+                  Total: {datos.datos.length}  |  Planta: {datos.datos.filter(p => p.esPlanta).length}  |  Suplentes: {datos.datos.filter(p => p.esSuplente).length}
                 </div>
               </>
             )}
