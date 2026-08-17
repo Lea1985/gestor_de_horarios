@@ -1,8 +1,7 @@
 // lib/usecases/reemplazos/crearReemplazo.ts
 import { reemplazoRepository } from "@/lib/repositories/reemplazoRepository"
-import { validarSuperposicionSuplente } from "./validarSuperposicion"
+import { validarSuperposicionSuplente, obtenerAgenteQueSeReemplaza } from "./validarSuperposicion"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
-
 export class DatosReemplazoInvalidosError extends Error {
   constructor() { super("claseId y asignacionTitularId son obligatorios") }
 }
@@ -24,7 +23,9 @@ export class ReemplazoActivoExistenteError extends Error {
 export class SuperposicionSuplenteError extends Error {
   constructor() { super("El suplente ya tiene una clase programada en ese módulo y fecha") }
 }
-
+export class AutoReemplazoError extends Error {
+  constructor() { super("El agente suplente no puede reemplazar su propia ausencia") }
+}
 export async function crearReemplazo(
   tenantId: number,
   body: {
@@ -47,13 +48,16 @@ export async function crearReemplazo(
   if (!await reemplazoRepository.verificarAgente(agenteSuplenteId, tenantId)) {
     throw new AgenteSuplenteNoEncontradoError()
   }
+  const agenteQueSeReemplaza = await obtenerAgenteQueSeReemplaza(claseId, asignacionTitularId, tenantId)
+  if (agenteQueSeReemplaza === agenteSuplenteId) {
+    throw new AutoReemplazoError()
+  }
   if (await validarSuperposicionSuplente(claseId, agenteSuplenteId, tenantId)) {
     throw new SuperposicionSuplenteError()
   }
   if (await reemplazoRepository.verificarReemplazoActivo(claseId, tenantId)) {
     throw new ReemplazoActivoExistenteError()
   }
-
   const reemplazo = await reemplazoRepository.crear(tenantId, {
     claseId,
     asignacionTitularId,
@@ -61,8 +65,6 @@ export async function crearReemplazo(
     incidenciaId,
     observacion,
   })
-
   await resolverClase(claseId, tenantId)
-
   return reemplazo
 }

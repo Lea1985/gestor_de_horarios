@@ -10,9 +10,9 @@ import {
   AgenteSuplenteNoEncontradoError,
   ReemplazoActivoExistenteError,
   SuperposicionSuplenteError,
+  AutoReemplazoError,
   
 } from "@/lib/usecases/reemplazos/crearReemplazo"
-
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     const { searchParams } = new URL(req.url)
@@ -32,7 +32,6 @@ export async function GET(req: Request) {
     }
   })
 }
-
 export async function POST(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     let body
@@ -41,7 +40,6 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
-
     try {
       const reemplazo = await crearReemplazo(tenantId, body)
       return Response.json(reemplazo, { status: 201 })
@@ -61,7 +59,8 @@ export async function POST(req: Request) {
       }
       if (
         error instanceof ReemplazoActivoExistenteError ||
-        error instanceof SuperposicionSuplenteError
+        error instanceof SuperposicionSuplenteError ||
+        error instanceof AutoReemplazoError
       ) {
         return Response.json({ error: (error as Error).message }, { status: 409 })
       }
