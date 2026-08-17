@@ -1,5 +1,6 @@
 // lib/pdf/datasets/ausencias.ts
 import prisma from "@/lib/prisma"
+import { titularVigenteEn } from "./titularVigenteEn"
 export type FilaAusencia = {
   incidenciaId:      number
   incidenciaPadreId: number | null
@@ -27,20 +28,7 @@ const ORDEN_DIAS: Record<string, number> = {
 function formatHora(min: number): string {
   return `${Math.floor(min / 60).toString().padStart(2, "0")}:${(min % 60).toString().padStart(2, "0")}`
 }
-/**
- * Busca, dentro del historial de titularidades de una asignación, quién
- * era el titular vigente en una fecha puntual (no simplemente el más
- * reciente / actualmente activo).
- */
-function titularVigenteEn(
-  titularidades: { fecha_desde: Date; fecha_hasta: Date | null; agente: Agente | null }[],
-  fecha: Date
-): Agente | null {
-  const vigente = titularidades.find(
-    t => t.fecha_desde <= fecha && (!t.fecha_hasta || t.fecha_hasta >= fecha)
-  )
-  return vigente?.agente ?? null
-}
+
 /**
  * Mismo criterio que titularVigenteEn, pero para distribuciones horarias:
  * busca la versión que estaba vigente en una fecha puntual, no la
