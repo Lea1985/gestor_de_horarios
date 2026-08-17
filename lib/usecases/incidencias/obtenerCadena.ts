@@ -77,11 +77,13 @@ export async function obtenerCadena(id: number, tenantId: number) {
       }
     })
   )
-  return cadena.map(item => {
-    const r = reemplazantePorIncidencia.get(item.id) ?? null
-    return {
-      ...item,
-      reemplazante: r ? { nombre: `${r.apellido}, ${r.nombre}`, documento: r.documento } : null,
-    }
-  })
+    return [...cadena]
+    .sort((a, b) => a.fecha_desde.getTime() - b.fecha_desde.getTime())
+    .map(item => {
+      const r = reemplazantePorIncidencia.get(item.id) ?? null
+      return {
+        ...item,
+        reemplazante: r ? { nombre: `${r.apellido}, ${r.nombre}`, documento: r.documento } : null,
+      }
+    })
 }
