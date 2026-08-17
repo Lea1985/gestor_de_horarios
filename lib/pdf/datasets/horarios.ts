@@ -9,7 +9,6 @@ export type HorarioComisionRow = {
   identificador: string
   titularNombre: string
   titularDNI:    string
-  // Si se solicita "a cargo ahora": reemplazante vigente si hay incidencia activa hoy
   aCargoNombre?: string
   aCargosDNI?:   string
   esSuplente?:   boolean
@@ -24,13 +23,24 @@ export type DatosReporteHorarios = {
   }
   filas: HorarioComisionRow[]
 }
+/**
+ * Si se pasa comisionId, devuelve un array con un único elemento (esa
+ * comisión). Si no, devuelve todas las comisiones activas de la
+ * institución -- mismo patrón que obtenerDatosCodigarios.
+ */
 export async function obtenerDatosHorarios(
   tenantId:       number,
-  comisionId:     number,
+  comisionId:     number | null,
   conACargoAhora: boolean
-): Promise<DatosReporteHorarios | null> {
-  const comision = await prisma.comision.findFirst({
-    where: { id: comisionId, institucionId: tenantId, activo: true, deletedAt: null },
+): Promise<DatosReporteHorarios[]> {
+  const comisiones = await prisma.comision.findMany({
+    where: {
+      institucionId: tenantId,
+      activo:        true,
+      deletedAt:     null,
+      ...(comisionId ? { id: comisionId } : {}),
+    },
+    orderBy: [{ curso: { nombre: "asc" } }, { nombre: "asc" }],
     select: {
       id:     true,
       nombre: true,
@@ -39,136 +49,134 @@ export async function obtenerDatosHorarios(
       unidad: { select: { nombre: true } },
     },
   })
-  if (!comision) return null
-  // UTC explícito, medianoche de hoy -- ClaseProgramada.fecha y
-  // DistribucionHoraria.fecha_vigencia_hasta se guardan como medianoche
-  // UTC. Comparar contra new Date() (el instante exacto de la consulta,
-  // no la medianoche de hoy) hacía que una distribución vigente "hasta
-  // hoy" dejara de aparecer a mitad del día, según la hora en que se
-  // corriera el reporte -- mismo patrón de bug ya corregido en otros
-  // ~15 archivos, esta vez con instante exacto en vez de timezone local.
+  if (comisiones.length === 0) return []
+  // UTC explícito, medianoche de hoy -- comparar contra new Date() en vez
+  // de la medianoche de hoy hacía que una distribución vigente "hasta hoy"
+  // dejara de aparecer a mitad del día (fix del 18/08/2026).
   const hoy = new Date()
   hoy.setUTCHours(0, 0, 0, 0)
-  // Traer asignaciones activas de esta comisión con su distribución vigente
-  const asignaciones = await prisma.asignacion.findMany({
-    where: {
-      institucionId: tenantId,
-      comisionId,
-      activo:        true,
-      deletedAt:     null,
-    },
-    select: {
-      id:                       true,
-      identificadorEstructural: true,
-      materia:   { select: { nombre: true } },
-      titularidades: {
-        where:   { activo: true, fecha_hasta: null },
-        take:    1,
-        select: {
-          agente: { select: { nombre: true, apellido: true, documento: true } },
-        },
-      },
-      distribuciones: {
+  const manana = new Date(hoy)
+  manana.setUTCDate(manana.getUTCDate() + 1)
+  const ORDEN_DIAS: Record<string, number> = {
+    LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4,
+    VIERNES: 5, SABADO: 6, DOMINGO: 7,
+  }
+  const resultados = await Promise.all(
+    comisiones.map(async (comision) => {
+      const asignaciones = await prisma.asignacion.findMany({
         where: {
-          activo:    true,
-          deletedAt: null,
-          OR: [
-            { fecha_vigencia_hasta: null },
-            { fecha_vigencia_hasta: { gte: hoy } },
-          ],
+          institucionId: tenantId,
+          comisionId:    comision.id,
+          activo:        true,
+          deletedAt:     null,
         },
-        orderBy: { version: "desc" },
-        take:    1,
         select: {
-          distribucionModulos: {
+          id:                       true,
+          identificadorEstructural: true,
+          materia:   { select: { nombre: true } },
+          titularidades: {
+            where:   { activo: true, fecha_hasta: null },
+            take:    1,
             select: {
-              moduloHorario: {
+              agente: { select: { nombre: true, apellido: true, documento: true } },
+            },
+          },
+          distribuciones: {
+            where: {
+              activo:    true,
+              deletedAt: null,
+              OR: [
+                { fecha_vigencia_hasta: null },
+                { fecha_vigencia_hasta: { gte: hoy } },
+              ],
+            },
+            orderBy: { version: "desc" },
+            take:    1,
+            select: {
+              distribucionModulos: {
                 select: {
-                  id:         true,
-                  dia_semana: true,
-                  hora_desde: true,
-                  hora_hasta: true,
+                  moduloHorario: {
+                    select: {
+                      id:         true,
+                      dia_semana: true,
+                      hora_desde: true,
+                      hora_hasta: true,
+                    },
+                  },
                 },
               },
             },
           },
         },
-      },
-    },
-  })
-  // Si se pide "a cargo ahora", traer clases programadas de hoy para esta comisión
-  let reemplazosHoy: Map<number, { nombre: string; apellido: string; documento: string }> = new Map()
-  if (conACargoAhora) {
-    const manana = new Date(hoy)
-    manana.setUTCDate(manana.getUTCDate() + 1)
-    const clasesHoy = await prisma.claseProgramada.findMany({
-      where: {
-        institucionId: tenantId,
-        comisionId,
-        fecha: { gte: hoy, lt: manana },
-      },
-      select: {
-        moduloId: true,
-        reemplazos: {
-          where:  { activo: true },
+      })
+      let reemplazosHoy: Map<number, { nombre: string; apellido: string; documento: string }> = new Map()
+      if (conACargoAhora) {
+        const clasesHoy = await prisma.claseProgramada.findMany({
+          where: {
+            institucionId: tenantId,
+            comisionId:    comision.id,
+            fecha: { gte: hoy, lt: manana },
+          },
           select: {
-            agenteSuplente: {
-              select: { nombre: true, apellido: true, documento: true },
+            moduloId: true,
+            reemplazos: {
+              where:  { activo: true },
+              select: {
+                agenteSuplente: {
+                  select: { nombre: true, apellido: true, documento: true },
+                },
+              },
+              take: 1,
             },
           },
-          take: 1,
-        },
-      },
-    })
-    for (const clase of clasesHoy) {
-      const r = clase.reemplazos[0]
-      if (clase.moduloId && r?.agenteSuplente) {
-        reemplazosHoy.set(clase.moduloId, r.agenteSuplente)
+        })
+        for (const clase of clasesHoy) {
+          const r = clase.reemplazos[0]
+          if (clase.moduloId && r?.agenteSuplente) {
+            reemplazosHoy.set(clase.moduloId, r.agenteSuplente)
+          }
+        }
       }
-    }
-  }
-  // Construir filas ordenadas por día/hora
-  const ORDEN_DIAS: Record<string, number> = {
-    LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4,
-    VIERNES: 5, SABADO: 6, DOMINGO: 7,
-  }
-  const filas: HorarioComisionRow[] = []
-  for (const asig of asignaciones) {
-    const dist = asig.distribuciones[0]
-    if (!dist) continue
-    const titular = asig.titularidades[0]?.agente
-    for (const dm of dist.distribucionModulos) {
-      const mod = dm.moduloHorario
-      const suplente = conACargoAhora ? reemplazosHoy.get(mod.id) : undefined
-      filas.push({
-        moduloId:       mod.id,
-        dia:            mod.dia_semana,
-        horaDesde:      mod.hora_desde,
-        horaHasta:      mod.hora_hasta,
-        materia:        asig.materia?.nombre ?? null,
-        identificador:  asig.identificadorEstructural,
-        titularNombre:  titular ? `${titular.apellido}, ${titular.nombre}` : "Vacante",
-        titularDNI:     titular?.documento ?? "-",
-        aCargoNombre:   suplente ? `${suplente.apellido}, ${suplente.nombre}` : undefined,
-        aCargosDNI:     suplente?.documento,
-        esSuplente:     !!suplente,
+      const filas: HorarioComisionRow[] = []
+      for (const asig of asignaciones) {
+        const dist = asig.distribuciones[0]
+        if (!dist) continue
+        const titular = asig.titularidades[0]?.agente
+        for (const dm of dist.distribucionModulos) {
+          const mod = dm.moduloHorario
+          const suplente = conACargoAhora ? reemplazosHoy.get(mod.id) : undefined
+          filas.push({
+            moduloId:       mod.id,
+            dia:            mod.dia_semana,
+            horaDesde:      mod.hora_desde,
+            horaHasta:      mod.hora_hasta,
+            materia:        asig.materia?.nombre ?? null,
+            identificador:  asig.identificadorEstructural,
+            titularNombre:  titular ? `${titular.apellido}, ${titular.nombre}` : "Vacante",
+            titularDNI:     titular?.documento ?? "-",
+            aCargoNombre:   suplente ? `${suplente.apellido}, ${suplente.nombre}` : undefined,
+            aCargosDNI:     suplente?.documento,
+            esSuplente:     !!suplente,
+          })
+        }
+      }
+      filas.sort((a, b) => {
+        const dA = ORDEN_DIAS[a.dia] ?? 9
+        const dB = ORDEN_DIAS[b.dia] ?? 9
+        if (dA !== dB) return dA - dB
+        return a.horaDesde - b.horaDesde
       })
-    }
-  }
-  filas.sort((a, b) => {
-    const dA = ORDEN_DIAS[a.dia] ?? 9
-    const dB = ORDEN_DIAS[b.dia] ?? 9
-    if (dA !== dB) return dA - dB
-    return a.horaDesde - b.horaDesde
-  })
-  return {
-    comision: {
-      id:     comision.id,
-      nombre: comision.nombre,
-      curso:  comision.curso.nombre,
-      turno:  comision.turno.nombre,
-      unidad: comision.unidad?.nombre ?? null,
-    },
-    filas,
-  }
+      return {
+        comision: {
+          id:     comision.id,
+          nombre: comision.nombre,
+          curso:  comision.curso.nombre,
+          turno:  comision.turno.nombre,
+          unidad: comision.unidad?.nombre ?? null,
+        },
+        filas,
+      }
+    })
+  )
+  return resultados
 }
