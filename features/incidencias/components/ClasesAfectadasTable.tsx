@@ -1,20 +1,17 @@
 // features/incidencias/components/ClasesAfectadasTable.tsx
 import { useState } from "react"
 import type { ClaseAfectada, ReemplazoClase } from "../types"
-
 function formatHora(minutos: number): string {
   const h = Math.floor(minutos / 60).toString().padStart(2, "0")
   const m = (minutos % 60).toString().padStart(2, "0")
   return `${h}:${m}`
 }
-
 function nombreSuplente(reemplazo: ReemplazoClase): string {
   if (reemplazo.agenteSuplente) {
     return `${reemplazo.agenteSuplente.apellido}, ${reemplazo.agenteSuplente.nombre}`
   }
   return "—"
 }
-
 const th = {
   textAlign:     "left" as const,
   fontSize:      "var(--text-2xs)",
@@ -26,7 +23,6 @@ const th = {
   borderBottom:  "1px solid var(--color-border-strong)",
   background:    "var(--color-surface-raised)",
 }
-
 const td = {
   padding:       "10px 12px",
   fontSize:      "var(--text-sm)",
@@ -34,16 +30,13 @@ const td = {
   borderBottom:  "1px solid var(--color-border)",
   verticalAlign: "middle" as const,
 }
-
 const estadoBadge: Record<ClaseAfectada["estado"], { label: string; color: string; bg: string }> = {
   PROGRAMADA:  { label: "Programada",  color: "var(--color-text-secondary)", bg: "var(--color-surface-raised)" },
   DICTADA:     { label: "Dictada",     color: "var(--color-success-text)",   bg: "var(--color-success-bg)" },
   SUSPENDIDA:  { label: "Suspendida",  color: "var(--color-error)",          bg: "var(--color-error-bg)" },
   REEMPLAZADA: { label: "Reemplazada", color: "var(--color-accent)",         bg: "var(--color-accent-bg, #f0f8ff)" },
 }
-
 const UMBRAL_AUTO_COLAPSO = 5
-
 export function ClasesAfectadasTable({
   clases,
   esRaiz,
@@ -62,12 +55,9 @@ const hayPendientes = clases.some(
   const [abierto, setAbierto] = useState(
     clases.length <= UMBRAL_AUTO_COLAPSO || hayPendientes
   )
-
   const puedeColapsar = clases.length > 0
-
   return (
     <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
-
       <button
         onClick={() => puedeColapsar && setAbierto(v => !v)}
         disabled={!puedeColapsar}
@@ -89,7 +79,6 @@ const hayPendientes = clases.some(
             </span>
           )}
         </span>
-
         {puedeColapsar && (
           <svg
             width="14" height="14" viewBox="0 0 14 14" fill="none"
@@ -99,7 +88,6 @@ const hayPendientes = clases.some(
           </svg>
         )}
       </button>
-
       {(!puedeColapsar || abierto) && (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -119,9 +107,6 @@ const hayPendientes = clases.some(
             ) : clases.map(clase => {
               const badge          = estadoBadge[clase.estado]
               const reemplazoActivo = clase.reemplazos.find(r => r.activo) ?? null
-              const ordenados        = [...clase.reemplazos].sort((a, b) => a.id - b.id)
-              const cadena            = esRaiz ? ordenados.slice(0, 1) : ordenados
-
               return (
                 <tr
                   key={clase.id}
@@ -132,14 +117,12 @@ const hayPendientes = clases.some(
                   <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                     {clase.fecha?.slice(0, 10).split("-").reverse().join("/")}
                   </td>
-
                   <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                     {clase.modulo
                       ? `${clase.modulo.dia_semana} · ${formatHora(clase.modulo.hora_desde)}–${formatHora(clase.modulo.hora_hasta)}`
                       : "—"
                     }
                   </td>
-
                   <td style={td}>
                     <span style={{
                       fontSize:     "var(--text-xs)",
@@ -154,43 +137,22 @@ const hayPendientes = clases.some(
                       {badge.label}
                     </span>
                   </td>
-
-                  {/* Reemplazante */}
+                  {/* Reemplazante -- solo el activo, sin importar si la incidencia
+                      es raíz o parte de una cadena. El historial completo (quién
+                      más pasó por esta clase antes) se puede ver en la tabla
+                      "Cadena de incidencias" de más abajo, que sí distingue cada
+                      eslabón por separado -- mostrarlo acá también confundía,
+                      porque mezclaba reemplazantes de OTRAS incidencias de la
+                      misma cadena como si fueran de esta (hallazgo 18/08/2026). */}
                   <td style={td}>
-                    {esRaiz ? (
-                      reemplazoActivo ? (
-                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-primary)", fontWeight: "var(--font-medium)" }}>
-                          {nombreSuplente(reemplazoActivo)}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Sin cubrir</span>
-                      )
-                    ) : cadena.length === 0 ? (
-                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Sin cubrir</span>
+                    {reemplazoActivo ? (
+                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-primary)", fontWeight: "var(--font-medium)" }}>
+                        {nombreSuplente(reemplazoActivo)}
+                      </span>
                     ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        {cadena.map((r, i) => (
-                          <span
-                            key={r.id}
-                            style={{
-                              fontSize:       "var(--text-xs)",
-                              color:          r.activo ? "var(--color-text-primary)" : "var(--color-text-hint)",
-                              fontWeight:     r.activo ? "var(--font-medium)" : 400,
-                              textDecoration: r.activo ? "none" : "line-through",
-                            }}
-                          >
-                            {i + 1}. {nombreSuplente(r)}
-                            {r.activo && (
-                              <span style={{ marginLeft: 4, fontSize: "var(--text-2xs)", color: "var(--color-accent)" }}>
-                                ● activo
-                              </span>
-                            )}
-                          </span>
-                        ))}
-                      </div>
+                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Sin cubrir</span>
                     )}
                   </td>
-
                   <td style={td}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", alignItems: "flex-start" }}>
                       {reemplazoActivo ? (
@@ -210,7 +172,6 @@ const hayPendientes = clases.some(
                       )}
                     </div>
                   </td>
-
                 </tr>
               )
             })}
