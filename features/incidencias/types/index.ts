@@ -85,6 +85,10 @@ export type CadenaItem = {
   fecha_desde: string
   fecha_hasta: string
   tipo?:       string
+  reemplazante: {
+    nombre:    string
+    documento: string
+  } | null
 }
 
 export type ReemplazoClase = {
