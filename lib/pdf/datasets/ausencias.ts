@@ -41,6 +41,24 @@ function titularVigenteEn(
   )
   return vigente?.agente ?? null
 }
+/**
+ * Mismo criterio que titularVigenteEn, pero para distribuciones horarias:
+ * busca la versión que estaba vigente en una fecha puntual, no la
+ * actualmente activa. Necesario porque una distribución puede haberse
+ * reemplazado o eliminado DESPUÉS de la fecha de la incidencia que se
+ * está reportando -- si filtráramos por "activo/deletedAt actuales",
+ * perderíamos la carga horaria histórica real (bug encontrado 17/08/2026,
+ * incidencia #5: la distribución vigente el 04/08 fue borrada el 05/08,
+ * y el reporte mostraba "-" en vez del horario real).
+ */
+function distribucionVigenteEn<T extends { fecha_vigencia_desde: Date; fecha_vigencia_hasta: Date | null }>(
+  distribuciones: T[],
+  fecha: Date
+): T | null {
+  return distribuciones.find(
+    d => d.fecha_vigencia_desde <= fecha && (!d.fecha_vigencia_hasta || d.fecha_vigencia_hasta >= fecha)
+  ) ?? null
+}
 function formatearDistribucion(
   modulos: { dia_semana: string; hora_desde: number; hora_hasta: number }[]
 ): string {
@@ -121,17 +139,10 @@ export async function obtenerDatosAusencias(
             },
           },
           distribuciones: {
-            where: {
-              activo:    true,
-              deletedAt: null,
-              OR: [
-                { fecha_vigencia_hasta: null },
-                { fecha_vigencia_hasta: { gte: new Date() } },
-              ],
-            },
             orderBy: { version: "desc" },
-            take:    1,
             select: {
+              fecha_vigencia_desde: true,
+              fecha_vigencia_hasta: true,
               distribucionModulos: {
                 select: {
                   moduloHorario: {
@@ -228,7 +239,7 @@ export async function obtenerDatosAusencias(
   const filas: FilaAusencia[] = incidenciasFiltradas.map(inc => {
     const esRaiz   = !inc.incidenciaPadreId
     const titular  = titularVigenteEn(inc.asignacion.titularidades, inc.fecha_desde)
-    const dist     = inc.asignacion.distribuciones[0]
+    const dist     = distribucionVigenteEn(inc.asignacion.distribuciones, inc.fecha_desde)
     const modulos = dist?.distribucionModulos.map(dm => dm.moduloHorario) ?? []
     const distribucion = formatearDistribucion(modulos)
     let titularDNI:    string
