@@ -1,6 +1,5 @@
 // lib/pdf/datasets/horarios.ts
 import prisma from "@/lib/prisma"
-
 export type HorarioComisionRow = {
   moduloId:    number
   dia:         string
@@ -15,7 +14,6 @@ export type HorarioComisionRow = {
   aCargosDNI?:   string
   esSuplente?:   boolean
 }
-
 export type DatosReporteHorarios = {
   comision: {
     id:     number
@@ -26,13 +24,11 @@ export type DatosReporteHorarios = {
   }
   filas: HorarioComisionRow[]
 }
-
 export async function obtenerDatosHorarios(
   tenantId:       number,
   comisionId:     number,
   conACargoAhora: boolean
 ): Promise<DatosReporteHorarios | null> {
-
   const comision = await prisma.comision.findFirst({
     where: { id: comisionId, institucionId: tenantId, activo: true, deletedAt: null },
     select: {
@@ -44,7 +40,15 @@ export async function obtenerDatosHorarios(
     },
   })
   if (!comision) return null
-
+  // UTC explícito, medianoche de hoy -- ClaseProgramada.fecha y
+  // DistribucionHoraria.fecha_vigencia_hasta se guardan como medianoche
+  // UTC. Comparar contra new Date() (el instante exacto de la consulta,
+  // no la medianoche de hoy) hacía que una distribución vigente "hasta
+  // hoy" dejara de aparecer a mitad del día, según la hora en que se
+  // corriera el reporte -- mismo patrón de bug ya corregido en otros
+  // ~15 archivos, esta vez con instante exacto en vez de timezone local.
+  const hoy = new Date()
+  hoy.setUTCHours(0, 0, 0, 0)
   // Traer asignaciones activas de esta comisión con su distribución vigente
   const asignaciones = await prisma.asignacion.findMany({
     where: {
@@ -70,7 +74,7 @@ export async function obtenerDatosHorarios(
           deletedAt: null,
           OR: [
             { fecha_vigencia_hasta: null },
-            { fecha_vigencia_hasta: { gte: new Date() } },
+            { fecha_vigencia_hasta: { gte: hoy } },
           ],
         },
         orderBy: { version: "desc" },
@@ -92,19 +96,11 @@ export async function obtenerDatosHorarios(
       },
     },
   })
-
   // Si se pide "a cargo ahora", traer clases programadas de hoy para esta comisión
   let reemplazosHoy: Map<number, { nombre: string; apellido: string; documento: string }> = new Map()
-
   if (conACargoAhora) {
-    // UTC explícito -- ClaseProgramada.fecha se guarda como medianoche UTC.
-    // setHours/setDate locales corrían el rango en cualquier servidor con
-    // TZ != UTC, mismo patrón ya corregido 8 veces en el Dashboard.
-    const hoy = new Date()
-    hoy.setUTCHours(0, 0, 0, 0)
     const manana = new Date(hoy)
     manana.setUTCDate(manana.getUTCDate() + 1)
-
     const clasesHoy = await prisma.claseProgramada.findMany({
       where: {
         institucionId: tenantId,
@@ -124,7 +120,6 @@ export async function obtenerDatosHorarios(
         },
       },
     })
-
     for (const clase of clasesHoy) {
       const r = clase.reemplazos[0]
       if (clase.moduloId && r?.agenteSuplente) {
@@ -132,25 +127,19 @@ export async function obtenerDatosHorarios(
       }
     }
   }
-
   // Construir filas ordenadas por día/hora
   const ORDEN_DIAS: Record<string, number> = {
     LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4,
     VIERNES: 5, SABADO: 6, DOMINGO: 7,
   }
-
   const filas: HorarioComisionRow[] = []
-
   for (const asig of asignaciones) {
     const dist = asig.distribuciones[0]
     if (!dist) continue
-
     const titular = asig.titularidades[0]?.agente
-
     for (const dm of dist.distribucionModulos) {
       const mod = dm.moduloHorario
       const suplente = conACargoAhora ? reemplazosHoy.get(mod.id) : undefined
-
       filas.push({
         moduloId:       mod.id,
         dia:            mod.dia_semana,
@@ -166,14 +155,12 @@ export async function obtenerDatosHorarios(
       })
     }
   }
-
   filas.sort((a, b) => {
     const dA = ORDEN_DIAS[a.dia] ?? 9
     const dB = ORDEN_DIAS[b.dia] ?? 9
     if (dA !== dB) return dA - dB
     return a.horaDesde - b.horaDesde
   })
-
   return {
     comision: {
       id:     comision.id,
