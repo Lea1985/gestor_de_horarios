@@ -1,17 +1,16 @@
 // lib/pdf/datasets/codigarios.ts
 import prisma from "@/lib/prisma"
-
 export type FilaCodigario = {
   codigarioId:     number
   codigarioNombre: string
   items: {
-    codigo:      string
-    nombre:      string
-    descripcion: string | null
-    activo:      boolean
+    codigo:                string
+    nombre:                string
+    descripcion:           string | null
+    porcentajeComputable:  number
+    activo:                boolean
   }[]
 }
-
 /**
  * Si se pasa codigarioId, filtra solo ese codigario.
  * Si no, devuelve todos los codigarios activos de la institución.
@@ -34,15 +33,15 @@ export async function obtenerDatosCodigarios(
       items: {
         orderBy: { codigo: "asc" },
         select: {
-          codigo:      true,
-          nombre:      true,
-          descripcion: true,
-          activo:      true,
+          codigo:                true,
+          nombre:                true,
+          descripcion:           true,
+          porcentajeComputable:  true,
+          activo:                true,
         },
       },
     },
   })
-
   return codigarios.map(c => ({
     codigarioId:     c.id,
     codigarioNombre: c.nombre,

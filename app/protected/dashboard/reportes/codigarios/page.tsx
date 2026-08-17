@@ -3,24 +3,20 @@ import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { useDescargarPDF } from "@/app/hooks/useDescargarPDF"
 import { useVistaReporte } from "@/app/hooks/useVistaReporte"
-
 type Codigario = { id: number; nombre: string }
-
 type ItemCodigario = {
-  codigo:      string
-  nombre:      string
-  descripcion: string | null
-  activo:      boolean
+  codigo:                string
+  nombre:                string
+  descripcion:           string | null
+  porcentajeComputable:  number
+  activo:                boolean
 }
-
 type FilaCodigario = {
   codigarioId:     number
   codigarioNombre: string
   items:           ItemCodigario[]
 }
-
 type VistaCodigarios = { datos: FilaCodigario[] }
-
 const th: React.CSSProperties = {
   textAlign: "left", fontSize: "var(--text-2xs)", fontWeight: "var(--font-medium)",
   textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--color-text-secondary)",
@@ -31,22 +27,18 @@ const td: React.CSSProperties = {
   padding: "10px 12px", fontSize: "var(--text-sm)", color: "var(--color-text-primary)",
   borderBottom: "1px solid var(--color-border)", verticalAlign: "middle",
 }
-
 export default function ReporteCodigariosPage() {
   const { authHeaders } = useAuth()
   const { descargar, descargando, error: errorDescarga } = useDescargarPDF()
   const { datos, visible, cargando, error: errorVista, verEnPantalla, cerrarVista } = useVistaReporte<VistaCodigarios>()
-
   const [codigarios, setCodigarios] = useState<Codigario[]>([])
   const [loadingCodigarios, setLoadingCodigarios] = useState(true)
   const [codigarioId, setCodigarioId] = useState("")
   const fetchedRef = useRef(false)
-
   useEffect(() => {
     if (fetchedRef.current) return
     const token = authHeaders?.Authorization
     if (!token || token === "Bearer ") return
-
     const fetchCodigarios = async () => {
       try {
         setLoadingCodigarios(true)
@@ -62,17 +54,14 @@ export default function ReporteCodigariosPage() {
     }
     fetchCodigarios()
   }, [authHeaders?.Authorization])
-
   const armarUrl = () => {
     const params = new URLSearchParams()
     if (codigarioId) params.set("codigarioId", codigarioId)
     const query = params.toString()
     return `/api/reportes/codigarios${query ? `?${query}` : ""}`
   }
-
   const handleDescargar = () => descargar(armarUrl())
   const handleVer        = () => verEnPantalla(armarUrl())
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
       <div>
@@ -81,7 +70,6 @@ export default function ReporteCodigariosPage() {
           Consultá en pantalla o descargá un PDF con el listado de codigarios y sus artículos asociados.
         </p>
       </div>
-
       <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "flex-end", flexWrap: "wrap" }}>
         <div>
           <label style={{ display: "block", fontSize: "var(--text-sm)", marginBottom: "var(--space-1)" }}>Codigario <span style={{ color: "var(--color-text-hint)" }}>(opcional)</span></label>
@@ -97,7 +85,6 @@ export default function ReporteCodigariosPage() {
             ))}
           </select>
         </div>
-
         <button
           onClick={handleVer}
           disabled={cargando}
@@ -105,7 +92,6 @@ export default function ReporteCodigariosPage() {
         >
           {cargando ? "Cargando..." : "Ver en pantalla"}
         </button>
-
         <button
           onClick={handleDescargar}
           disabled={descargando}
@@ -114,13 +100,11 @@ export default function ReporteCodigariosPage() {
           {descargando ? "Generando..." : "Descargar PDF"}
         </button>
       </div>
-
       {errorDescarga && (
         <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "#ef4444", fontSize: "var(--text-sm)" }}>
           {errorDescarga}
         </div>
       )}
-
       {visible && (
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -134,7 +118,6 @@ export default function ReporteCodigariosPage() {
               ×
             </button>
           </div>
-
           <div style={{ padding: "var(--space-4)" }}>
             {cargando ? (
               <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
@@ -158,7 +141,7 @@ export default function ReporteCodigariosPage() {
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
-                          {["Código", "Nombre", "Descripción", "Estado"].map(col => (
+                          {["Código", "Nombre", "Descripción", "% Computable", "Estado"].map(col => (
                             <th key={col} style={th}>{col}</th>
                           ))}
                         </tr>
@@ -166,7 +149,7 @@ export default function ReporteCodigariosPage() {
                       <tbody>
                         {c.items.length === 0 ? (
                           <tr>
-                            <td colSpan={4} style={{ ...td, textAlign: "center", color: "var(--color-text-hint)" }}>
+                            <td colSpan={5} style={{ ...td, textAlign: "center", color: "var(--color-text-hint)" }}>
                               Sin artículos
                             </td>
                           </tr>
@@ -175,6 +158,7 @@ export default function ReporteCodigariosPage() {
                             <td style={td}>{item.codigo}</td>
                             <td style={td}>{item.nombre}</td>
                             <td style={td}>{item.descripcion ?? "-"}</td>
+                            <td style={td}>{item.porcentajeComputable}%</td>
                             <td style={{ ...td, color: item.activo ? "var(--color-success-text, #16a34a)" : "var(--color-text-hint)" }}>
                               {item.activo ? "Activo" : "Inactivo"}
                             </td>
