@@ -2,7 +2,7 @@
 
 ## Resumen
 
-Sesión con dos frentes: cerrar la tarea de validación de auto-reemplazo que quedó pendiente de ayer (#65), y terminar la verificación visual de los 7 reportes (#61). Sobre la marcha aparecieron dos hallazgos grandes — uno de código (carga horaria histórica en ausencias) y uno de configuración/datos (porcentajes del codigario nunca cargados) — que terminaron ocupando más tiempo que lo planeado, pero con buen resultado: 4 commits, todos validados en vivo antes de comitear. 6 tareas nuevas documentadas para después.
+Sesión larga con tres frentes: cerrar la validación de auto-reemplazo pendiente de ayer (#65), terminar la verificación visual de los 7 reportes (#61), y después seguir bajando el backlog que fue quedando (código huérfano, helper duplicado, banner de cadena de incidencias, opción "Todas" en reportes). 9 commits en total, todos validados en vivo (pantalla y/o PDF) antes de comitear. Quedó una sola mejora moderada a mitad de camino (#68) para arrancar mañana.
 
 ## Lo que se hizo
 
@@ -13,40 +13,48 @@ Se investigó el flujo completo (`crearReemplazo.ts` → `validarSuperposicion.t
 
 Validado en vivo: intentar asignar a Perez, Juan (el agente ausente) a una clase de su propia incidencia #9 lo bloqueó con el mensaje correcto; asignar a un agente distinto (Juarez, Romina) siguió funcionando normalmente.
 
-De paso se encontró (sin arreglar, **tarea #72**): `reemplazoRepository.ts` usa el patrón "titular más reciente" en vez de "vigente en la fecha" al traer titularidades para mostrar en listados — mismo bug ya corregido ~15 veces en sesiones anteriores, en un archivo que no se había auditado todavía.
-
 ### 2. Tarea #66 — corrección de datos de prueba
 Clase 71 (incidencia #9) corregida vía UI: se quitó a Perez, Juan como su propio reemplazante, se asignó a Juarez, Romina. Clase 93 (incidencia #5) se investigó y se descartó como problema real — ahí el mismo suplente (Ramos, Juan Pedro) fue removido y reasignado, pero no es autorreemplazo (el titular ausente es otra persona, Alegre).
 
 ### 3. Fix carga horaria histórica en `reportes/ausencias` (`c81227a`)
-Hallazgo nuevo, motivado por una observación del usuario ("no muestra la carga horaria cuando hay reemplazo asignado"). Investigado con SQL: la incidencia #5 (04/08/2026) no mostraba horario porque el filtro de distribuciones en `ausencias.ts` buscaba la distribución **vigente hoy** (`activo:true, deletedAt:null`), no la vigente en la fecha de la incidencia — y la distribución que sí estaba vigente el 04/08 fue borrada el 05/08.
+Motivado por una observación del usuario ("no muestra la carga horaria cuando hay reemplazo asignado"). Investigado con SQL: la incidencia #5 (04/08/2026) no mostraba horario porque el filtro de distribuciones en `ausencias.ts` buscaba la distribución **vigente hoy** (`activo:true, deletedAt:null`), no la vigente en la fecha de la incidencia — y la distribución que sí estaba vigente el 04/08 fue borrada el 05/08.
 
-Mismo patrón categórico que motivó ~15 fixes de "titular más reciente" en sesiones anteriores, aplicado esta vez a distribuciones. Se agregó `distribucionVigenteEn()` (mismo criterio que `titularVigenteEn`), se sacó el filtro `where` de la consulta de distribuciones y se pasó a elegir la vigente en JS.
-
-Validado en pantalla: incidencia #5 pasó de mostrar "-" a mostrar "MAR (1) 09:00-09:40, MIE (2) 09:00-09:40, 09:40-10:20".
+Se agregó `distribucionVigenteEn()` (mismo criterio que `titularVigenteEn`), se sacó el filtro `where` de la consulta de distribuciones y se pasó a elegir la vigente en JS. Validado en pantalla: incidencia #5 pasó de mostrar "-" a mostrar "MAR (1) 09:00-09:40, MIE (2) 09:00-09:40, 09:40-10:20".
 
 ### 4. Verificación visual completa — tarea #61 cerrada
-Se completaron los 6 reportes que faltaban (ayer solo se había hecho `ausencias`):
+Se completaron los 6 reportes que faltaban:
 
-- **horarios**: pantalla y PDF coinciden. El checkbox "a cargo ahora" (fix de ayer, §3.3) no tuvo forma de probarse a fondo porque hoy (17/08) no hay ningún reemplazo activo en la comisión probada — no hay error, pero tampoco hay diferencial real. Se notó que el titular mostrado (Lila, Pilo) difiere del titular histórico que usa `ausencias.ts` para una incidencia pasada de la misma asignación (Juarez, Romina) — investigado con SQL y **confirmado que no es bug**: son dos reportes con propósitos distintos (titular actual vs. titular vigente en una fecha pasada), ambos correctos.
+- **horarios**: pantalla y PDF coinciden. Se notó que el titular mostrado (Lila, Pilo) difiere del titular histórico que usa `ausencias.ts` para una incidencia pasada de la misma asignación (Juarez, Romina) — investigado con SQL y **confirmado que no es bug**: dos reportes con propósitos distintos (titular actual vs. vigente en una fecha pasada), ambos correctos.
 - **asignaciones**: pantalla y PDF coinciden exactamente.
 - **codigarios**: pantalla y PDF coinciden (confirmado por el usuario hasta el código 92, el último).
-- **modulos-computables**: funciona, pero expuso dos gaps de producto (ver hallazgos).
-- **profesor** (ficha individual): pantalla y PDF coinciden. Expuso un hallazgo de diseño (ver hallazgos).
+- **modulos-computables**: funciona, pero expuso los gaps de producto que se convirtieron en #68/#69.
+- **profesor** (ficha individual): pantalla y PDF coinciden. Expuso el hallazgo de diseño que se convirtió en #70.
 
 ### 5. Columna "% Computable" en `reportes/codigarios` (`f5b0218`)
-El usuario explicó la regla de negocio real de módulos computables (las ausencias se pagan al 100% solo si el artículo tomado es "sin descuento") y pidió poder ver/editar ese porcentaje desde la gestión de codigarios. Al investigar se descubrió que **la pantalla de gestión ya existía completa** (`codigarios/[id]/page.tsx` — ver, editar y crear con el campo "% Computable", confirmado funcionando en vivo con capturas). Lo único que faltaba era mostrar la misma columna en el reporte de solo lectura (`reportes/codigarios`), que se agregó (dataset, pantalla y PDF).
+El usuario explicó la regla de negocio real de módulos computables (las ausencias se pagan al 100% solo si el artículo tomado es "sin descuento"). Al investigar se descubrió que **la pantalla de gestión ya existía completa** (`codigarios/[id]/page.tsx` — ver, editar y crear con el campo "% Computable", confirmado funcionando en vivo). Faltaba solo mostrar la misma columna en el reporte de solo lectura, que se agregó (dataset, pantalla y PDF).
 
-## Hallazgo más importante de la sesión (no es bug de código)
+Hallazgo asociado (no es bug de código): **los 109 artículos activos del codigario tienen `porcentajeComputable = 100`, sin excepción** — nunca se cargó el valor real de ninguno. El usuario confirmó que fue deliberado mientras se construía la funcionalidad. Queda como parte de la tarea #11.
 
-**Los 109 artículos activos del codigario tienen `porcentajeComputable = 100`, sin excepción** — es el valor default del schema, y nunca se cargó el valor real de ningún artículo desde la pantalla de gestión (que sí funciona bien). Esto significa que hoy el sistema no puede distinguir ausencias que se pagan de ausencias que deberían descontar — todo computa 100% siempre. El usuario confirmó que esto fue deliberado mientras se construía la funcionalidad, no un bug. Alto impacto si se usa `modulos-computables` para liquidar sueldos reales sin cargar los valores primero. Queda como parte de la **tarea #11** (seed real de Colegio Ceferino).
+### 6. Fix #62 — mismo patrón de timezone, ahora en `reportes/horarios` (`3b8378e`)
+El filtro de distribuciones en `horarios.ts` comparaba `fecha_vigencia_hasta >= new Date()` (el instante exacto de la consulta) en vez de la medianoche de hoy — una distribución vigente "hasta hoy" podía dejar de aparecer a mitad del día según la hora en que se corriera el reporte. Se calculó la medianoche UTC una sola vez al principio de la función y se reusó en los dos lugares que la necesitaban. Validado en pantalla y PDF: mismos datos que antes (la comisión de prueba no está en el caso límite).
 
-## Otros hallazgos nuevos (documentados, sin arreglar)
+### 7. Re-auditoría de código huérfano — #27, #28, #72 cerradas sin cambios de código
+Antes de tocar nada, se reconfirmó con grep si `horarioRepository.ts` (#27), los métodos `listar()`/`obtenerPorId()` de `claseProgramadaRepository.ts` (#28) y los mismos métodos de `reemplazoRepository.ts` (#72) tenían consumidor real. Los tres casos siguen el mismo patrón: la cadena backend existe (repo → usecase → API route) pero **ningún componente del frontend hace el `fetch` correspondiente**. Se decidió explícitamente no invertir tiempo arreglando el bug de "titular más reciente" en código sin consumidor — se documenta y se retoma si algún día se construye la pantalla que los use.
 
-- **#68** — `modulos-computables` no tiene opción "Todos" en el selector de Docente; obliga a ir uno por uno.
-- **#69** — `modulos-computables` es el único de los 7 reportes sin exportación (ni PDF ni CSV); el usuario pidió específicamente CSV para pasarle al liquidador.
-- **#70** — en `ausencias.ts`, una incidencia le atribuye a un único titular fijo (calculado con `fecha_desde`) todo su período, aunque el titular real de la asignación cambie a mitad de camino (caso real: incidencia #10, 06/08-14/08, "titular: Juarez, Romina" para los 9 días, pero el titular real ya era Lila, Pilo desde el día 2). Emparentado conceptualmente con la causa 2 ya documentada (#63) — mismo problema de fondo: un solo campo por incidencia no alcanza para representar un estado que cambia dentro del período.
-- **#72** — `reemplazoRepository.ts` con el patrón "titular más reciente" sin auditar todavía.
+### 8. Refactor #60 — `titularVigenteEn` extraída a helper compartido (`eb38e23`)
+Estaba duplicada de forma idéntica en `ausencias.ts` y `profesor.ts`. Se extrajo a `lib/pdf/datasets/titularVigenteEn.ts`, genérica sobre el tipo de Agente (cada dataset selecciona campos distintos). Se evaluó explícitamente extender el mismo criterio a los 3 repos huérfanos del punto anterior, pero se descartó: filtran a nivel de query de Prisma (no en JS), reestructurarlos sería trabajo especulativo sobre código sin uso. Validado: `tsc` limpio, mismos datos que antes en `reportes/ausencias`.
+
+### 9. Mejora #24 — la cadena completa de una incidencia, no solo el último salto (3 commits: `8d11f45`, `13bbe72`, `448be3e`)
+El banner de incidencia de reemplazante solo contaba el último salto de la cadena (en una cadena de 3 niveles titular → suplente1 → suplente2 → suplente3, la hoja de la cadena omitía por completo al primer suplente). En vez de rediseñar el banner (mucho más trabajo), se agregó una columna "Reemplazante" a la tabla "Cadena de incidencias" que ya existía — mismo valor funcional, una fracción del esfuerzo.
+
+El cálculo (`obtenerCadena.ts`) reusa el criterio de ventana-capada validado el mismo día en `ausencias.ts` (causa 1), para no mezclar el reemplazante de un eslabón con el siguiente. Validado en la cadena real #10→#11→#12: #11 muestra Perez, Juan; #12 muestra Federico, Pepo; #10 muestra "Sin cubrir" (consistente con lo que ya mostraba `reportes/ausencias` para la misma incidencia).
+
+Sobre la marcha, el usuario notó que la tabla "Clases afectadas" (existente, no tocada hasta ahora) mostraba el historial completo tachado de reemplazantes en incidencias no-raíz — incluyendo personas de OTROS eslabones de la cadena, lo cual confundía. Se simplificó para mostrar solo el reemplazante activo en todos los casos (raíz y no-raíz por igual), dejando el historial completo disponible en la tabla de cadena.
+
+Por último, se detectó que la tabla de cadena no tenía ningún orden explícito (SQL sin `ORDER BY`, mismo problema de determinismo visto varias veces en la sesión) — se ordenó por `fecha_desde` ascendente para que la cadena se lea cronológicamente.
+
+### 10. Mejora #73 — opción "Todas" en `reportes/horarios` (`990a493`)
+Mismo patrón ya usado en `reportes/codigarios`: `comisionId` pasa a ser opcional en `obtenerDatosHorarios()`, que ahora devuelve un array (antes un único objeto). Se propagó a `lib/pdf/documents/horarios.ts` (una sección de tabla por comisión), la ruta de API y la pantalla (el desplegable arranca en "Todas"). Validado en pantalla y PDF: modo "Todas" muestra las 2 comisiones de prueba apiladas correctamente; el modo de una comisión puntual sigue funcionando exactamente igual que antes.
 
 ## Commits de hoy
 
@@ -54,30 +62,30 @@ El usuario explicó la regla de negocio real de módulos computables (las ausenc
 670a581 fix(reemplazos): impedir que un agente sea asignado como su propio reemplazante
 c81227a fix(reportes/ausencias): mostrar la distribución vigente en la fecha de la incidencia, no la actual
 f5b0218 feat(reportes/codigarios): mostrar % Computable en pantalla y PDF
+3b8378e fix(reportes/horarios): comparar fecha_vigencia_hasta contra medianoche de hoy, no contra el instante exacto
+eb38e23 refactor(reportes): extraer titularVigenteEn duplicada a helper compartido
+8d11f45 feat(incidencias): mostrar quién cubrió cada eslabón en la tabla 'Cadena de incidencias'
+13bbe72 fix(incidencias): mostrar solo el reemplazante activo en 'Clases afectadas', no todo el historial
+448be3e fix(incidencias): ordenar 'Cadena de incidencias' por fecha_desde ascendente
+990a493 feat(reportes/horarios): agregar opción 'Todas' al selector de Comisión
 ```
-
-(Nota: son 3 commits de código + este documento será el 4to, de docs.)
 
 ## Estado general
 
-Con esto se cierra por completo la auditoría de Reportes iniciada el 15/08: los 5 hallazgos originales (§3.1-§3.5) están resueltos o descartados, la verificación visual de los 7 reportes está terminada, y la investigación de auto-reemplazo (que no estaba en el alcance original) también quedó cerrada y validada.
+La auditoría de Reportes iniciada el 15/08 está completamente cerrada: los 5 hallazgos originales resueltos o descartados, verificación visual de los 7 reportes terminada, investigación de auto-reemplazo cerrada y validada. Además se bajó casi todo el backlog de mejoras menores que había quedado documentado: código huérfano re-auditado (3 tareas), un refactor de deuda técnica real, y dos mejoras de UX (cadena completa + opción "Todas" en horarios).
 
 ## Para la próxima sesión
 
-De lo que queda, así se pueden agrupar por esfuerzo esperado:
+**Arrancar por acá — quedó a mitad de camino:**
+- **#68** — opción "Todos" en el selector de Docente de `reportes/modulos-computables`. A diferencia de `horarios`/`codigarios`, acá NO alcanza con "traer todos los datos": mostrar el detalle completo de todos los docentes a la vez sería una tabla enorme. Necesita diseñar una vista **resumen** (una fila por docente con el total del período), distinta de la vista detallada actual que se mantiene para un docente puntual. Es la única tarea de hoy que se evaluó y se decidió explícitamente posponer, no por falta de tiempo bruto sino porque conviene diseñarla con la cabeza fresca.
 
-**Rápidas / de limpieza:**
-- #27, #28 — código muerto sin consumidor real (evaluar directamente borrar en vez de arreglar).
-- #60 — extraer `titularVigenteEn` duplicada a un helper compartido.
-- #62 — mismo patrón que el fix de hoy (carga horaria histórica), pero en `horarios.ts` — investigar con SQL primero, probablemente una sesión corta.
-- #72 — auditar `reemplazoRepository.ts`.
+**Moderadas, ya con el terreno más despejado:**
+- **#69** — exportación PDF/CSV en `modulos-computables`. Puede convenir resolverla junto con #68, ya que el formato final de la tabla (detalle vs. resumen) afecta cómo se arma el CSV.
 
-**Moderadas (construir algo nuevo, sin ambigüedad de diseño):**
-- #24 — banner de incidencia debería mostrar la cadena completa, no solo el último salto.
-- #68 y #69 — opción "Todos" y exportación PDF/CSV en `modulos-computables`.
+**Arduas (diseño de datos, no código) — pensarlas juntas, no por separado:**
+- **#63** y **#70** son primas hermanas: ambas son casos donde una incidencia necesita representar un estado que cambia dentro de su propio período (heterogeneidad por módulo en #63, cambio de titular a mitad de camino en #70), y el modelo actual de "un campo fijo por incidencia" no alcanza.
 
-**Arduas (la dificultad es de diseño de datos, no de código):**
-- #63 y #70 son primas hermanas: ambas son casos donde una incidencia necesita representar un estado que cambia dentro de su propio período (por módulo en #63, por cambio de titular en #70), y el modelo actual de "un campo fijo por incidencia" no alcanza. Conviene pensarlas juntas en algún momento, no por separado.
-- #11 — seed real de Colegio Ceferino, que ahora incluye también cargar los 109 porcentajes reales del codigario.
+**Grande, en paralelo:**
+- **#11** — seed real de Colegio Ceferino, que incluye cargar los 109 porcentajes reales del codigario (ya se puede hacer desde la pantalla de gestión, que funciona bien).
 
-Sugerencia concreta para arrancar mañana: alguna de las rápidas primero para tener show de avance, y dejar #63/#70 para una sesión dedicada solo a diseño (sin código), dado que ahí lo que hace falta es decidir, no programar.
+Todo lo demás del backlog de sesiones anteriores (#27, #28, #60, #62, #72) quedó cerrado hoy.
