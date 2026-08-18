@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { useVistaReporte } from "@/app/hooks/useVistaReporte"
+import { useDescargarPDF } from "@/app/hooks/useDescargarPDF"
 
 type Agente = { id: number; nombre: string; apellido: string; documento: string }
 type PeriodoOperativo = { id: number; nombre: string; fecha_desde: string; fecha_hasta: string; estado: string }
@@ -43,6 +44,30 @@ function formatFecha(fecha: string): string {
   return new Date(fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
 }
 
+// Separador ";" y BOM UTF-8: pensado para abrirse en Excel con configuración
+// regional Argentina (coma como separador decimal), que es el caso de uso
+// real (pasarle el archivo al liquidador de sueldos).
+function escaparCSV(valor: string | number): string {
+  const s = String(valor)
+  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+function datosACSV(datos: VistaModulosComputables): string {
+  const filas: (string | number)[][] = datos.modo === "detalle"
+    ? [
+        ["Fecha", "Incidencia", "% Computable"],
+        ...datos.detalle.map(d => [
+          formatFecha(d.fecha),
+          d.incidenciaId ? `${d.codigarioItemCodigo} — ${d.codigarioItemNombre}` : "",
+          d.porcentajeComputable,
+        ]),
+      ]
+    : [
+        ["Docente", "DNI", "Total de clases", "Módulos computables"],
+        ...datos.resumen.map(f => [f.agenteNombre, f.agenteDocumento, f.totalClases, f.totalModulosComputables]),
+      ]
+  return filas.map(fila => fila.map(escaparCSV).join(";")).join("\n")
+}
+
 const th: React.CSSProperties = {
   textAlign: "left", fontSize: "var(--text-2xs)", fontWeight: "var(--font-medium)",
   textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--color-text-secondary)",
@@ -53,10 +78,15 @@ const td: React.CSSProperties = {
   padding: "10px 12px", fontSize: "var(--text-sm)", color: "var(--color-text-primary)",
   borderBottom: "1px solid var(--color-border)", verticalAlign: "middle",
 }
+const botonSecundario: React.CSSProperties = {
+  padding: "var(--space-2) var(--space-4)", background: "var(--color-surface)", color: "var(--color-text-primary)",
+  border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-md)", cursor: "pointer",
+}
 
 export default function ReporteModulosComputablesPage() {
   const { authHeaders } = useAuth()
   const { datos, visible, cargando, error: errorVista, verEnPantalla, cerrarVista } = useVistaReporte<VistaModulosComputables>()
+  const { descargar, descargando, error: errorDescarga } = useDescargarPDF()
 
   const [agentes, setAgentes] = useState<Agente[]>([])
   const [periodos, setPeriodos] = useState<PeriodoOperativo[]>([])
@@ -123,13 +153,35 @@ export default function ReporteModulosComputablesPage() {
     if (url) verEnPantalla(url)
   }
 
+  const handleDescargarPDF = () => {
+    const url = armarUrl()
+    if (!url) return
+    descargar(`${url}&formato=pdf`, agenteId ? "modulos_computables.pdf" : "modulos_computables_todos.pdf")
+  }
+
+  const handleDescargarCSV = () => {
+    if (!datos) return
+    const csv = "\uFEFF" + datosACSV(datos)
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const nombreArchivo = datos.modo === "detalle" ? "modulos_computables.csv" : "modulos_computables_todos.csv"
+    const link = document.createElement("a")
+    link.href = url
+    link.download = nombreArchivo
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
       <div>
         <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)" }}>Módulos computables</h1>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
           Calculá los módulos computables de un docente (o de todos) en un período: las clases sin incidencia
-          computan 100%, las que tienen incidencia computan el porcentaje definido en el codigario.
+          computan 100%, las que tienen incidencia computan el porcentaje definido en el codigario. Podés
+          consultarlo en pantalla, o descargarlo directamente en PDF o CSV.
         </p>
       </div>
 
@@ -206,11 +258,23 @@ export default function ReporteModulosComputablesPage() {
         >
           {cargando ? "Calculando..." : "Calcular"}
         </button>
+        <button
+          onClick={handleDescargarPDF}
+          disabled={descargando}
+          style={{ ...botonSecundario, cursor: descargando ? "not-allowed" : "pointer", opacity: descargando ? 0.6 : 1 }}
+        >
+          {descargando ? "Generando..." : "Descargar PDF"}
+        </button>
       </div>
 
       {errorForm && (
         <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "#ef4444", fontSize: "var(--text-sm)" }}>
           {errorForm}
+        </div>
+      )}
+      {errorDescarga && (
+        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "#ef4444", fontSize: "var(--text-sm)" }}>
+          {errorDescarga}
         </div>
       )}
 
@@ -220,12 +284,22 @@ export default function ReporteModulosComputablesPage() {
             <span style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
               {datos ? `${formatFecha(datos.periodo.desde)} al ${formatFecha(datos.periodo.hasta)}` : "Resultado"}
             </span>
-            <button
-              onClick={cerrarVista}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-hint)", fontSize: "var(--text-base)", lineHeight: 1 }}
-            >
-              ×
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+              {datos && (
+                <button
+                  onClick={handleDescargarCSV}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)" }}
+                >
+                  Descargar CSV
+                </button>
+              )}
+              <button
+                onClick={cerrarVista}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-hint)", fontSize: "var(--text-base)", lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
           </div>
           <div style={{ padding: "var(--space-4)" }}>
             {cargando ? (

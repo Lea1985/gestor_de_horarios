@@ -178,3 +178,17 @@ export async function obtenerModulosComputablesResumen(
 
   return resultados
 }
+
+export type AgenteHeader = { nombre: string; apellido: string; documento: string } | null
+
+/**
+ * Datos mínimos del agente para el encabezado del PDF individual
+ * (nombre completo + DNI). Separado de obtenerModulosComputables()
+ * para no modificar su contrato existente (ya usado por la pantalla).
+ */
+export async function obtenerAgenteParaHeader(tenantId: number, agenteId: number): Promise<AgenteHeader> {
+  return prisma.agente.findFirst({
+    where: { id: agenteId, institucionId: tenantId },
+    select: { nombre: true, apellido: true, documento: true },
+  })
+}
