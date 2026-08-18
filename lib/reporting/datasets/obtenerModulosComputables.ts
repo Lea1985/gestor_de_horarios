@@ -119,3 +119,62 @@ export async function obtenerModulosComputables(
     detalle,
   }
 }
+
+export type FilaResumenDocente = {
+  agenteId:                number
+  agenteNombre:            string
+  agenteDocumento:         string
+  totalClases:             number
+  totalModulosComputables: number
+}
+
+/**
+ * Igual que obtenerModulosComputables, pero para TODOS los docentes que
+ * tuvieron alguna titularidad vigente en el período -- sin el detalle
+ * clase por clase (sería una tabla enorme), solo los totales agregados
+ * por docente.
+ */
+export async function obtenerModulosComputablesResumen(
+  tenantId: number,
+  periodo: { desde: Date; hasta: Date }
+): Promise<FilaResumenDocente[]> {
+  const titularidades = await prisma.titularAsignacion.findMany({
+    where: {
+      institucionId: tenantId,
+      deletedAt: null,
+      fecha_desde: { lte: periodo.hasta },
+      OR: [
+        { fecha_hasta: null },
+        { fecha_hasta: { gte: periodo.desde } },
+      ],
+    },
+    select: { agenteId: true },
+    distinct: ["agenteId"],
+  })
+
+  if (titularidades.length === 0) return []
+
+  const agentes = await prisma.agente.findMany({
+    where: {
+      id: { in: titularidades.map(t => t.agenteId) },
+      institucionId: tenantId,
+    },
+    select: { id: true, nombre: true, apellido: true, documento: true },
+    orderBy: [{ apellido: "asc" }, { nombre: "asc" }],
+  })
+
+  const resultados = await Promise.all(
+    agentes.map(async (agente) => {
+      const r = await obtenerModulosComputables(tenantId, agente.id, periodo)
+      return {
+        agenteId:                agente.id,
+        agenteNombre:            `${agente.apellido}, ${agente.nombre}`,
+        agenteDocumento:         agente.documento,
+        totalClases:             r.totalClases,
+        totalModulosComputables: r.totalModulosComputables,
+      }
+    })
+  )
+
+  return resultados
+}

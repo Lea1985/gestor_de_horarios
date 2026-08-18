@@ -15,13 +15,27 @@ type DetalleClase = {
   codigarioItemNombre:  string | null
   porcentajeComputable: number
 }
-type VistaModulosComputables = {
+type FilaResumen = {
   agenteId:                number
-  periodo:                 { desde: string; hasta: string }
+  agenteNombre:            string
+  agenteDocumento:         string
   totalClases:             number
   totalModulosComputables: number
-  detalle:                 DetalleClase[]
 }
+type VistaModulosComputables =
+  | {
+      modo:                    "detalle"
+      agenteId:                number
+      periodo:                 { desde: string; hasta: string }
+      totalClases:             number
+      totalModulosComputables: number
+      detalle:                 DetalleClase[]
+    }
+  | {
+      modo:    "resumen"
+      periodo: { desde: string; hasta: string }
+      resumen: FilaResumen[]
+    }
 
 type ModoPeriodo = "mes" | "periodoOperativo" | "rango"
 
@@ -84,11 +98,9 @@ export default function ReporteModulosComputablesPage() {
   }, [authHeaders?.Authorization])
 
   const armarUrl = (): string | null => {
-    if (!agenteId) {
-      setErrorForm("Seleccioná un docente")
-      return null
-    }
-    const params = new URLSearchParams({ agenteId })
+    // agenteId vacío => modo resumen (Todos), no es un error de formulario.
+    const params = new URLSearchParams()
+    if (agenteId) params.set("agenteId", agenteId)
     if (modoPeriodo === "mes") {
       if (!mesAnio) { setErrorForm("Indicá el mes"); return null }
       const [anio, mes] = mesAnio.split("-")
@@ -116,8 +128,8 @@ export default function ReporteModulosComputablesPage() {
       <div>
         <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)" }}>Módulos computables</h1>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-          Calculá los módulos computables de un docente en un período: las clases sin incidencia computan 100%,
-          las que tienen incidencia computan el porcentaje definido en el codigario.
+          Calculá los módulos computables de un docente (o de todos) en un período: las clases sin incidencia
+          computan 100%, las que tienen incidencia computan el porcentaje definido en el codigario.
         </p>
       </div>
 
@@ -130,7 +142,7 @@ export default function ReporteModulosComputablesPage() {
             style={{ padding: "var(--space-2)" }}
             disabled={loadingFiltros}
           >
-            <option value="">{loadingFiltros ? "Cargando..." : "Seleccionar"}</option>
+            <option value="">{loadingFiltros ? "Cargando..." : "Todos"}</option>
             {!loadingFiltros && agentes.map(a => (
               <option key={a.id} value={a.id}>{a.apellido}, {a.nombre} (DNI {a.documento})</option>
             ))}
@@ -224,37 +236,72 @@ export default function ReporteModulosComputablesPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
                 {errorVista}
               </div>
-            ) : !datos || datos.detalle.length === 0 ? (
+            ) : !datos ? (
               <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
-                No hay clases para este docente en el período seleccionado.
+                No hay datos para el período seleccionado.
+              </div>
+            ) : datos.modo === "detalle" ? (
+              datos.detalle.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
+                  No hay clases para este docente en el período seleccionado.
+                </div>
+              ) : (
+                <>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        {["Fecha", "Incidencia", "% Computable"].map(col => (
+                          <th key={col} style={th}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {datos.detalle.map(d => (
+                        <tr key={d.claseId}>
+                          <td style={td}>{formatFecha(d.fecha)}</td>
+                          <td style={{ ...td, color: d.incidenciaId ? undefined : "var(--color-text-hint)" }}>
+                            {d.incidenciaId ? `${d.codigarioItemCodigo} — ${d.codigarioItemNombre}` : "—"}
+                          </td>
+                          <td style={{ ...td, fontWeight: "var(--font-medium)", color: d.porcentajeComputable === 0 ? "var(--color-error)" : undefined }}>
+                            {d.porcentajeComputable}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-primary)", marginTop: "var(--space-4)", display: "flex", gap: "var(--space-4)", fontWeight: "var(--font-medium)" }}>
+                    <span>Total de clases: {datos.totalClases}</span>
+                    <span>Módulos computables: {datos.totalModulosComputables}</span>
+                  </div>
+                </>
+              )
+            ) : datos.resumen.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
+                No hay docentes con titularidad vigente en el período seleccionado.
               </div>
             ) : (
               <>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      {["Fecha", "Incidencia", "% Computable"].map(col => (
+                      {["Docente", "DNI", "Total de clases", "Módulos computables"].map(col => (
                         <th key={col} style={th}>{col}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {datos.detalle.map(d => (
-                      <tr key={d.claseId}>
-                        <td style={td}>{formatFecha(d.fecha)}</td>
-                        <td style={{ ...td, color: d.incidenciaId ? undefined : "var(--color-text-hint)" }}>
-                          {d.incidenciaId ? `${d.codigarioItemCodigo} — ${d.codigarioItemNombre}` : "—"}
-                        </td>
-                        <td style={{ ...td, fontWeight: "var(--font-medium)", color: d.porcentajeComputable === 0 ? "var(--color-error)" : undefined }}>
-                          {d.porcentajeComputable}%
-                        </td>
+                    {datos.resumen.map(f => (
+                      <tr key={f.agenteId}>
+                        <td style={td}>{f.agenteNombre}</td>
+                        <td style={td}>{f.agenteDocumento}</td>
+                        <td style={td}>{f.totalClases}</td>
+                        <td style={{ ...td, fontWeight: "var(--font-medium)" }}>{f.totalModulosComputables}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-primary)", marginTop: "var(--space-4)", display: "flex", gap: "var(--space-4)", fontWeight: "var(--font-medium)" }}>
-                  <span>Total de clases: {datos.totalClases}</span>
-                  <span>Módulos computables: {datos.totalModulosComputables}</span>
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--color-text-primary)", marginTop: "var(--space-4)", fontWeight: "var(--font-medium)" }}>
+                  Total de docentes: {datos.resumen.length}
                 </div>
               </>
             )}
