@@ -252,3 +252,68 @@ const sinCobertura = clasesHoy
 export function filtrarFrenteACurso(clases: ClaseOperativa[]): ClaseOperativa[] {
   return clases.filter(c => c.asignacion?.materia != null)
 }
+
+export type PersonalNoDocenteHoy = {
+  asignacionId: number
+  agente:       string
+  cargo:        string | null
+  estado:       "presente" | "reemplazado" | "sin_cobertura"
+  suplente:     string | null
+  incidenciaId: number | null
+}
+
+/**
+ * Espejo de mapearCoberturaHoy, pero para cargos no-frente-a-curso
+ * (preceptor/secretario/director -- asignación sin materia). A diferencia
+ * de un aula, acá no interesa "% de cobertura" sino simplemente si la
+ * persona está presente hoy o no -- por eso colapsa los módulos de hoy de
+ * cada asignación a un único estado (misma prioridad que el resto del
+ * sistema: sin_cobertura > reemplazada > normal), y omite del todo los
+ * días sin nada que reportar (SUSPENDIDA por cualquier causa -- feriado o
+ * hueco de período operativo: ninguno de los dos implica que haya que
+ * hacer algo hoy).
+ */
+export function mapearPersonalNoDocenteHoy(clasesHoy: ClaseOperativa[]): PersonalNoDocenteHoy[] {
+  const noFrenteACurso = clasesHoy.filter(c => c.asignacion != null && c.asignacion.materia == null)
+
+  const porAsignacion = new Map<number, ClaseOperativa[]>()
+  for (const c of noFrenteACurso) {
+    const id = c.asignacion!.id
+    const arr = porAsignacion.get(id) ?? []
+    arr.push(c)
+    porAsignacion.set(id, arr)
+  }
+
+  const prioridad: Record<CoberturaEstado, number> = {
+    SIN_COBERTURA: 3,
+    REEMPLAZADA:   2,
+    NORMAL:        1,
+    SUSPENDIDA:    0,
+  }
+
+  const resultado: PersonalNoDocenteHoy[] = []
+  for (const [asignacionId, clases] of porAsignacion) {
+    const relevantes = clases.filter(c => c.coberturaEstado !== "SUSPENDIDA")
+    if (relevantes.length === 0) continue // feriado o hueco de período operativo -- nada que reportar hoy
+
+    const ganadora = relevantes.reduce((mejor, actual) =>
+      prioridad[actual.coberturaEstado] > prioridad[mejor.coberturaEstado] ? actual : mejor
+    )
+
+    const estado: PersonalNoDocenteHoy["estado"] =
+      ganadora.coberturaEstado === "SIN_COBERTURA" ? "sin_cobertura" :
+      ganadora.coberturaEstado === "REEMPLAZADA"   ? "reemplazado"   :
+                                                       "presente"
+
+    resultado.push({
+      asignacionId,
+      agente:       ganadora.titular ? `${ganadora.titular.apellido}, ${ganadora.titular.nombre}` : "Vacante",
+      cargo:        ganadora.unidad?.nombre ?? null,
+      estado,
+      suplente:     ganadora.suplente ? `${ganadora.suplente.apellido}, ${ganadora.suplente.nombre}` : null,
+      incidenciaId: ganadora.incidencia?.id ?? null,
+    })
+  }
+
+  return resultado.sort((a, b) => a.agente.localeCompare(b.agente))
+}

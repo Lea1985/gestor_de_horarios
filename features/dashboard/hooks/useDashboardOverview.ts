@@ -1,4 +1,3 @@
-// features/dashboard/hooks/useDashboardOverview.ts
 "use client"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
@@ -7,19 +6,21 @@ import {
   TimelineItem,
   ClaseSinCobertura,
   ReemplazoActivoHoy,
+  PersonalNoDocenteHoy,
   PendientesDashboard,
   RangoDias,
 } from "../types"
 import { getDashboardOverview } from "../services/dashboardService"
 
 type DashboardState = {
-  kpis:              DashboardKPIs | null
-  sinCobertura:      ClaseSinCobertura[]
-  reemplazosActivos: ReemplazoActivoHoy[]
-  timeline:          TimelineItem[]
-  pendientes:        PendientesDashboard
-  loading:           boolean
-  error:             string | null
+  kpis:                 DashboardKPIs | null
+  sinCobertura:         ClaseSinCobertura[]
+  reemplazosActivos:    ReemplazoActivoHoy[]
+  personalNoDocenteHoy: PersonalNoDocenteHoy[]
+  timeline:             TimelineItem[]
+  pendientes:           PendientesDashboard
+  loading:              boolean
+  error:                string | null
 }
 
 const PENDIENTES_VACIO: PendientesDashboard = {
@@ -34,13 +35,14 @@ export function useDashboardOverview(diasInicial: RangoDias = 14) {
   const { authHeaders } = useAuth()
   const [dias, setDias] = useState<RangoDias>(diasInicial)
   const [state, setState] = useState<DashboardState>({
-    kpis:              null,
-    sinCobertura:      [],
-    reemplazosActivos: [],
-    timeline:          [],
-    pendientes:        PENDIENTES_VACIO,
-    loading:           true,
-    error:             null,
+    kpis:                 null,
+    sinCobertura:         [],
+    reemplazosActivos:    [],
+    personalNoDocenteHoy: [],
+    timeline:             [],
+    pendientes:           PENDIENTES_VACIO,
+    loading:              true,
+    error:                null,
   })
 
   async function load() {
@@ -48,23 +50,25 @@ export function useDashboardOverview(diasInicial: RangoDias = 14) {
       setState(prev => ({ ...prev, loading: true, error: null }))
       const data = await getDashboardOverview(authHeaders, dias)
       setState({
-        kpis:              data.kpis ?? null,
-        sinCobertura:      data.sinCobertura      ?? [],
-        reemplazosActivos: data.reemplazosActivos ?? [],
-        timeline:          data.timeline          ?? [],
-        pendientes:        data.pendientes        ?? PENDIENTES_VACIO,
-        loading:           false,
-        error:             null,
+        kpis:                 data.kpis ?? null,
+        sinCobertura:         data.sinCobertura         ?? [],
+        reemplazosActivos:    data.reemplazosActivos    ?? [],
+        personalNoDocenteHoy: data.personalNoDocenteHoy ?? [],
+        timeline:             data.timeline             ?? [],
+        pendientes:           data.pendientes           ?? PENDIENTES_VACIO,
+        loading:              false,
+        error:                null,
       })
     } catch {
       setState({
-        kpis:              null,
-        sinCobertura:      [],
-        reemplazosActivos: [],
-        timeline:          [],
-        pendientes:        PENDIENTES_VACIO,
-        loading:           false,
-        error:             "No se pudo cargar el dashboard",
+        kpis:                 null,
+        sinCobertura:         [],
+        reemplazosActivos:    [],
+        personalNoDocenteHoy: [],
+        timeline:             [],
+        pendientes:           PENDIENTES_VACIO,
+        loading:              false,
+        error:                "No se pudo cargar el dashboard",
       })
     }
   }

@@ -42,6 +42,7 @@ export type ClaseSinCobertura = {
   titular:       string
   articulo:      string | null
 }
+
 export type ReemplazoActivoHoy = {
   claseId:       number
   incidenciaId:  number | null
@@ -53,6 +54,15 @@ export type ReemplazoActivoHoy = {
   suplente:      string
 }
 
+export type PersonalNoDocenteHoy = {
+  asignacionId: number
+  agente:       string
+  cargo:        string | null
+  estado:       "presente" | "reemplazado" | "sin_cobertura"
+  suplente:     string | null
+  incidenciaId: number | null
+}
+
 export type PendientesDashboard = {
   sinCobertura:           number
   vencenHoy:              number
@@ -62,11 +72,12 @@ export type PendientesDashboard = {
 }
 
 export type DashboardOverviewResponse = {
-  kpis:              DashboardKPIs
-  sinCobertura:      ClaseSinCobertura[]
-  reemplazosActivos: ReemplazoActivoHoy[]
-  timeline:          TimelineItem[]
-  pendientes:        PendientesDashboard
+  kpis:               DashboardKPIs
+  sinCobertura:       ClaseSinCobertura[]
+  reemplazosActivos:  ReemplazoActivoHoy[]
+  personalNoDocenteHoy: PersonalNoDocenteHoy[]
+  timeline:           TimelineItem[]
+  pendientes:         PendientesDashboard
 }
 
 export const RANGOS_DIAS = [7, 14, 30] as const

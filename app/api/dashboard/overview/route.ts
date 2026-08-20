@@ -1,6 +1,6 @@
 // app/api/dashboard/overview/route.ts
 import { withContext } from "@/lib/auth/withContext"
-import { obtenerClasesOperativas, obtenerClasesOperativasHoy, mapearCoberturaHoy, filtrarFrenteACurso } from "@/lib/reporting/datasets/obtenerClasesOperativas"
+import { obtenerClasesOperativas, obtenerClasesOperativasHoy, mapearCoberturaHoy, filtrarFrenteACurso, mapearPersonalNoDocenteHoy } from "@/lib/reporting/datasets/obtenerClasesOperativas"
 import { generarTimelineCobertura } from "@/lib/reporting/transformers/generarTimelineCobertura"
 import { obtenerKPIsDashboard } from "@/lib/reporting/kpis/obtenerKPIsDashboard"
 import prisma from "@/lib/prisma"
@@ -151,6 +151,10 @@ export async function GET(req: Request) {
           ? coberturaHoy - coberturaAyer
           : null
       const { sinCobertura, reemplazosActivos } = mapearCoberturaHoy(clasesHoyFrenteACurso)
+      // Personal no docente: espejo de sinCobertura/reemplazosActivos, pero
+      // sobre TODAS las clases de hoy (sin filtrar frente-a-curso) porque
+      // acá justamente interesa lo contrario -- los cargos SIN materia.
+      const personalNoDocenteHoy = mapearPersonalNoDocenteHoy(clasesHoy)
       return Response.json({
         kpis: {
           clasesHoy:           kpis.clasesHoy,
@@ -171,6 +175,7 @@ export async function GET(req: Request) {
         },
         sinCobertura,
         reemplazosActivos,
+        personalNoDocenteHoy,
         timeline,
         meta: {
           periodo: { desde, hasta, dias },

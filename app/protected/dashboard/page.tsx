@@ -386,7 +386,7 @@ export default function DashboardPage() {
 
   const {
     kpis, sinCobertura, reemplazosActivos, timeline,
-    pendientes, loading, error, dias, setDias,
+    pendientes, personalNoDocenteHoy, loading, error, dias, setDias,
   } = useDashboardOverview()
 
 
@@ -680,6 +680,62 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Personal no docente — hoy ───────────────────────────────────────── */}
+      {personalNoDocenteHoy.length > 0 && (
+        <div style={panelTabla}>
+          <div style={{
+            padding: "10px 14px", borderBottom: "1px solid var(--color-border)",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
+              Personal no docente — hoy
+            </span>
+            <span style={{
+              fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)",
+              color: personalNoDocenteHoy.some(p => p.estado === "sin_cobertura") ? "var(--color-error)" : "var(--color-text-hint)",
+            }}>
+              {personalNoDocenteHoy.length}
+            </span>
+          </div>
+          <div style={cuerpoScroll}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>{["Agente", "Cargo", "Estado", ""].map(col => <th key={col} style={th}>{col}</th>)}</tr>
+              </thead>
+              <tbody>
+                {personalNoDocenteHoy.map(p => (
+                  <tr key={p.asignacionId}>
+                    <td style={td}>{p.agente}</td>
+                    <td style={td}>{p.cargo ?? "-"}</td>
+                    <td style={{
+                      ...td,
+                      fontWeight: "var(--font-medium)",
+                      color: p.estado === "sin_cobertura" ? "var(--color-error)" : p.estado === "reemplazado" ? "var(--color-accent)" : "#16a34a",
+                    }}>
+                      {p.estado === "sin_cobertura" ? "Sin cobertura" : p.estado === "reemplazado" ? `Reemplazado por ${p.suplente}` : "Presente"}
+                    </td>
+                    <td style={td}>
+                      {p.incidenciaId && (
+                        <button
+                          onClick={() => router.push(`/protected/dashboard/incidencias/${p.incidenciaId}`)}
+                          style={{
+                            background: "none", border: "none",
+                            fontSize: "var(--text-2xs)", fontWeight: "var(--font-medium)",
+                            color: "var(--color-accent)", cursor: "pointer", padding: 0, whiteSpace: "nowrap",
+                          }}
+                        >
+                          {p.estado === "sin_cobertura" ? "Asignar →" : "Ver →"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── Cards secundarias ───────────────────────────────────────────────── */}
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--space-3)" }}>    
