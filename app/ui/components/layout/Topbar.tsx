@@ -25,6 +25,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/protected/dashboard/reportes/profesor": "Reporte profesor",
   "/protected/dashboard/reportes/profesores": "Reporte profesores",
   "/protected/dashboard/reportes/modulos-computables": "Reporte Modulos-computables",
+    "/protected/dashboard/reportes/jornadas": "Reporte Jornadas-computables",
+
 
 
 }

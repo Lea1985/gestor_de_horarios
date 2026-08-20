@@ -26,6 +26,7 @@ const REPORT_ITEMS = [
   { label: "Codigarios", href: "/protected/dashboard/reportes/codigarios" },
   { label: "Horarios", href: "/protected/dashboard/reportes/horarios" },
   { label: "Módulos computables", href: "/protected/dashboard/reportes/modulos-computables" },
+  { label: "Jornadas computables", href: "/protected/dashboard/reportes/jornadas" },
   { label: "Profesor", href: "/protected/dashboard/reportes/profesor" },
   { label: "Profesores", href: "/protected/dashboard/reportes/profesores" },
 ]
