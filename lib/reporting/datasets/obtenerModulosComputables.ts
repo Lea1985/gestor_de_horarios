@@ -28,6 +28,12 @@ export type ResultadoModulosComputables = {
  * Resuelve las clases del docente respetando el historial de titularidad
  * (TitularAsignacion): un agente puede haber ocupado distintos cargos
  * (asignaciones) en distintos tramos dentro del mismo período.
+ *
+ * Excluye tramos sobre cargos no-frente-a-curso (asignación sin materia
+ * -- preceptor, secretario, director): se pagan por jornal, no por
+ * módulo, así que "módulos computables" no aplica. Si un agente tiene
+ * a la vez un cargo frente a curso y uno jornalizado en el período, solo
+ * se computa el frente a curso.
  */
 export async function obtenerModulosComputables(
   tenantId: number,
@@ -45,6 +51,8 @@ export async function obtenerModulosComputables(
         { fecha_hasta: null },
         { fecha_hasta: { gte: periodo.desde } },
       ],
+      // Excluye cargos no-frente-a-curso (ver docstring).
+      asignacion: { materiaId: { not: null } },
     },
     select: { asignacionId: true, fecha_desde: true, fecha_hasta: true },
   })
@@ -133,6 +141,10 @@ export type FilaResumenDocente = {
  * tuvieron alguna titularidad vigente en el período -- sin el detalle
  * clase por clase (sería una tabla enorme), solo los totales agregados
  * por docente.
+ *
+ * Mismo criterio de exclusión de cargos no-frente-a-curso que
+ * obtenerModulosComputables(): un agente cuya única titularidad en el
+ * período es un cargo jornalizado no aparece en absoluto en el resumen.
  */
 export async function obtenerModulosComputablesResumen(
   tenantId: number,
@@ -147,6 +159,8 @@ export async function obtenerModulosComputablesResumen(
         { fecha_hasta: null },
         { fecha_hasta: { gte: periodo.desde } },
       ],
+      // Excluye cargos no-frente-a-curso (ver docstring de obtenerModulosComputables).
+      asignacion: { materiaId: { not: null } },
     },
     select: { agenteId: true },
     distinct: ["agenteId"],
