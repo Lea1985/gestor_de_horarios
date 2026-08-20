@@ -1,6 +1,6 @@
 // app/api/dashboard/overview/route.ts
 import { withContext } from "@/lib/auth/withContext"
-import { obtenerClasesOperativas, obtenerClasesOperativasHoy, mapearCoberturaHoy } from "@/lib/reporting/datasets/obtenerClasesOperativas"
+import { obtenerClasesOperativas, obtenerClasesOperativasHoy, mapearCoberturaHoy, filtrarFrenteACurso } from "@/lib/reporting/datasets/obtenerClasesOperativas"
 import { generarTimelineCobertura } from "@/lib/reporting/transformers/generarTimelineCobertura"
 import { obtenerKPIsDashboard } from "@/lib/reporting/kpis/obtenerKPIsDashboard"
 import prisma from "@/lib/prisma"
@@ -12,7 +12,10 @@ function esRangoValido(n: number): n is RangoDias {
 }
 
 /** Cobertura de ayer para calcular delta. UTC explícito -- ver nota en
- *  obtenerClasesOperativasHoy sobre por qué no se usa setHours local. */
+ *  obtenerClasesOperativasHoy sobre por qué no se usa setHours local.
+ *  Excluye cargos no-frente-a-curso (asignacion.materiaId null), mismo
+ *  criterio que el resto de las métricas de cobertura -- ver
+ *  filtrarFrenteACurso() en obtenerClasesOperativas.ts. */
 async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
   const ayer = new Date()
   ayer.setUTCDate(ayer.getUTCDate() - 1)
@@ -23,6 +26,7 @@ async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
     where: {
       institucionId: tenantId,
       fecha: { gte: ayer, lte: ayerFin },
+      asignacion: { materiaId: { not: null } },
     },
     select: {
       estado: true,
@@ -58,7 +62,6 @@ async function obtenerProximosVencimientos(tenantId: number) {
   const semanaFin = new Date(hoy)
   semanaFin.setUTCDate(hoy.getUTCDate() + 7)
   semanaFin.setUTCHours(23, 59, 59, 999)
-
   const [vencenHoy, vencenManana, vencenEstaSemana, reemplazosVencenSemana] =
     await Promise.all([
       prisma.incidencia.count({
@@ -95,7 +98,6 @@ async function obtenerProximosVencimientos(tenantId: number) {
         },
       }),
     ])
-
   return { vencenHoy, vencenManana, vencenEstaSemana, reemplazosVencenSemana }
 }
 
@@ -129,7 +131,6 @@ export async function GET(req: Request) {
       })()
       const desdeDate = new Date(desde)
       const hastaDate = new Date(hasta)
-
       const [kpis, clasesRango, clasesHoy, coberturaAyer, proximosVencimientos] =
         await Promise.all([
           obtenerKPIsDashboard(tenantId),
@@ -138,18 +139,18 @@ export async function GET(req: Request) {
           obtenerCoberturaAyer(tenantId),
           obtenerProximosVencimientos(tenantId),
         ])
-
-      const timeline              = generarTimelineCobertura(clasesRango)
+      // Timeline y tablas de "hoy" son métricas de cobertura de aula:
+      // excluyen cargos no-frente-a-curso, mismo criterio que obtenerKPIsDashboard.
+      const clasesRangoFrenteACurso = filtrarFrenteACurso(clasesRango)
+      const clasesHoyFrenteACurso   = filtrarFrenteACurso(clasesHoy)
+      const timeline              = generarTimelineCobertura(clasesRangoFrenteACurso)
       const continuidadPedagogica = calcularContinuidad(timeline)
-
       const coberturaHoy = kpis.coberturaPorcentaje
       const deltaCobertura =
         coberturaAyer !== null && typeof coberturaHoy === "number"
           ? coberturaHoy - coberturaAyer
           : null
-
-      const { sinCobertura, reemplazosActivos } = mapearCoberturaHoy(clasesHoy)
-
+      const { sinCobertura, reemplazosActivos } = mapearCoberturaHoy(clasesHoyFrenteACurso)
       return Response.json({
         kpis: {
           clasesHoy:           kpis.clasesHoy,
@@ -173,7 +174,7 @@ export async function GET(req: Request) {
         timeline,
         meta: {
           periodo: { desde, hasta, dias },
-          totalClases: clasesRango.length,
+          totalClases: clasesRangoFrenteACurso.length,
         },
       })
     } catch (error) {

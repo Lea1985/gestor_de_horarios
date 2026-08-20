@@ -72,6 +72,11 @@ export async function obtenerCoberturaPorComision(
       institucionId: tenantId,
       comisionId:    comisionId ? comisionId : { not: null },
       fecha:         { gte: desde, lte: hasta },
+      // Excluye cargos no-frente-a-curso: una asignación puede tener
+      // comisionId sin tener materiaId (ej. preceptor asignado a una
+      // comisión puntual), y esta métrica es específicamente cobertura
+      // de aula por comisión.
+      asignacion:    { materiaId: { not: null } },
     },
     select: {
       fecha:      true,

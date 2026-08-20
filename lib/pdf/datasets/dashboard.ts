@@ -3,6 +3,7 @@ import { obtenerKPIsDashboard } from "@/lib/reporting/kpis/obtenerKPIsDashboard"
 import {
   obtenerClasesOperativasHoy,
   mapearCoberturaHoy,
+  filtrarFrenteACurso,
   ClaseSinCobertura,
   ClaseReemplazoActivo,
 } from "@/lib/reporting/datasets/obtenerClasesOperativas"
@@ -28,9 +29,9 @@ export async function obtenerDatosDashboardPDF(
     obtenerKPIsDashboard(tenantId),
     obtenerClasesOperativasHoy(tenantId),
   ])
-
-  const { sinCobertura, reemplazosActivos } = mapearCoberturaHoy(clasesHoy)
-
+  // Mismo criterio que la pantalla: las tablas de cobertura excluyen
+  // cargos no-frente-a-curso -- ver filtrarFrenteACurso().
+  const { sinCobertura, reemplazosActivos } = mapearCoberturaHoy(filtrarFrenteACurso(clasesHoy))
   return {
     fecha: new Date(),
     kpis: {

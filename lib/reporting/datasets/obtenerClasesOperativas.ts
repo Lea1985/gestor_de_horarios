@@ -233,3 +233,22 @@ const sinCobertura = clasesHoy
     }))
   return { sinCobertura, reemplazosActivos }
 }
+
+/**
+ * Filtra las clases operativas a solo las de cargos frente a curso (con
+ * materia asociada). Las métricas de cobertura de aula (% de cobertura
+ * institucional, "sin cobertura hoy", "reemplazos activos hoy") no
+ * tienen sentido para cargos no-frente-a-curso (preceptor, secretario,
+ * director -- asignación sin materia, típicamente sobre una unidad tipo
+ * ADMIN): esos cargos se pagan por jornal, no por módulo, y su ausencia
+ * no "descubre" un aula.
+ *
+ * OJO: NO usar este filtro en /clases (gestión general de clases) ni en
+ * ningún otro lugar que no sea específicamente una métrica de cobertura
+ * de aula -- esas clases siguen siendo registros operativos reales que
+ * hay que poder ver y gestionar (asignar reemplazo, etc.), simplemente
+ * no cuentan para "cobertura de aula".
+ */
+export function filtrarFrenteACurso(clases: ClaseOperativa[]): ClaseOperativa[] {
+  return clases.filter(c => c.asignacion?.materia != null)
+}
