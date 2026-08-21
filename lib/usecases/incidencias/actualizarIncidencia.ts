@@ -3,6 +3,7 @@ import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
+import { FechaFueraDePadreError } from "./crearIncidencia"
 import prisma from "@/lib/prisma"
 
 export class IncidenciaNoEncontradaError extends Error {
@@ -31,6 +32,7 @@ export class TieneHijosError extends Error {
 export class TieneReemplazosError extends Error {
   constructor() { super("No se puede editar una incidencia que tiene reemplazos asignados en sus clases") }
 }
+export { FechaFueraDePadreError }
 
 export async function actualizarIncidencia(
   id:       number,
@@ -67,16 +69,28 @@ export async function actualizarIncidencia(
   const nuevaHasta = body.fecha_hasta
     ? new Date(body.fecha_hasta as string)
     : incidencia.fecha_hasta
-
   if (isNaN(nuevaDesde.getTime()) || isNaN(nuevaHasta.getTime()) || nuevaDesde > nuevaHasta) {
     throw new RangoFechasInvalidoError()
+  }
+
+  // Regla 3: si esta incidencia es hija de otra (incidenciaPadreId), el
+  // rango editado no puede exceder el rango de su padre directo -- mismo
+  // criterio que ya se aplica al CREAR una incidencia (crearIncidencia.ts),
+  // pero acá faltaba: al no revalidarse en el update, se podía crear una
+  // hija bien contenida y después, editándola (si no tiene hijos propios,
+  // Regla 1 ya lo permite), estirarle la fecha_hasta más allá de lo que
+  // su propio padre permite -- rompiendo la contención de la cadena.
+  if (incidencia.incidenciaPadreId) {
+    const padre = await incidenciaRepository.obtenerPorId(incidencia.incidenciaPadreId, tenantId)
+    if (padre && (nuevaDesde < padre.fecha_desde || nuevaHasta > padre.fecha_hasta)) {
+      throw new FechaFueraDePadreError()
+    }
   }
 
   const codigarioItemId =
     body.codigarioItemId !== undefined
       ? Number(body.codigarioItemId)
       : incidencia.codigarioItemId
-
   if (body.codigarioItemId !== undefined && codigarioItemId !== incidencia.codigarioItemId) {
     const valido = await incidenciaRepository.verificarCodigarioItem(codigarioItemId, tenantId)
     if (!valido) throw new CodigarioItemNoValidoError()

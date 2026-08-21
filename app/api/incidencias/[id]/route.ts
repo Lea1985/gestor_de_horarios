@@ -1,7 +1,7 @@
 //app/api/incidencias/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerIncidencia, IncidenciaNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/incidencias/obtenerIncidencia"
-import { actualizarIncidencia, IncidenciaNoEncontradaError as ActualizarNotFound, RangoFechasInvalidoError, CodigarioItemNoValidoError, SuperposicionError, TieneHijosError as EditarHijosError, TieneReemplazosError as EditarReemplazosError } from "@/lib/usecases/incidencias/actualizarIncidencia"
+import { actualizarIncidencia, IncidenciaNoEncontradaError as ActualizarNotFound, RangoFechasInvalidoError, CodigarioItemNoValidoError, SuperposicionError, TieneHijosError as EditarHijosError, TieneReemplazosError as EditarReemplazosError, FechaFueraDePadreError } from "@/lib/usecases/incidencias/actualizarIncidencia"
 import { eliminarIncidencia, TieneHijosError, TieneReemplazosError } from "@/lib/usecases/incidencias/eliminarIncidencia"
 
 function parseId(id: string) {
@@ -38,7 +38,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       return Response.json(await actualizarIncidencia(incId, tenantId, body))
     } catch (error) {
       if (error instanceof ActualizarNotFound) return Response.json({ error: error.message }, { status: 404 })
-      if (error instanceof RangoFechasInvalidoError || error instanceof CodigarioItemNoValidoError) {
+      if (error instanceof FechaFueraDePadreError) {
         return Response.json({ error: (error as Error).message }, { status: 400 })
       }
       if (error instanceof SuperposicionError) {
