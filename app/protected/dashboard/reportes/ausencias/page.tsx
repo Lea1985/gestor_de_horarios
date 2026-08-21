@@ -1,5 +1,5 @@
 "use client"
-import { Fragment, useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { useDescargarPDF } from "@/app/hooks/useDescargarPDF"
 import { useVistaReporte } from "@/app/hooks/useVistaReporte"
@@ -11,6 +11,8 @@ type FilaAusencia = {
   incidenciaId:      number
   incidenciaPadreId: number | null
   esRaiz:            boolean
+  tramoIndex:        number
+  totalTramos:       number
   fechaDesde:        string
   fechaHasta:        string
   codigoArt:         string
@@ -211,46 +213,71 @@ export default function ReporteAusenciasPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {datos.datos.map(f => {
-                      const etiquetaTitular   = f.esRaiz ? "TITULAR"   : "REEMPLAZA A"
-                      const etiquetaReemplazo = f.esRaiz ? "REEMPLAZO" : "NUEVO REEMPLAZO"
-                      const esHija = !f.esRaiz && !!f.incidenciaPadreId
-                      return (
-                        <Fragment key={f.incidenciaId}>
-                          <tr style={{ background: "var(--color-surface-raised)" }}>
-                            <td style={{ ...td, fontWeight: "var(--font-medium)", color: "var(--color-accent)" }} rowSpan={esHija ? 3 : 2}>
-                              #{f.incidenciaId}
+                    {(() => {
+                      const elementos: React.ReactNode[] = []
+                      let i = 0
+                      while (i < datos.datos.length) {
+                        const primero = datos.datos[i]
+                        const tramos  = datos.datos.slice(i, i + primero.totalTramos)
+                        const esHija  = !primero.esRaiz && !!primero.incidenciaPadreId
+                        const rowSpanIncidencia = 1 + tramos.length + (esHija ? 1 : 0)
+
+                        const periodoDesde = tramos.reduce((min, t) => t.fechaDesde < min ? t.fechaDesde : min, tramos[0].fechaDesde)
+                        const periodoHasta = tramos.reduce((max, t) => t.fechaHasta > max ? t.fechaHasta : max, tramos[0].fechaHasta)
+
+                        const etiquetaTitular   = primero.esRaiz ? "TITULAR"   : "REEMPLAZA A"
+                        const etiquetaReemplazo = primero.esRaiz ? "REEMPLAZO" : "NUEVO REEMPLAZO"
+
+                        elementos.push(
+                          <tr key={`${primero.incidenciaId}-titulo`} style={{ background: "var(--color-surface-raised)" }}>
+                            <td style={{ ...td, fontWeight: "var(--font-medium)", color: "var(--color-accent)" }} rowSpan={rowSpanIncidencia}>
+                              #{primero.incidenciaId}
                             </td>
-                            <td style={td} rowSpan={esHija ? 3 : 2}>
-                              {formatFecha(f.fechaDesde)} —<br />{formatFecha(f.fechaHasta)}
+                            <td style={td}>
+                              {formatFecha(periodoDesde)} —<br />{formatFecha(periodoHasta)}
                             </td>
                             <td style={{ ...tdRol, color: "#1e3a5f" }}>{etiquetaTitular}</td>
-                            <td style={td}>{f.titularNombre} (DNI {f.titularDNI})</td>
-                            <td style={td}>{f.identificador}</td>
-                            <td style={td}>{[f.materia, f.comision].filter(Boolean).join(" / ") || "-"}</td>
+                            <td style={td}>{primero.titularNombre} (DNI {primero.titularDNI})</td>
+                            <td style={td}>{primero.identificador}</td>
+                            <td style={td}>{[primero.materia, primero.comision].filter(Boolean).join(" / ") || "-"}</td>
                           </tr>
-                          <tr>
-                            <td style={{ ...tdRol, color: "#92400e" }}>{etiquetaReemplazo}</td>
-                            <td style={{ ...td, color: f.reemplazante ? undefined : "var(--color-text-hint)", fontStyle: f.reemplazante ? undefined : "italic" }}>
-                              {f.reemplazante ? `${f.reemplazante.nombre} (DNI ${f.reemplazante.documento})` : "Sin reemplazo asignado"}
-                            </td>
-                            <td style={td}>{f.identificador}</td>
-                            <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>{f.distribucion || "-"}</td>
-                          </tr>
-                          {esHija && (
-                            <tr>
+                        )
+
+                        tramos.forEach((f, idx) => {
+                          elementos.push(
+                            <tr key={`${f.incidenciaId}-tramo-${idx}`}>
+                              <td style={td}>
+                                {formatFecha(f.fechaDesde)} —<br />{formatFecha(f.fechaHasta)}
+                              </td>
+                              <td style={{ ...tdRol, color: "#92400e" }}>{etiquetaReemplazo}</td>
+                              <td style={{ ...td, color: f.reemplazante ? undefined : "var(--color-text-hint)", fontStyle: f.reemplazante ? undefined : "italic" }}>
+                                {f.reemplazante ? `${f.reemplazante.nombre} (DNI ${f.reemplazante.documento})` : "Sin reemplazo asignado"}
+                              </td>
+                              <td style={td}>{f.identificador}</td>
+                              <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>{f.distribucion || "-"}</td>
+                            </tr>
+                          )
+                        })
+
+                        if (esHija) {
+                          elementos.push(
+                            <tr key={`${primero.incidenciaId}-cadena`}>
+                              <td style={td}></td>
                               <td colSpan={4} style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-hint)", fontStyle: "italic" }}>
-                                ↳ Cadena: incidencia #{f.incidenciaPadreId}
+                                ↳ Cadena: incidencia #{primero.incidenciaPadreId}
                               </td>
                             </tr>
-                          )}
-                        </Fragment>
-                      )
-                    })}
+                          )
+                        }
+
+                        i += primero.totalTramos
+                      }
+                      return elementos
+                    })()}
                   </tbody>
                 </table>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginTop: "var(--space-3)" }}>
-                  Total de incidencias: {datos.datos.length}  |  Con reemplazo: {datos.datos.filter(f => f.reemplazante).length}  |  Sin cubrir: {datos.datos.filter(f => !f.reemplazante).length}
+                  Total de incidencias: {new Set(datos.datos.map(f => f.incidenciaId)).size}  |  Tramos con reemplazo: {datos.datos.filter(f => f.reemplazante).length}  |  Tramos sin cobertura: {datos.datos.filter(f => !f.reemplazante).length}
                 </div>
               </>
             )}

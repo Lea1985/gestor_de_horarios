@@ -1,11 +1,14 @@
 // lib/pdf/datasets/ausencias.ts
 import prisma from "@/lib/prisma"
 import { titularVigenteEn } from "./titularVigenteEn"
+
 export type FilaAusencia = {
   incidenciaId:      number
   incidenciaPadreId: number | null
   esRaiz:            boolean
-  fechaDesde:        Date
+  tramoIndex:        number  // posición del tramo (0-based) dentro de esta incidencia
+  totalTramos:       number  // cuántos tramos tiene esta incidencia en total
+  fechaDesde:        Date    // fechas del TRAMO, no necesariamente de toda la incidencia
   fechaHasta:        Date
   codigoArt:         string
   nombreArt:         string
@@ -20,25 +23,18 @@ export type FilaAusencia = {
     documento: string
   } | null
 }
+
 type Agente = { id: number; nombre: string; apellido: string; documento: string }
+
 const ORDEN_DIAS: Record<string, number> = {
   LUNES: 1, MARTES: 2, MIERCOLES: 3,
   JUEVES: 4, VIERNES: 5, SABADO: 6, DOMINGO: 7,
 }
+
 function formatHora(min: number): string {
   return `${Math.floor(min / 60).toString().padStart(2, "0")}:${(min % 60).toString().padStart(2, "0")}`
 }
 
-/**
- * Mismo criterio que titularVigenteEn, pero para distribuciones horarias:
- * busca la versión que estaba vigente en una fecha puntual, no la
- * actualmente activa. Necesario porque una distribución puede haberse
- * reemplazado o eliminado DESPUÉS de la fecha de la incidencia que se
- * está reportando -- si filtráramos por "activo/deletedAt actuales",
- * perderíamos la carga horaria histórica real (bug encontrado 17/08/2026,
- * incidencia #5: la distribución vigente el 04/08 fue borrada el 05/08,
- * y el reporte mostraba "-" en vez del horario real).
- */
 function distribucionVigenteEn<T extends { fecha_vigencia_desde: Date; fecha_vigencia_hasta: Date | null }>(
   distribuciones: T[],
   fecha: Date
@@ -47,6 +43,7 @@ function distribucionVigenteEn<T extends { fecha_vigencia_desde: Date; fecha_vig
     d => d.fecha_vigencia_desde <= fecha && (!d.fecha_vigencia_hasta || d.fecha_vigencia_hasta >= fecha)
   ) ?? null
 }
+
 function formatearDistribucion(
   modulos: { dia_semana: string; hora_desde: number; hora_hasta: number }[]
 ): string {
@@ -66,6 +63,7 @@ function formatearDistribucion(
     })
     .join(", ")
 }
+
 export async function obtenerDatosAusencias(
   tenantId:   number,
   filtros: {
@@ -75,13 +73,6 @@ export async function obtenerDatosAusencias(
     agenteId?:   number | null
   }
 ): Promise<FilaAusencia[]> {
-  // Traer incidencias en el rango con sus datos.
-  // Ojo: cuando se filtra por agenteId, acá solo se hace un filtro AMPLIO
-  // ("tuvo alguna vez a este agente como titular"), sin importar si estaba
-  // activo o si la fecha coincide -- el filtro preciso (vigente en la
-  // fecha real de cada incidencia) se hace después, en JS, porque Prisma
-  // no puede correlacionar la fecha del titular contra la fecha de la
-  // incidencia padre en un único filtro anidado.
   const incidencias = await prisma.incidencia.findMany({
     where: {
       activo:     true,
@@ -148,24 +139,18 @@ export async function obtenerDatosAusencias(
       },
     },
   })
+
   if (incidencias.length === 0) return []
-  // Filtro preciso por agente: se queda solo con las incidencias donde el
-  // titular REALMENTE vigente en la fecha de esa incidencia puntual (no el
-  // titular actual) coincide con el agente buscado.
+
   const incidenciasFiltradas = filtros.agenteId
     ? incidencias.filter(inc => {
         const titularReal = titularVigenteEn(inc.asignacion.titularidades, inc.fecha_desde)
         return titularReal?.id === filtros.agenteId
       })
     : incidencias
+
   if (incidenciasFiltradas.length === 0) return []
-  // Ventana exclusiva de cada incidencia: si tiene una hija que arranca
-  // dentro de su propio rango (cadena), las clases desde ese punto en
-  // adelante reflejan el estado de la HIJA, no el de esta incidencia --
-  // se busca en TODAS las incidencias traídas (no solo las filtradas por
-  // agente), porque la hija puede quedar afuera del filtro por agente
-  // aunque su fecha de inicio siga siendo relevante para acotar la ventana
-  // del padre.
+
   const primerHijoPorIncidencia = new Map<number, Date>()
   for (const posibleHijo of incidencias) {
     if (!posibleHijo.incidenciaPadreId) continue
@@ -174,8 +159,22 @@ export async function obtenerDatosAusencias(
       primerHijoPorIncidencia.set(posibleHijo.incidenciaPadreId, posibleHijo.fecha_desde)
     }
   }
+
+  type TramoRaiz = {
+    fechaDesde:   Date
+    fechaHasta:   Date
+    reemplazante: Agente | null
+  }
+  const tramosPorIncidencia = new Map<number, TramoRaiz[]>()
   const salienteHistorico = new Map<number, Agente>()
   const entranteActivo    = new Map<number, Agente>()
+  // Ventana REAL (ya truncada por la hija, si corresponde) de cada
+  // incidencia -- se guarda para poder filtrar el resultado final contra
+  // el rango pedido usando la ventana efectiva, no las fechas crudas de
+  // Incidencia.fecha_desde/fecha_hasta (que pueden seguir reflejando el
+  // rango original de la licencia aunque una hija la haya truncado antes).
+  const ventanaRealPorIncidencia = new Map<number, { desde: Date; hasta: Date }>()
+
   await Promise.all(
     incidenciasFiltradas.map(async (inc) => {
       const inicioHijo = primerHijoPorIncidencia.get(inc.id) ?? null
@@ -184,17 +183,18 @@ export async function obtenerDatosAusencias(
         finVentana = new Date(inicioHijo)
         finVentana.setUTCDate(finVentana.getUTCDate() - 1)
       }
-      // La hija arranca el mismo día que esta incidencia (o antes) -- no
-      // hay ventana propia, no hay datos confiables que mostrar para ella.
       if (finVentana < inc.fecha_desde) return
+      ventanaRealPorIncidencia.set(inc.id, { desde: inc.fecha_desde, hasta: finVentana })
+
       const clases = await prisma.claseProgramada.findMany({
         where: {
           institucionId: tenantId,
           asignacionId:  inc.asignacionId,
           fecha: { gte: inc.fecha_desde, lte: finVentana },
         },
-        orderBy: [{ fecha: "asc" }, { id: "asc" }],
+        orderBy: [{ fecha: "asc" }, { modulo: { hora_desde: "asc" } }, { id: "asc" }],
         select: {
+          fecha: true,
           reemplazos: {
             orderBy: { id: "asc" },
             select: {
@@ -206,61 +206,108 @@ export async function obtenerDatosAusencias(
           },
         },
       })
-      for (const clase of clases) {
-        if (clase.reemplazos.length === 0) continue
-        // El "saliente" es el último desactivado antes del actual (no el
-        // primero jamás creado) -- en una cadena de 3+ niveles, el primero
-        // histórico y el inmediatamente anterior son personas distintas.
-        const inactivos = clase.reemplazos.filter(r => !r.activo)
-        const saliente   = inactivos[inactivos.length - 1] ?? null
-        const activo     = clase.reemplazos.find(r => r.activo)
-        if (saliente?.agenteSuplente && !salienteHistorico.has(inc.id)) {
-          salienteHistorico.set(inc.id, saliente.agenteSuplente)
+
+      const esRaiz = !inc.incidenciaPadreId
+
+      if (esRaiz) {
+        const tramos: TramoRaiz[] = []
+        let claveActual: number | null | undefined = undefined
+        for (const clase of clases) {
+          const activo = clase.reemplazos.find(r => r.activo)?.agenteSuplente ?? null
+          const clave  = activo?.id ?? null
+          if (claveActual === undefined || clave !== claveActual) {
+            tramos.push({ fechaDesde: clase.fecha, fechaHasta: clase.fecha, reemplazante: activo })
+            claveActual = clave
+          } else {
+            tramos[tramos.length - 1].fechaHasta = clase.fecha
+          }
         }
-        if (activo?.agenteSuplente && !entranteActivo.has(inc.id)) {
-          entranteActivo.set(inc.id, activo.agenteSuplente)
+        if (tramos.length === 0) {
+          tramos.push({ fechaDesde: inc.fecha_desde, fechaHasta: finVentana, reemplazante: null })
         }
-        break
+        tramosPorIncidencia.set(inc.id, tramos)
+      } else {
+        for (const clase of clases) {
+          if (clase.reemplazos.length === 0) continue
+          const inactivos = clase.reemplazos.filter(r => !r.activo)
+          const saliente   = inactivos[inactivos.length - 1] ?? null
+          const activo     = clase.reemplazos.find(r => r.activo)
+          if (saliente?.agenteSuplente && !salienteHistorico.has(inc.id)) {
+            salienteHistorico.set(inc.id, saliente.agenteSuplente)
+          }
+          if (activo?.agenteSuplente && !entranteActivo.has(inc.id)) {
+            entranteActivo.set(inc.id, activo.agenteSuplente)
+          }
+          break
+        }
       }
     })
   )
-  const filas: FilaAusencia[] = incidenciasFiltradas.map(inc => {
-    const esRaiz   = !inc.incidenciaPadreId
-    const titular  = titularVigenteEn(inc.asignacion.titularidades, inc.fecha_desde)
-    const dist     = distribucionVigenteEn(inc.asignacion.distribuciones, inc.fecha_desde)
+
+  const filas: FilaAusencia[] = []
+
+  for (const inc of incidenciasFiltradas) {
+    const esRaiz  = !inc.incidenciaPadreId
+    const titular = titularVigenteEn(inc.asignacion.titularidades, inc.fecha_desde)
+    const dist    = distribucionVigenteEn(inc.asignacion.distribuciones, inc.fecha_desde)
     const modulos = dist?.distribucionModulos.map(dm => dm.moduloHorario) ?? []
     const distribucion = formatearDistribucion(modulos)
-    let titularDNI:    string
-    let titularNombre: string
-    let reemplazante:  { nombre: string; documento: string } | null
-    if (esRaiz) {
-      titularDNI    = titular?.documento ?? "-"
-      titularNombre = titular ? `${titular.apellido}, ${titular.nombre}` : "Vacante"
-      const r = salienteHistorico.get(inc.id) ?? null
-      reemplazante = r ? { nombre: `${r.apellido}, ${r.nombre}`, documento: r.documento } : null
-    } else {
-      const saliente = salienteHistorico.get(inc.id) ?? null
-      titularDNI    = saliente?.documento ?? "-"
-      titularNombre = saliente ? `${saliente.apellido}, ${saliente.nombre}` : "Sin datos"
-      const entrante = entranteActivo.get(inc.id) ?? null
-      reemplazante = entrante ? { nombre: `${entrante.apellido}, ${entrante.nombre}`, documento: entrante.documento } : null
-    }
-    return {
+
+    const base = {
       incidenciaId:      inc.id,
       incidenciaPadreId: inc.incidenciaPadreId,
       esRaiz,
-      fechaDesde:    inc.fecha_desde,
-      fechaHasta:    inc.fecha_hasta,
       codigoArt:     inc.codigarioItem?.codigo ?? "-",
       nombreArt:     inc.codigarioItem?.nombre ?? "-",
-      titularDNI,
-      titularNombre,
       identificador: inc.asignacion.identificadorEstructural,
       materia:       inc.asignacion.materia?.nombre ?? null,
       comision:      inc.asignacion.comision?.nombre ?? null,
       distribucion,
-      reemplazante,
     }
-  })
-  return filas
+
+    if (esRaiz) {
+      const tramos = tramosPorIncidencia.get(inc.id) ?? []
+      const titularDNI    = titular?.documento ?? "-"
+      const titularNombre = titular ? `${titular.apellido}, ${titular.nombre}` : "Vacante"
+      tramos.forEach((tramo, i) => {
+        filas.push({
+          ...base,
+          tramoIndex:  i,
+          totalTramos: tramos.length,
+          fechaDesde:  tramo.fechaDesde,
+          fechaHasta:  tramo.fechaHasta,
+          titularDNI,
+          titularNombre,
+          reemplazante: tramo.reemplazante
+            ? { nombre: `${tramo.reemplazante.apellido}, ${tramo.reemplazante.nombre}`, documento: tramo.reemplazante.documento }
+            : null,
+        })
+      })
+    } else {
+      const saliente = salienteHistorico.get(inc.id) ?? null
+      const entrante = entranteActivo.get(inc.id) ?? null
+      const titularDNI    = saliente?.documento ?? "-"
+      const titularNombre = saliente ? `${saliente.apellido}, ${saliente.nombre}` : "Sin datos"
+      const ventanaReal = ventanaRealPorIncidencia.get(inc.id)
+      filas.push({
+        ...base,
+        tramoIndex:  0,
+        totalTramos: 1,
+        fechaDesde:  ventanaReal?.desde ?? inc.fecha_desde,
+        fechaHasta:  ventanaReal?.hasta ?? inc.fecha_hasta,
+        titularDNI,
+        titularNombre,
+        reemplazante: entrante
+          ? { nombre: `${entrante.apellido}, ${entrante.nombre}`, documento: entrante.documento }
+          : null,
+      })
+    }
+  }
+
+  // Filtro final contra el rango pedido, usando las fechas REALES ya
+  // calculadas de cada tramo/fila (no las crudas de Incidencia), para no
+  // arrastrar incidencias que técnicamente "solapan" el rango por su
+  // fecha_hasta original, pero cuya ventana efectiva (truncada por una
+  // hija) ya terminó antes de que empezara el período consultado.
+  return filas.filter(f => f.fechaHasta >= filtros.desde && f.fechaDesde <= filtros.hasta)
 }
