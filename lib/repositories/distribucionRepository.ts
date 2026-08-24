@@ -1,17 +1,14 @@
 //lib/repositories/distribucionRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
-
 function parseDate(value: unknown): Date | null {
   if (!value) return null
   const d = new Date(value as string)
   return isNaN(d.getTime()) ? null : d
 }
-
 function solapa(inicioA: Date, finA: Date, inicioB: Date, finB: Date) {
   return inicioA <= finB && finA >= inicioB
 }
-
 // Include completo para la lista — incluye agente, curso y turno
 // que la page necesita para mostrar y filtrar
 const asignacionInclude = {
@@ -26,7 +23,6 @@ const asignacionInclude = {
     },
   },
 } satisfies Prisma.AsignacionInclude
-
 export const distribucionRepository = {
 listar(tenantId: number) {
   return prisma.distribucionHoraria.findMany({
@@ -54,7 +50,6 @@ listar(tenantId: number) {
     },
   })
 },
-
   obtenerPorId(id: number, tenantId: number) {
     return prisma.distribucionHoraria.findFirst({
       where: {
@@ -74,7 +69,6 @@ listar(tenantId: number) {
       },
     })
   },
-
   existeEnTenant(id: number, tenantId: number) {
     return prisma.distribucionHoraria.findFirst({
       where: {
@@ -87,7 +81,21 @@ listar(tenantId: number) {
       },
     })
   },
-
+  /**
+   * Máxima versión usada por una asignación, A PROPÓSITO sin filtrar
+   * deletedAt -- el índice único real de la DB (@@unique([asignacionId,
+   * version])) no excluye borrados. Si acá filtráramos deletedAt: null
+   * (como hace el resto del repository), podríamos proponer un número de
+   * versión ya "quemado" por una versión eliminada y romper con un P2002
+   * crudo al crear (bug encontrado 24/08/2026, #87).
+   */
+  async obtenerMaxVersion(tenantId: number, asignacionId: number): Promise<number> {
+    const resultado = await prisma.distribucionHoraria.aggregate({
+      where: { institucionId: tenantId, asignacionId },
+      _max: { version: true },
+    })
+    return resultado._max.version ?? 0
+  },
   async verificarSolapamiento(
     tenantId: number,
     asignacionId: number,
@@ -96,11 +104,9 @@ listar(tenantId: number) {
     hasta: Date
   ) {
     const versionNumber = typeof version === "number" ? version : Number(version)
-
     if (!Number.isInteger(versionNumber)) {
       throw new Error("version inválida")
     }
-
     const versionExistente = await prisma.distribucionHoraria.findFirst({
       where: {
         institucionId: tenantId,
@@ -110,9 +116,7 @@ listar(tenantId: number) {
       },
       select: { id: true },
     })
-
     if (versionExistente) return { tipo: "version" as const }
-
     const existentes = await prisma.distribucionHoraria.findMany({
       where: {
         institucionId: tenantId,
@@ -120,18 +124,14 @@ listar(tenantId: number) {
         deletedAt: null,
       },
     })
-
     const conflicto = existentes.find((d) => {
       const dInicio = new Date(d.fecha_vigencia_desde)
       const dFin    = d.fecha_vigencia_hasta ?? new Date("9999-12-31")
       return solapa(desde, hasta, dInicio, dFin)
     })
-
     if (conflicto) return { tipo: "solapamiento" as const }
-
     return null
   },
-
   crear(data: {
     tenantId:             number
     asignacionId:         number
@@ -149,7 +149,6 @@ listar(tenantId: number) {
       },
     })
   },
-
   async actualizar(
     id: number,
     tenantId: number,
@@ -159,48 +158,37 @@ listar(tenantId: number) {
       where: { id, institucionId: tenantId, deletedAt: null },
       select: { id: true },
     })
-
     if (!existente) return null
-
     return prisma.distribucionHoraria.update({
       where: { id },
       data,
     })
   },
-
   async eliminar(id: number, tenantId: number) {
     const existente = await prisma.distribucionHoraria.findFirst({
       where: { id, institucionId: tenantId },
       select: { id: true, deletedAt: true },
     })
-
     if (!existente)          return { ok: true, deleted: false }
     if (existente.deletedAt) return { ok: true, deleted: false }
-
     await prisma.distribucionHoraria.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     })
-
     return { ok: true, deleted: true }
   },
-
   async asignarModulos(
     distribucionId: number,
     tenantId: number,
     modulos: number[]
   ) {
     const modulosUnicos = [...new Set(modulos.map(Number))]
-
     if (modulosUnicos.some(isNaN)) return null
-
     const distribucion = await prisma.distribucionHoraria.findFirst({
       where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
       select: { id: true },
     })
-
     if (!distribucion) return null
-
     if (modulosUnicos.length > 0) {
       const modulosValidos = await prisma.moduloHorario.findMany({
         where: {
@@ -210,15 +198,12 @@ listar(tenantId: number) {
         },
         select: { id: true },
       })
-
       if (modulosValidos.length !== modulosUnicos.length) return null
     }
-
     return prisma.$transaction(async (tx) => {
       await tx.distribucionModulo.deleteMany({
         where: { distribucionHorariaId: distribucionId },
       })
-
       if (modulosUnicos.length > 0) {
         await tx.distribucionModulo.createMany({
           data: modulosUnicos.map((moduloHorarioId) => ({
@@ -227,13 +212,11 @@ listar(tenantId: number) {
           })),
         })
       }
-
       return tx.distribucionModulo.findMany({
         where: { distribucionHorariaId: distribucionId },
         include: { moduloHorario: true },
       })
     })
   },
-
   parseDate,
 }

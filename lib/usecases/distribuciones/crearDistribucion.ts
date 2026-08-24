@@ -6,7 +6,7 @@ import { resolverClasesVencidas } from "@/lib/usecases/clases/resolverClasesVenc
 import prisma from "@/lib/prisma"
 
 export class DatosDistribucionInvalidosError extends Error {
-  constructor() { super("asignacionId, version y fecha_vigencia_desde son obligatorios") }
+  constructor() { super("asignacionId y fecha_vigencia_desde son obligatorios") }
 }
 export class FechaInvalidaError extends Error {
   constructor() { super("fecha_vigencia_desde inválida") }
@@ -32,8 +32,8 @@ export async function crearDistribucion(tenantId: number, body: {
   fecha_vigencia_desde?: string
   fecha_vigencia_hasta?: string
 }) {
-  const { asignacionId, version, fecha_vigencia_desde, fecha_vigencia_hasta } = body
-  if (!asignacionId || version == null || !fecha_vigencia_desde) {
+  const { asignacionId, fecha_vigencia_desde, fecha_vigencia_hasta } = body
+  if (!asignacionId || !fecha_vigencia_desde) {
     throw new DatosDistribucionInvalidosError()
   }
   const desde = distribucionRepository.parseDate(fecha_vigencia_desde)
@@ -45,6 +45,15 @@ export async function crearDistribucion(tenantId: number, body: {
     select: { id: true, unidadId: true, comisionId: true },
   })
   if (!asignacion) throw new AsignacionNoEncontradaError()
+  // La versión SIEMPRE se calcula acá, ignorando cualquier valor que venga
+  // en el body -- el formulario no la deja editar, es puramente
+  // informativa (muestra "se creará la versión X" antes de mandar). Se
+  // cuentan TODAS las versiones de la asignación, incluidas las borradas
+  // (ver obtenerMaxVersion) -- así nunca se puede proponer un número ya
+  // usado, sin importar qué haya calculado el cliente con datos
+  // incompletos (#87, 24/08/2026).
+  const maxVersion = await distribucionRepository.obtenerMaxVersion(tenantId, asignacionId)
+  const version = maxVersion + 1
   const conflicto = await distribucionRepository.verificarSolapamiento(
     tenantId, asignacionId, version, desde, hasta
   )
