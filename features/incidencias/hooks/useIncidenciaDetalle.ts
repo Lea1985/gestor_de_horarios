@@ -6,7 +6,6 @@ import type { IncidenciaDetalle, CadenaItem, TramoCobertura } from "../types"
 
 export function useIncidenciaDetalle(id: string) {
   const { authHeaders } = useAuth()
-
   const [incidencia, setIncidencia] = useState<IncidenciaDetalle | null>(null)
   const [cadena,     setCadena]     = useState<CadenaItem[]>([])
   const [cobertura,  setCobertura]  = useState<TramoCobertura[]>([])
@@ -25,7 +24,6 @@ export function useIncidenciaDetalle(id: string) {
       ])
       setIncidencia(inc)
       setCadena(cad)
-
       const cob = await fetchCobertura(id, authHeaders)
       setCobertura(cob)
     } catch (e: unknown) {
@@ -77,5 +75,12 @@ export function useIncidenciaDetalle(id: string) {
     confirmarReactivar,
     setConfirmarReactivar,
     reactivar,
+    // Recarga completa (incidencia + cadena + cobertura). Se expone para
+    // que otros hooks de la misma página (ej. useClasesAfectadas, al
+    // agregar/quitar un reemplazo) puedan pedirle a este hook que se
+    // refresque -- si no, la "Cadena de incidencias" queda con el
+    // primer fetch para siempre, porque vive en un hook separado que
+    // nunca se entera del cambio (bug encontrado 24/08/2026).
+    recargar: cargar,
   }
 }

@@ -1,17 +1,11 @@
 // lib/usecases/reemplazos/validarSuperposicion.ts
 import prisma from "@/lib/prisma"
-/**
- * Verifica si el agente suplente ya tiene una ClaseProgramada
- * en el mismo módulo y fecha que la clase que se quiere cubrir.
- *
- * Retorna true si hay superposición.
- */
+
 export async function validarSuperposicionSuplente(
   claseId: number,
   agenteSuplenteId: number,
   tenantId: number
 ): Promise<boolean> {
-  // Clase que se quiere cubrir
   const clase = await prisma.claseProgramada.findFirst({
     where: {
       id: claseId,
@@ -23,13 +17,12 @@ export async function validarSuperposicionSuplente(
     },
   })
   if (!clase) return false
-  // Buscar asignaciones activas del agente suplente a través de TitularAsignacion
   const titularidades = await prisma.titularAsignacion.findMany({
     where: {
       agenteId: agenteSuplenteId,
       institucionId: tenantId,
       activo: true,
-      fecha_hasta: null, // Titular actual
+      fecha_hasta: null,
     },
     select: {
       asignacionId: true,
@@ -37,7 +30,6 @@ export async function validarSuperposicionSuplente(
   })
   const asignacionIds = titularidades.map(t => t.asignacionId)
   if (asignacionIds.length === 0) return false
-  // Verificar si ya tiene clase en ese módulo y fecha
   const conflicto = await prisma.claseProgramada.findFirst({
     where: {
       asignacionId: {
@@ -55,13 +47,18 @@ export async function validarSuperposicionSuplente(
   })
   return conflicto !== null
 }
+
 /**
  * Determina qué agente está siendo reemplazado en esta clase puntual:
- * el agente del último Reemplazo registrado para esa clase (activo o
- * no, el más reciente por id) -- porque ese es, en los hechos, quien
- * dejó de cubrirla justo antes de este nuevo reemplazo. Si todavía no
- * hay ningún Reemplazo para la clase, es el titular vigente en la
- * fecha de esa clase.
+ * el agente del Reemplazo ACTIVO registrado para esa clase (si existe)
+ * -- porque ese es, en los hechos, quien la está cubriendo ahora mismo.
+ * Si no hay ningún Reemplazo activo (nunca se asignó, o el anterior se
+ * quitó), es el titular vigente en la fecha de esa clase.
+ *
+ * IMPORTANTE: solo mira reemplazos ACTIVOS, no cualquiera histórico --
+ * si mirara también los soft-deleted (activo:false), volver a agregar
+ * al mismo suplente después de quitarlo lo comparaba contra sí mismo y
+ * disparaba un falso "auto-reemplazo" (bug encontrado 24/08/2026).
  *
  * Se usa para impedir que un agente quede asignado como su propio
  * reemplazante (bug real encontrado 16/08/2026: un suplente que
@@ -75,6 +72,7 @@ export async function obtenerAgenteQueSeReemplaza(
   const ultimoReemplazo = await prisma.reemplazo.findFirst({
     where: {
       claseId,
+      activo: true,
       clase: { institucionId: tenantId },
     },
     orderBy: { id: "desc" },

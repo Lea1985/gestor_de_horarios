@@ -11,21 +11,22 @@ import type { ClaseAfectada, AgenteParaReemplazo } from "../types"
 
 export type TipoSuplente = "asignacion" | "agente"
 
-export function useClasesAfectadas(incidenciaId: string, asignacionTitularId: number) {
+export function useClasesAfectadas(
+  incidenciaId: string,
+  asignacionTitularId: number,
+  onCambio?: () => void | Promise<void>
+) {
   const { authHeaders } = useAuth()
-
   const [clases,       setClases]       = useState<ClaseAfectada[]>([])
   const [agentes,      setAgentes]      = useState<AgenteParaReemplazo[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
-
   // modal reemplazo
   const [claseSeleccionada,    setClaseSeleccionada]    = useState<ClaseAfectada | null>(null)
   const [suplenteId,           setSuplenteId]           = useState<string>("")
   const [observacionReemplazo, setObservacionReemplazo] = useState<string>("")
   const [guardandoReemplazo,   setGuardandoReemplazo]   = useState(false)
   const [errorReemplazo,       setErrorReemplazo]       = useState<string | null>(null)
-
   // modal ausencia suplente
   const [modalAusencia, setModalAusencia] = useState<{
     reemplazoId:    number
@@ -60,7 +61,6 @@ export function useClasesAfectadas(incidenciaId: string, asignacionTitularId: nu
     setObservacionReemplazo("")
     setErrorReemplazo(null)
   }
-
   function cerrarModal() {
     setClaseSeleccionada(null)
     setErrorReemplazo(null)
@@ -83,6 +83,7 @@ export function useClasesAfectadas(incidenciaId: string, asignacionTitularId: nu
       }, authHeaders)
       cerrarModal()
       await cargar()
+      await onCambio?.()
     } catch (e: unknown) {
       setErrorReemplazo(e instanceof Error ? e.message : "Error creando reemplazo")
     } finally {
@@ -94,6 +95,7 @@ export function useClasesAfectadas(incidenciaId: string, asignacionTitularId: nu
     try {
       await eliminarReemplazoService(reemplazoId, authHeaders)
       await cargar()
+      await onCambio?.()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error eliminando reemplazo")
     }
@@ -103,7 +105,6 @@ export function useClasesAfectadas(incidenciaId: string, asignacionTitularId: nu
   function abrirModalAusencia(reemplazoId: number, nombreSuplente: string) {
     setModalAusencia({ reemplazoId, nombreSuplente })
   }
-
   function cerrarModalAusencia() {
     setModalAusencia(null)
   }

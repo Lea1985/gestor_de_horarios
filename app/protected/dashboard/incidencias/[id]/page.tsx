@@ -22,6 +22,7 @@ export default function IncidenciaDetallePage() {
     incidencia, cadena, cobertura, loading, error, setError,
     confirmar, setConfirmar, eliminar,
     confirmarReactivar, setConfirmarReactivar, reactivar,
+    recargar,
   } = useIncidenciaDetalle(id)
 
   const asignacionTitularId = incidencia?.asignacionId ?? 0
@@ -34,7 +35,7 @@ export default function IncidenciaDetallePage() {
     guardandoReemplazo, errorReemplazo,
     abrirModal, cerrarModal, confirmarReemplazo, eliminarReemplazo,
     modalAusencia, abrirModalAusencia, cerrarModalAusencia,
-  } = useClasesAfectadas(id, asignacionTitularId)
+  } = useClasesAfectadas(id, asignacionTitularId, recargar)
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
@@ -60,7 +61,6 @@ export default function IncidenciaDetallePage() {
     ? "Tiene reemplazos asignados en sus clases"
     : null
 
-  // Reemplazo activo a nivel de la incidencia (todas las clases comparten el mismo suplente vigente)
   const reemplazoActivoIncidencia = clases
     .flatMap(c => c.reemplazos)
     .find(r => r.activo) ?? null
