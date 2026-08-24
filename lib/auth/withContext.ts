@@ -3,12 +3,22 @@
 // Lee los headers inyectados por el proxy — sin queries a DB.
 // El proxy ya validó el token y el tenant antes de que el request llegue aquí.
 //
-// Además, dispara resolverClasesVencidas una vez por día por institución
-// -- es el único "reloj" que tiene el sistema: sin infraestructura de cron,
-// la primera request de cada día para cada institución es lo que hace que
-// las clases PROGRAMADA vencidas pasen a DICTADA. El updateMany atómico
-// evita que dos requests simultáneas al arrancar el día disparen la
-// resolución dos veces (gana la primera, las demás ven count=0 y siguen).
+// Además, dispara dos tareas de mantenimiento una vez por día por
+// institución -- es el único "reloj" que tiene el sistema: sin
+// infraestructura de cron, la primera request de cada día para cada
+// institución es lo que las hace correr. El updateMany atómico evita que
+// dos requests simultáneas al arrancar el día las disparen dos veces
+// (gana la primera, las demás ven count=0 y siguen).
+//
+//   1. cerrarPeriodoSiVencido: si el período ACTIVO ya pasó su fecha_hasta,
+//      se cierra solo -- si no, queda ACTIVO indefinidamente hasta que
+//      alguien lo cierre a mano, bloqueando la activación del próximo (#81,
+//      24/08/2026). Corre ANTES que resolverClasesVencidas: el motor
+//      necesita ver el período ya cerrado para decidir bien entre DICTADA
+//      y SUSPENDIDA/PERIODO_OPERATIVO en las clases residuales (mismo
+//      criterio que ya usa cerrarPeriodo.ts).
+//   2. resolverClasesVencidas: hace que las clases PROGRAMADA vencidas
+//      pasen a DICTADA.
 //
 // Uso en un handler:
 //
@@ -20,6 +30,20 @@
 import prisma from "@/lib/prisma"
 import { RequestContext } from "@/lib/types/context"
 import { resolverClasesVencidas } from "@/lib/usecases/clases/resolverClasesVencidas"
+import { cerrarPeriodo } from "@/lib/usecases/periodosOperativos/cerrarPeriodo"
+import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+
+async function cerrarPeriodoSiVencido(tenantId: number) {
+  const hoy = new Date()
+  hoy.setUTCHours(0, 0, 0, 0)
+  const activo = await periodoOperativoRepository.obtenerVigente(tenantId)
+  if (!activo || activo.fecha_hasta >= hoy) return // no hay activo, o todavía no venció
+  try {
+    await cerrarPeriodo(tenantId, activo.id)
+  } catch (error) {
+    console.error(`Error auto-cerrando período vencido (institucion ${tenantId}, periodo ${activo.id}):`, error)
+  }
+}
 
 async function resolverClasesVencidasSiCorresponde(tenantId: number) {
   const hoy = new Date()
@@ -35,6 +59,7 @@ async function resolverClasesVencidasSiCorresponde(tenantId: number) {
     data: { ultimaResolucionClases: hoy },
   })
   if (count === 0) return // otra request ya se encargó hoy para esta institución
+  await cerrarPeriodoSiVencido(tenantId)
   try {
     await resolverClasesVencidas(tenantId)
   } catch (error) {
