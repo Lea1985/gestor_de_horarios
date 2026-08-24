@@ -2,6 +2,7 @@
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { resolverClasesVencidas } from "@/lib/usecases/clases/resolverClasesVencidas"
 import prisma from "@/lib/prisma"
 
 export class DistribucionNoEncontradaError extends Error {
@@ -19,7 +20,6 @@ export class FormatoModulosInvalidoError extends Error {
 export class SinPeriodoActivoError extends Error {
   constructor() { super("No hay período ACTIVO.") }
 }
-
 /**
  * Reasigna los módulos de una distribución.
  *
@@ -40,7 +40,10 @@ export class SinPeriodoActivoError extends Error {
  *     Las que siguen coincidiendo (misma fecha+módulo) quedan intactas.
  *  4. Asignar los módulos nuevos.
  *  5. Generar las clases nuevas para el mismo tramo (idempotente: no
- *     duplica las que ya quedaron intactas en el paso 3).
+ *     duplica las que ya quedaron intactas en el paso 3). Si el tramo cae
+ *     total o parcialmente en el pasado, resolver de inmediato las clases
+ *     recién generadas que ya vencieron (#83, 24/08/2026) -- sin esto,
+ *     quedan PROGRAMADA hasta el gate diario del día siguiente.
  *  6. Migrar el reemplazo leído en el paso 1, si el usuario confirmó
  *     mantenerlo y el tramo era 100% migrable.
  *
@@ -58,15 +61,12 @@ export async function asignarModulos(
   body: { modulos?: unknown; mantenerReemplazo?: boolean }
 ) {
   if (!Array.isArray(body.modulos)) throw new FormatoModulosInvalidoError()
-
   const distribucion = await prisma.distribucionHoraria.findFirst({
     where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
     include: { asignacion: true },
   })
   if (!distribucion) throw new DistribucionNoEncontradaError()
-
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
-
   // ── Sin período ACTIVO: solo guardamos los módulos, sin tocar clases ──
   if (!periodo) {
     const result = await distribucionRepository.asignarModulos(
@@ -83,7 +83,6 @@ export async function asignarModulos(
       avisoSinPeriodoActivo: true, // el frontend puede mostrar un aviso informativo
     }
   }
-
   // ── Con período ACTIVO: flujo completo de reemplazo de clases ──
   const { asignacion } = distribucion
   // Clampeado: nunca antes del inicio del período ACTIVO, aunque la
@@ -93,29 +92,24 @@ export async function asignarModulos(
     ? distribucion.fecha_vigencia_desde
     : periodo.fecha_desde
   const hasta = periodo.fecha_hasta // límite explícito, siempre
-
   // 1. Leer cobertura del tramo ANTES de tocar nada
   const tramos = await claseProgramadaService.resolverCoberturaDelTramo({
     asignacionId: asignacion.id, desde, hasta,
   })
-
   // 2. Si hay reemplazo en juego y todavía no hay confirmación, preguntar
   if (tramos.length > 0 && body.mantenerReemplazo === undefined) {
     return { ok: false, requiereConfirmacion: true, tramos }
   }
-
   const suplenteAMigrar =
     body.mantenerReemplazo && tramos[0]?.migrable && tramos[0].suplente
       ? tramos[0].suplente
       : null
-
   // 3a. Traer los módulos nuevos completos (necesitamos dia_semana para
   //     poder calcular qué fecha+módulo corresponde con la nueva distribución)
   const modulosNuevos = await prisma.moduloHorario.findMany({
     where: { id: { in: body.modulos as number[] }, institucionId: tenantId },
     select: { id: true, dia_semana: true },
   })
-
   // 3b. Suspender (causa CAMBIO_DISTRIBUCION) las clases que ya no
   //     corresponden a la nueva lista de módulos. Las que siguen
   //     coincidiendo quedan intactas para ser reutilizadas en el paso 5.
@@ -127,13 +121,11 @@ export async function asignarModulos(
     modulosNuevos,
     desde, hasta,
   })
-
   // 4. Asignar los módulos nuevos
   const result = await distribucionRepository.asignarModulos(
     distribucionId, tenantId, body.modulos as number[]
   )
   if (!result) throw new ModulosInvalidosError()
-
   // 5. Generar las clases nuevas para el mismo tramo
   const { creadas } = await claseProgramadaService.generarParaRango({
     institucionId:  tenantId,
@@ -144,7 +136,12 @@ export async function asignarModulos(
     periodoId:      periodo.id,
     desde, hasta,
   })
-
+  // Best-effort: no tumbamos la asignación de módulos si esto falla (#83).
+  try {
+    await resolverClasesVencidas(tenantId)
+  } catch (error) {
+    console.error(`Error en resolverClasesVencidas tras asignarModulos (institucion ${tenantId}):`, error)
+  }
   // 6. Migrar el reemplazo leído en el paso 1, si corresponde
   let migradas = 0
   if (suplenteAMigrar) {
@@ -155,7 +152,6 @@ export async function asignarModulos(
     })
     migradas = r.migradas
   }
-
   return {
     ok: true,
     total: result.length,

@@ -1,6 +1,7 @@
 // lib/usecases/periodosOperativos/activarPeriodo.ts
 import prisma from "@/lib/prisma"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { resolverClasesVencidas } from "@/lib/usecases/clases/resolverClasesVencidas"
 
 export class PeriodoNoEncontradoError extends Error {
   constructor() { super("El período a activar no existe o no pertenece a la institución") }
@@ -20,19 +21,16 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
   })
   if (!periodo) throw new PeriodoNoEncontradoError()
   if (periodo.estado !== "BORRADOR") throw new PeriodoNoEsBorradorError()
-
   const activoExistente = await prisma.periodoOperativo.findFirst({
     where: { institucionId: tenantId, estado: "ACTIVO", deletedAt: null },
   })
   if (activoExistente) {
     throw new YaHayPeriodoActivoError(activoExistente.id, activoExistente.nombre)
   }
-
   const periodoActivo = await prisma.periodoOperativo.update({
     where: { id: periodoId },
     data:  { estado: "ACTIVO" },
   })
-
   const distribuciones = await prisma.distribucionHoraria.findMany({
     where: {
       institucionId: tenantId,
@@ -50,10 +48,8 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
       _count: { select: { distribucionModulos: true } },
     },
   })
-
   let totalCreadas = 0
   const distribucionesSinModulos: { id: number; identificadorEstructural: string; version: number }[] = []
-
   for (const dist of distribuciones) {
     if (dist._count.distribucionModulos === 0) {
       distribucionesSinModulos.push({
@@ -63,11 +59,9 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
       })
       continue
     }
-
     const desde = dist.fecha_vigencia_desde > periodoActivo.fecha_desde
       ? dist.fecha_vigencia_desde
       : periodoActivo.fecha_desde
-
     const { creadas } = await claseProgramadaService.generarParaRango({
       institucionId:  tenantId,
       asignacionId:   dist.asignacion.id,
@@ -80,7 +74,6 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
     })
     totalCreadas += creadas
   }
-
   // Reconciliar TODAS las clases existentes de la institución contra el
   // nuevo rango vigente -- las que quedan fuera pasan a SUSPENDIDA por
   // PERIODO_OPERATIVO, y las que vuelven a caer adentro se revierten.
@@ -89,7 +82,18 @@ export async function activarPeriodo(tenantId: number, periodoId: number) {
     desde:         periodoActivo.fecha_desde,
     hasta:         periodoActivo.fecha_hasta,
   })
-
+  // Activar un período puede ser retroactivo (fecha_desde en el pasado):
+  // tanto las clases recién generadas como las revertidas a PROGRAMADA por
+  // la reconciliación pueden tener fecha <= hoy. Sin esto quedarían mal
+  // (PROGRAMADA en vez de DICTADA) hasta la primera request del día
+  // siguiente, que es el único momento en que dispara el gate diario
+  // (withContext.ts). Best-effort: no tumbamos la activación del período
+  // si esto falla (#83, 24/08/2026).
+  try {
+    await resolverClasesVencidas(tenantId)
+  } catch (error) {
+    console.error(`Error en resolverClasesVencidas tras activarPeriodo (institucion ${tenantId}):`, error)
+  }
   return {
     periodo: periodoActivo,
     distribucionesProcesadas: distribuciones.length - distribucionesSinModulos.length,
