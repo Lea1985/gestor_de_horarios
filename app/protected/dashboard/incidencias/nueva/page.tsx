@@ -41,6 +41,7 @@ export default function NuevaIncidenciaPage() {
     datosErr, setDatosErr,
     guardando,
     resultado, setResultado,
+    resultadoReemplazos,
     // paso 4
     clasesAgrupadasPorAsignacion,
     clasesSeleccionadas,
@@ -108,6 +109,7 @@ export default function NuevaIncidenciaPage() {
         </button>
         <ResultadoCarga
           resultado={resultado}
+          resultadoReemplazos={resultadoReemplazos}
           onReintentar={() => { setResultado(null); setPaso(3) }}
         />
       </div>

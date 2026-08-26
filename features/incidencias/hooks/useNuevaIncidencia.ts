@@ -13,6 +13,7 @@ import type {
   CodigarioItem,
   DatosComunes,
   ResultadoCarga,
+  ResultadoReemplazo,
 } from "../types"
 import { DATOS_VACIO } from "../types"
 
@@ -88,6 +89,10 @@ export function useNuevaIncidencia() {
   const [datosErr,  setDatosErr]  = useState<Partial<DatosComunes>>({})
   const [guardando, setGuardando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoCarga[] | null>(null)
+  // UX-INC-002: resultado de los POST /api/reemplazos del paso 4 (antes
+  // se descartaba silenciosamente). null = no se intentó ningún
+  // reemplazo todavía (o se salteó el paso).
+  const [resultadoReemplazos, setResultadoReemplazos] = useState<ResultadoReemplazo[] | null>(null)
 
   // ── Paso 4: reemplazos ───────────────────────────────────────
   // Clases reales obtenidas tras crear las incidencias
@@ -241,6 +246,7 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     setIncidenciasCreadas(creadas)
     // Guardamos los resultados de incidencias para mostrarlos al final
     setResultado(resultados) // temporal — se pisa al finalizar reemplazos
+    setResultadoReemplazos(null)
     // Cargar clases reales de cada incidencia creada
     setLoadingClases(true)
     setPaso(4)
@@ -389,23 +395,42 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       }).then(async r => ({
         claseId: config.claseId,
         ok:      r.ok,
-        error:   r.ok ? undefined : (await r.json()).error,
+        error:   r.ok ? undefined : ((await r.json().catch(() => null))?.error ?? "Error desconocido"),
       })).catch(() => ({
         claseId: config.claseId,
         ok:      false as const,
         error:   "Error de red",
       }))
     )
-    await Promise.all(promesas)
+    // UX-INC-002: antes el resultado de este Promise.all se descartaba
+    // por completo y el usuario terminaba creyendo que todas las clases
+    // habían quedado cubiertas, aunque algún POST hubiera fallado. Ahora
+    // se captura cada resultado, se enriquece con el contexto de la
+    // clase (identificador, agente, fecha, módulo) y se muestra en la
+    // pantalla de resultado final.
+    const resultados = await Promise.all(promesas)
     setGuardandoReemplazos(false)
+    const enriquecidos: ResultadoReemplazo[] = resultados.map(r => {
+      const clase = clasesReemplazo.find(c => c.id === r.claseId)
+      return {
+        claseId:       r.claseId,
+        identificador: clase?.identificador ?? "—",
+        agente:        clase?.agente ?? "—",
+        fecha:         clase ? formatearFecha(clase.fecha) : "—",
+        modulo:        clase ? formatearModulo(clase) : "—",
+        ok:            r.ok,
+        error:         r.error,
+      }
+    })
+    setResultadoReemplazos(enriquecidos.length > 0 ? enriquecidos : null)
     // Ir al resultado final (el resultado de incidencias ya está en estado)
-    // Restaurar resultado completo — ya estaba seteado antes
     setPaso(5 as never) // señal para mostrar resultado
   }
 
   // ── Saltear reemplazos ───────────────────────────────────────
   function saltearReemplazos() {
-    // resultado ya está seteado desde guardarLoteYContinuar
+    // No se intentó crear ningún reemplazo — no hay nada que reportar.
+    setResultadoReemplazos(null)
     setPaso(5 as never)
   }
 
@@ -453,6 +478,7 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     datosErr, setDatosErr,
     guardando,
     resultado, setResultado,
+    resultadoReemplazos,
     // paso 4
     clasesReemplazo,
     clasesAgrupadasPorAsignacion,

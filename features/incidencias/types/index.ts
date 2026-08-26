@@ -160,6 +160,20 @@ export type ResultadoCarga = {
   error?:        string
 }
 
+// UX-INC-002: resultado de cada intento de POST /api/reemplazos en el
+// paso 4 del wizard de "Nueva incidencia". Antes esto se descartaba
+// (Promise.all sin capturar resultados) y el usuario nunca se enteraba
+// de qué clases quedaron sin reemplazo por un error del servidor.
+export type ResultadoReemplazo = {
+  claseId:       number
+  identificador: string
+  agente:        string
+  fecha:         string
+  modulo:        string
+  ok:            boolean
+  error?:        string
+}
+
 export const DATOS_VACIO: DatosComunes = {
   codigarioId: "", codigarioItemId: "", fecha_desde: "", fecha_hasta: "", observacion: "",
 }

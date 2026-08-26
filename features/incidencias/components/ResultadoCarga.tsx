@@ -1,6 +1,6 @@
-//features/incidencias/components/Stepper.tsx
+//features/incidencias/components/ResultadoCarga.tsx
 import { useRouter } from "next/navigation"
-import type { ResultadoCarga as TResultado } from "../types"
+import type { ResultadoCarga as TResultado, ResultadoReemplazo as TResultadoReemplazo } from "../types"
 
 const th = {
   textAlign:     "left" as const,
@@ -22,13 +22,17 @@ const td = {
   verticalAlign: "middle" as const,
 }
 
-export function ResultadoCarga({ resultado, onReintentar }: {
-  resultado:    TResultado[]
-  onReintentar: () => void
+export function ResultadoCarga({ resultado, resultadoReemplazos, onReintentar }: {
+  resultado:            TResultado[]
+  resultadoReemplazos?: TResultadoReemplazo[] | null
+  onReintentar:         () => void
 }) {
   const router   = useRouter()
   const exitosos = resultado.filter(r => r.ok).length
   const fallidos = resultado.filter(r => !r.ok).length
+
+  const exitososReemplazos = (resultadoReemplazos ?? []).filter(r => r.ok).length
+  const fallidosReemplazos = (resultadoReemplazos ?? []).filter(r => !r.ok).length
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 700 }}>
@@ -69,6 +73,51 @@ export function ResultadoCarga({ resultado, onReintentar }: {
           </tbody>
         </table>
       </div>
+
+      {/* UX-INC-002: resultado de los reemplazos del paso 4 (antes se
+          descartaba silenciosamente y el usuario nunca se enteraba de
+          cuáles habían fallado). Solo se muestra si se intentó crear
+          al menos un reemplazo. */}
+      {resultadoReemplazos && resultadoReemplazos.length > 0 && (
+        <div>
+          <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-1)" }}>
+            Reemplazos asignados
+          </h2>
+          <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-3)" }}>
+            {exitososReemplazos} asignado{exitososReemplazos !== 1 ? "s" : ""} correctamente
+            {fallidosReemplazos > 0 && ` · ${fallidosReemplazos} con error — revisá el detalle de la incidencia correspondiente para asignarlos manualmente`}
+          </p>
+          <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["Agente", "Identificador", "Fecha", "Módulo", "Estado"].map(col => (
+                    <th key={col} style={th}>{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {resultadoReemplazos.map(r => (
+                  <tr key={r.claseId}>
+                    <td style={td}>{r.agente}</td>
+                    <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
+                      {r.identificador}
+                    </td>
+                    <td style={td}>{r.fecha}</td>
+                    <td style={td}>{r.modulo}</td>
+                    <td style={td}>
+                      {r.ok
+                        ? <span style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-success-text)", background: "var(--color-success-bg)", padding: "2px 8px", borderRadius: "var(--radius-sm)" }}>OK</span>
+                        : <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)" }}>{r.error}</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: "var(--space-3)" }}>
         <button
