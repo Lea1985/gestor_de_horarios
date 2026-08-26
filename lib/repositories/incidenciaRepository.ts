@@ -1,6 +1,5 @@
 // lib/repositories/incidenciaRepository.ts
 import prisma from "@/lib/prisma"
-
 const incidenciaInclude = {
   codigarioItem: true,
   padre: {
@@ -35,6 +34,22 @@ const incidenciaInclude = {
     },
   },
   hijos: true,
+  // Reemplazos activos de la propia incidencia (no del padre) -- falta
+  // por completo hasta ahora a nivel raíz, y sin esto
+  // useEditarIncidencia.ts no tiene forma de saber si ESTA incidencia
+  // tiene reemplazo: lee r1.ClaseProgramada, que siempre era `undefined`,
+  // así que el modo restringido de edición ("solo podés modificar la
+  // fecha de cierre") nunca se activaba, aunque el backend igual
+  // rechazara cualquier otro cambio (UX-INC-001, auditoría 25/08/2026,
+  // confirmado en vivo sobre incidencia #12).
+  ClaseProgramada: {
+    include: {
+      reemplazos: {
+        where: { activo: true },
+        select: { id: true },
+      },
+    },
+  },
   asignacion: {
     include: {
       titularidades: {
@@ -48,7 +63,6 @@ const incidenciaInclude = {
     },
   },
 }
-
 export const incidenciaRepository = {
   
 async listar(tenantId: number, asignacionId?: number, incluirEliminadas = false) {
@@ -74,7 +88,6 @@ async listar(tenantId: number, asignacionId?: number, incluirEliminadas = false)
     })
   )
 },
-
 async obtenerPorId(id: number, tenantId: number) {
     const incidencia = await prisma.incidencia.findFirst({
       where: {
@@ -91,7 +104,6 @@ async obtenerPorId(id: number, tenantId: number) {
       : incidencia.fecha_desde
     return { ...incidencia, raizFechaDesde }
   },
-
   existeEnTenant(id: number, tenantId: number) {
     return prisma.incidencia.findFirst({
       where: {
@@ -106,7 +118,6 @@ async obtenerPorId(id: number, tenantId: number) {
       },
     })
   },
-
   verificarAsignacion(asignacionId: number, tenantId: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -118,7 +129,6 @@ async obtenerPorId(id: number, tenantId: number) {
       select: { id: true },
     })
   },
-
   verificarAsignacionBasica(asignacionId: number, tenantId: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -129,7 +139,6 @@ async obtenerPorId(id: number, tenantId: number) {
       select: { id: true },
     })
   },
-
   verificarCodigarioItem(codigarioItemId: number, tenantId: number) {
     return prisma.codigarioItem.findFirst({
       where: {
@@ -142,7 +151,6 @@ async obtenerPorId(id: number, tenantId: number) {
       select: { id: true },
     })
   },
-
   verificarPadre(
     incidenciaPadreId: number,
     asignacionId: number,
@@ -161,7 +169,6 @@ async obtenerPorId(id: number, tenantId: number) {
       select: { id: true, fecha_desde: true, fecha_hasta: true },  // ← agregar fecha_desde
     })
   },
-
   verificarSuperposicion(
     asignacionId: number,
     fechaDesde: Date,
@@ -216,7 +223,6 @@ async obtenerPorId(id: number, tenantId: number) {
     `
     return rows.map(r => r.id)
   },
-
   async obtenerRaizFechaDesde(incidenciaId: number, tenantId: number): Promise<Date | null> {
     const rows = await prisma.$queryRaw<{ fecha_desde: Date }[]>`
       WITH RECURSIVE ancestros AS (
@@ -236,7 +242,6 @@ async obtenerPorId(id: number, tenantId: number) {
     `
     return rows[0]?.fecha_desde ?? null
   },
-
   async obtenerSuplenteSaliente(incidenciaId: number, tenantId: number) {
   const clase = await prisma.claseProgramada.findFirst({
     where: { incidenciaId, institucionId: tenantId },
@@ -252,7 +257,6 @@ async obtenerPorId(id: number, tenantId: number) {
   const inactivos = reemplazos.filter(r => !r.activo)
   return inactivos[inactivos.length - 1]?.agenteSuplente ?? null
 },
-
   crear(data: {
     asignacionId: number
     fecha_desde: Date
@@ -273,7 +277,6 @@ async obtenerPorId(id: number, tenantId: number) {
       include: incidenciaInclude,
     })
   },
-
   async actualizar(
     id: number,
     tenantId: number,
@@ -294,18 +297,15 @@ async obtenerPorId(id: number, tenantId: number) {
       },
       select: { id: true },
     })
-
     if (!existente) {
       return null
     }
-
     return prisma.incidencia.update({
       where: { id },
       data,
       include: incidenciaInclude,
     })
   },
-
   async eliminar(id: number, tenantId: number) {
     const existente = await prisma.incidencia.findFirst({
       where: {
@@ -317,11 +317,9 @@ async obtenerPorId(id: number, tenantId: number) {
       },
       select: { id: true },
     })
-
     if (!existente) {
       return null
     }
-
     return prisma.incidencia.update({
       where: { id },
       data: {
@@ -330,7 +328,6 @@ async obtenerPorId(id: number, tenantId: number) {
       },
     })
   },
-
   cadena(incidenciaId: number, tenantId: number) {
     return prisma.$queryRaw`
       WITH RECURSIVE padres AS (
@@ -342,9 +339,7 @@ async obtenerPorId(id: number, tenantId: number) {
         LEFT JOIN "CodigarioItem" ci ON ci.id = i."codigarioItemId"
         WHERE i.id = ${incidenciaId}
           AND a."institucionId" = ${tenantId}
-
         UNION ALL
-
         SELECT i.id, i."asignacionId", i."incidenciaPadreId", i."fecha_desde", i."fecha_hasta",
                ci.nombre AS tipo, i."codigarioItemId", i."observacion", i."activo",
                i."deletedAt", i."createdAt", i."updatedAt"
@@ -354,7 +349,6 @@ async obtenerPorId(id: number, tenantId: number) {
         LEFT JOIN "CodigarioItem" ci ON ci.id = i."codigarioItemId"
         WHERE a."institucionId" = ${tenantId}
       ),
-
       hijos AS (
         SELECT i.id, i."asignacionId", i."incidenciaPadreId", i."fecha_desde", i."fecha_hasta",
                ci.nombre AS tipo, i."codigarioItemId", i."observacion", i."activo",
@@ -364,9 +358,7 @@ async obtenerPorId(id: number, tenantId: number) {
         LEFT JOIN "CodigarioItem" ci ON ci.id = i."codigarioItemId"
         WHERE i.id = ${incidenciaId}
           AND a."institucionId" = ${tenantId}
-
         UNION ALL
-
         SELECT i.id, i."asignacionId", i."incidenciaPadreId", i."fecha_desde", i."fecha_hasta",
                ci.nombre AS tipo, i."codigarioItemId", i."observacion", i."activo",
                i."deletedAt", i."createdAt", i."updatedAt"
@@ -376,7 +368,6 @@ async obtenerPorId(id: number, tenantId: number) {
         LEFT JOIN "CodigarioItem" ci ON ci.id = i."codigarioItemId"
         WHERE a."institucionId" = ${tenantId}
       )
-
       SELECT DISTINCT *
       FROM (
         SELECT * FROM padres
@@ -385,7 +376,6 @@ async obtenerPorId(id: number, tenantId: number) {
       ) t
     `
   },
-
   existeEliminada(id: number, tenantId: number) {
     return prisma.incidencia.findFirst({
       where: {
@@ -396,7 +386,6 @@ async obtenerPorId(id: number, tenantId: number) {
       select: { id: true, asignacionId: true, fecha_desde: true, fecha_hasta: true },
     })
   },
-
   reactivar(id: number) {
     return prisma.incidencia.update({
       where: { id },

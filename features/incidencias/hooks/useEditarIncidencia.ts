@@ -14,21 +14,27 @@ export type FormData = {
 
 export function useEditarIncidencia(id: string) {
   const { authHeaders } = useAuth()
-
   const [loading,        setLoading]        = useState(true)
   const [guardando,      setGuardando]      = useState(false)
   const [error,          setError]          = useState<string | null>(null)
   const [codigarios,     setCodigarios]     = useState<Codigario[]>([])
   const [items,          setItems]          = useState<CodigarioItem[]>([])
   const [loadingItems,   setLoadingItems]   = useState(false)
+  // Si tiene un reemplazo activo, la incidencia NO se puede editar en
+  // absoluto (misma regla que ya bloquea el botón "Editar" en el
+  // detalle) -- esta pantalla solo se alcanza saltando ese botón por
+  // URL directa. Antes existía acá un "modo restringido" (solo fecha de
+  // cierre editable) que nunca funcionó: el backend (actualizarIncidencia,
+  // Regla 2) rechaza CUALQUIER cambio si hay reemplazos activos, sin
+  // excepción -- confirmado en vivo el 25/08/2026 (UX-INC-001). Se quita
+  // esa lógica y se bloquea directamente, en vez de mostrar un
+  // formulario que promete algo que el backend no permite.
   const [tieneReemplazo, setTieneReemplazo] = useState(false)
   const [formErrors,     setFormErrors]     = useState<Partial<FormData>>({})
-
   const [form, setForm] = useState<FormData>({
     codigarioId: "", codigarioItemId: "",
     fecha_desde: "", fecha_hasta: "", observacion: "",
   })
-
   // ── Carga inicial ────────────────────────────────────────────
   useEffect(() => {
     if (authHeaders.Authorization === "Bearer ") return
@@ -39,14 +45,12 @@ export function useEditarIncidencia(id: string) {
           fetchCodigarios(authHeaders),
         ])
         setCodigarios(catalogos)
-
         const conReemplazo =
           Array.isArray(r1.ClaseProgramada) &&
           r1.ClaseProgramada.some(
             (c: { reemplazos?: unknown[] }) => (c.reemplazos?.length ?? 0) > 0
           )
         setTieneReemplazo(conReemplazo)
-
         setForm({
           codigarioId:     r1.codigarioItem?.codigarioId?.toString() ?? "",
           codigarioItemId: r1.codigarioItemId?.toString() ?? "",
@@ -62,7 +66,6 @@ export function useEditarIncidencia(id: string) {
     }
     cargar()
   }, [authHeaders.Authorization])
-
   // ── Items cuando cambia codigario ────────────────────────────
   useEffect(() => {
     if (!form.codigarioId) { setItems([]); return }
@@ -72,42 +75,32 @@ export function useEditarIncidencia(id: string) {
       .catch(() => setItems([]))
       .finally(() => setLoadingItems(false))
   }, [form.codigarioId])
-
   // ── Helpers ──────────────────────────────────────────────────
   function campo<K extends keyof FormData>(key: K, value: string) {
     setForm(p => ({ ...p, [key]: value }))
     setFormErrors(p => ({ ...p, [key]: undefined }))
   }
-
   function validar(): boolean {
     const err: Partial<FormData> = {}
-    if (tieneReemplazo) {
-      if (!form.fecha_hasta) err.fecha_hasta = "Requerido"
-    } else {
-      if (!form.codigarioId)     err.codigarioId     = "Requerido"
-      if (!form.codigarioItemId) err.codigarioItemId = "Requerido"
-      if (!form.fecha_desde)     err.fecha_desde     = "Requerido"
-      if (!form.fecha_hasta)     err.fecha_hasta     = "Requerido"
-    }
+    if (!form.codigarioId)     err.codigarioId     = "Requerido"
+    if (!form.codigarioItemId) err.codigarioItemId = "Requerido"
+    if (!form.fecha_desde)     err.fecha_desde     = "Requerido"
+    if (!form.fecha_hasta)     err.fecha_hasta     = "Requerido"
     setFormErrors(err)
     return Object.keys(err).length === 0
   }
-
   // ── Guardar ──────────────────────────────────────────────────
   async function guardar(): Promise<boolean> {
     if (!validar()) return false
     setGuardando(true)
     setError(null)
     try {
-      const body = tieneReemplazo
-        ? { fecha_hasta: form.fecha_hasta }
-        : {
-            codigarioItemId: Number(form.codigarioItemId),
-            fecha_desde:     form.fecha_desde,
-            fecha_hasta:     form.fecha_hasta,
-            observacion:     form.observacion || null,
-          }
-
+      const body = {
+        codigarioItemId: Number(form.codigarioItemId),
+        fecha_desde:     form.fecha_desde,
+        fecha_hasta:     form.fecha_hasta,
+        observacion:     form.observacion || null,
+      }
       const res = await fetch(`/api/incidencias/${id}`, {
         method:  "PATCH",
         headers: authHeaders,
@@ -123,7 +116,6 @@ export function useEditarIncidencia(id: string) {
       setGuardando(false)
     }
   }
-
   return {
     loading, guardando, error, setError,
     codigarios, items, loadingItems,
