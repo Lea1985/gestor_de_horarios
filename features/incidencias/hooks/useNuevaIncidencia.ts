@@ -434,6 +434,21 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     setPaso(5 as never)
   }
 
+  // ── Reintentar solo las fallidas ──────────────────────────────
+  // UX-INC-004: antes, "Reintentar fallidas" solo hacía setPaso(3) sin
+  // tocar `seleccionados` -- el lote completo (incluidas las asignaciones
+  // que YA se habían creado con éxito) volvía a intentarse, generando un
+  // SuperposicionError confuso para las que no tenían nada que reintentar.
+  // Ahora se recorta `seleccionados` a las asignaciones que efectivamente
+  // fallaron antes de volver al formulario.
+  function reintentarFallidas() {
+    if (!resultado) return
+    const fallidos = resultado.filter(r => !r.ok).map(r => r.asignacionId)
+    setSeleccionados(fallidos)
+    setResultado(null)
+    setPaso(3)
+  }
+
   // Clases agrupadas por asignación para el UI
   const clasesAgrupadasPorAsignacion = useMemo(() => {
     const grupos = new Map<number, { agente: string; identificador: string; clases: ClaseParaReemplazo[] }>()
@@ -479,6 +494,7 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     guardando,
     resultado, setResultado,
     resultadoReemplazos,
+    reintentarFallidas,
     // paso 4
     clasesReemplazo,
     clasesAgrupadasPorAsignacion,

@@ -42,6 +42,7 @@ export default function NuevaIncidenciaPage() {
     guardando,
     resultado, setResultado,
     resultadoReemplazos,
+    reintentarFallidas,
     // paso 4
     clasesAgrupadasPorAsignacion,
     clasesSeleccionadas,
@@ -110,7 +111,7 @@ export default function NuevaIncidenciaPage() {
         <ResultadoCarga
           resultado={resultado}
           resultadoReemplazos={resultadoReemplazos}
-          onReintentar={() => { setResultado(null); setPaso(3) }}
+          onReintentar={reintentarFallidas}
         />
       </div>
     )
