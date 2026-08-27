@@ -252,13 +252,24 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     setPaso(4)
     try {
       const todasLasClases: ClaseParaReemplazo[] = []
+      // UX-INC-008: antes, si el GET de clases de una incidencia recién
+      // creada fallaba, esa asignación desaparecía en silencio del paso 4
+      // -- sin distinguir "no tiene clases en el rango" de "falló la
+      // carga". La incidencia SÍ se creó (eso no se puede deshacer acá),
+      // así que se avisa cuáles quedaron sin poder cargar sus clases para
+      // que el usuario sepa que tiene que ir a asignarles el reemplazo
+      // manualmente desde el detalle.
+      const erroresCargaClases: { asignacionId: number; identificador: string }[] = []
       for (const { asignacionId, incidenciaId } of creadas) {
         const asignacion = asignacionesLote.find(a => a.id === asignacionId)
         if (!asignacion) continue
         const res = await fetch(`/api/incidencias/${incidenciaId}/clases`, {
           headers: authHeaders,
         })
-        if (!res.ok) continue
+        if (!res.ok) {
+          erroresCargaClases.push({ asignacionId, identificador: asignacion.identificadorEstructural })
+          continue
+        }
         const clases = await res.json()
         for (const clase of clases) {
           todasLasClases.push({
@@ -267,6 +278,11 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
             identificador: asignacion.identificadorEstructural,
           })
         }
+      }
+      if (erroresCargaClases.length > 0) {
+        setError(
+          `La${erroresCargaClases.length !== 1 ? "s" : ""} incidencia${erroresCargaClases.length !== 1 ? "s" : ""} se creó${erroresCargaClases.length !== 1 ? "ron" : ""} igual, pero no se ${erroresCargaClases.length !== 1 ? "pudieron" : "pudo"} cargar sus clases para asignar reemplazo acá (${erroresCargaClases.map(e => e.identificador).join(", ")}). Asigná el reemplazo manualmente desde el detalle de cada una.`
+        )
       }
       // Ordenar por fecha
       todasLasClases.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
