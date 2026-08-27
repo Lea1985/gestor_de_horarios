@@ -1,6 +1,7 @@
 // features/incidencias/components/PasoReemplazos.tsx
 import type { ClaseParaReemplazo, ReemplazoConfig } from "../hooks/useNuevaIncidencia"
 import { formatearFecha, formatearModulo } from "../hooks/useNuevaIncidencia"
+import type { ResultadoCarga } from "../types"
 // ── Tipos ─────────────────────────────────────────────────────
 type Agente = { id: number; nombre: string; apellido: string }
 // ── Estilos base ──────────────────────────────────────────────
@@ -244,6 +245,7 @@ function GrupoAsignacion({
 // ── Componente principal ──────────────────────────────────────
 export function PasoReemplazos({
   grupos,
+  resultado,
   clasesSeleccionadas,
   reemplazos,
   agentes,
@@ -265,6 +267,7 @@ export function PasoReemplazos({
     identificador: string
     clases:        ClaseParaReemplazo[]
   }[]
+  resultado:                   ResultadoCarga[] | null
   clasesSeleccionadas:        Set<number>
   reemplazos:                 Map<number, ReemplazoConfig>
   agentes:                    Agente[]
@@ -286,6 +289,11 @@ export function PasoReemplazos({
   const seleccionadas    = clasesSeleccionadas.size
   const hayIncompletos   = clasesConSuplenteIncompleto.length > 0
   const haySeleccionadas = seleccionadas > 0
+  // UX-INC-011: antes, cuando no había clases para mostrar (grupos vacío),
+  // el mensaje afirmaba sin condición "Las incidencias fueron creadas
+  // correctamente" -- aunque `resultado` tuviera entradas con ok:false
+  // (algunas incidencias del lote habían fallado). Ahora se distingue.
+  const huboFallosIncidencias = resultado?.some(r => !r.ok) ?? false
   if (loadingClases) {
     return (
       <div style={{
@@ -323,8 +331,11 @@ export function PasoReemplazos({
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-2)" }}>
             No se encontraron clases programadas en este rango de fechas.
           </p>
-          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
-            Las incidencias fueron creadas correctamente.
+          <p style={{ fontSize: "var(--text-xs)", color: huboFallosIncidencias ? "var(--color-error)" : "var(--color-text-hint)" }}>
+            {huboFallosIncidencias
+              ? "Ojo: alguna(s) incidencia(s) del lote no se pudieron crear -- revisá el resultado."
+              : "Las incidencias fueron creadas correctamente."
+            }
           </p>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>

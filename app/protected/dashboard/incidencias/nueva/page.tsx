@@ -245,6 +245,7 @@ export default function NuevaIncidenciaPage() {
       {paso === 4 && (
         <PasoReemplazos
           grupos={clasesAgrupadasPorAsignacion}
+          resultado={resultado}
           clasesSeleccionadas={clasesSeleccionadas}
           reemplazos={reemplazos}
           agentes={agentes}
