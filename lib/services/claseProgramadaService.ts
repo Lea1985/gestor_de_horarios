@@ -415,20 +415,55 @@ export const claseProgramadaService = {
     },
 
   /**
-   * Desvincula una incidencia (eliminada) de sus ClaseProgramada. El llamador
-   * debe volver a resolver cada clase devuelta (normalmente vía resolverClase).
+   * Desvincula una incidencia (eliminada) de sus ClaseProgramada.
+   *
+   * Antes de soltar el vínculo, busca si hay otra incidencia ACTIVA de la
+   * misma asignación que también cubra esa fecha (ej. la ancestra en la
+   * cadena, de rango más amplio) y, si la hay, reclama la clase para ella
+   * en vez de dejarla huérfana. Esto replica la misma semántica que ya
+   * rige en la creación (vincularIncidencia pisa el incidenciaId anterior
+   * sin preguntar: "la incidencia más reciente que cubre la fecha manda").
+   * Si hay más de una candidata activa, gana la de id más alto (la creada
+   * más recientemente), consistente con ese mismo criterio.
+   *
+   * Confirmado con datos reales el 26/08/2026: al eliminar una incidencia
+   * hija de un solo día (creada para una "causa imprevista" puntual
+   * dentro de la ventana de una incidencia padre más amplia), las clases
+   * de ese día quedaban con incidenciaId null -- y el motor de resolución,
+   * que confía en ese campo cacheado, las resolvía como si nunca hubiera
+   * habido ninguna incidencia (DICTADA en vez de SUSPENDIDA/causa
+   * INCIDENCIA), aunque la incidencia padre siguiera activa y cubriendo
+   * esa misma fecha.
+   *
+   * El llamador debe volver a resolver cada clase devuelta (normalmente
+   * vía resolverClase) para que el estado/causa reflejen el vínculo nuevo.
    */
   async desvincularIncidencia(incidenciaId: number): Promise<{ ids: number[] }> {
     const clases = await prisma.claseProgramada.findMany({
       where: { incidenciaId, estado: { not: EstadoClase.DICTADA } },
-      select: { id: true },
+      select: { id: true, fecha: true, asignacionId: true },
     })
     if (clases.length === 0) return { ids: [] }
 
-    await prisma.claseProgramada.updateMany({
-      where: { id: { in: clases.map(c => c.id) } },
-      data:  { incidenciaId: null },
-    })
+    await Promise.all(clases.map(async (clase) => {
+      const reclamante = await prisma.incidencia.findFirst({
+        where: {
+          asignacionId: clase.asignacionId,
+          activo:       true,
+          deletedAt:    null,
+          id:           { not: incidenciaId },
+          fecha_desde:  { lte: clase.fecha },
+          fecha_hasta:  { gte: clase.fecha },
+        },
+        orderBy: { id: "desc" },
+        select:  { id: true },
+      })
+      await prisma.claseProgramada.update({
+        where: { id: clase.id },
+        data:  { incidenciaId: reclamante?.id ?? null },
+      })
+    }))
+
     return { ids: clases.map(c => c.id) }
   },
 

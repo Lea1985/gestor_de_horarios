@@ -33,7 +33,7 @@ const incidenciaInclude = {
       },
     },
   },
-  hijos: true,
+  hijos: { where: { deletedAt: null } },
   // Reemplazos activos de la propia incidencia (no del padre) -- falta
   // por completo hasta ahora a nivel raíz, y sin esto
   // useEditarIncidencia.ts no tiene forma de saber si ESTA incidencia
@@ -374,6 +374,7 @@ async obtenerPorId(id: number, tenantId: number) {
         UNION
         SELECT * FROM hijos
       ) t
+      WHERE t."deletedAt" IS NULL
     `
   },
   existeEliminada(id: number, tenantId: number) {
