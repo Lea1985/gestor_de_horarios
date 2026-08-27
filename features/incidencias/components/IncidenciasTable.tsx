@@ -48,7 +48,18 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                 No hay incidencias{!verEliminadas ? " activas" : ""} registradas
               </td>
             </tr>
-          ) : incidencias.map(i => (
+          ) : incidencias.map(i => {
+            // UX-INC-006: la tabla ya trae `hijos` (filtrado a activos desde
+            // el fix de #100) -- lo mismo que usa el detalle para bloquear
+            // "Eliminar". Antes acá se podía intentar eliminar una
+            // incidencia con hijos igual, y solo se enteraba del rechazo
+            // después de tocar el botón (el backend lo bloquea, pero la UI
+            // no lo anticipaba). OJO: tener padre NO bloquea eliminar (solo
+            // tener hijos activos lo hace) -- por eso no reusamos la misma
+            // condición que la columna "Cadena" (que muestra "Sí" con
+            // padre O hijos).
+            const tieneHijos = (i.hijos?.length ?? 0) > 0
+            return (
             <tr
               key={i.id}
               style={{ transition: "background 0.1s" }}
@@ -146,8 +157,18 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
 
                   {i.activo ? (
                     <button
-                      onClick={() => onEliminar(i.id)}
-                      style={{ background: "none", border: "none", fontSize: "var(--text-xs)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
+                      onClick={() => !tieneHijos && onEliminar(i.id)}
+                      disabled={tieneHijos}
+                      title={tieneHijos ? "Tiene incidencias hijas en la cadena" : undefined}
+                      style={{
+                        background: "none",
+                        border:     "none",
+                        fontSize:   "var(--text-xs)",
+                        color:      tieneHijos ? "var(--color-text-hint)" : "var(--color-error)",
+                        cursor:     tieneHijos ? "not-allowed" : "pointer",
+                        opacity:    tieneHijos ? 0.6 : 1,
+                        padding:    0,
+                      }}
                     >
                       Eliminar
                     </button>
@@ -162,7 +183,8 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                 </div>
               </td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>
