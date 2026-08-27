@@ -45,7 +45,7 @@ export default function IncidenciasPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar esta incidencia? Esta acción no se puede deshacer."
+          mensaje="¿Eliminar esta incidencia? Vas a poder reactivarla después desde el listado."
           onConfirmar={() => { eliminar(confirmarId); setConfirmarId(null) }}
           onCancelar={() => setConfirmarId(null)}
         />

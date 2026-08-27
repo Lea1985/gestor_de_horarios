@@ -69,7 +69,7 @@ export default function IncidenciaDetallePage() {
     <>
       {confirmar && (
         <ModalConfirmar
-          mensaje="¿Eliminar esta incidencia? Esta acción no se puede deshacer."
+          mensaje="¿Eliminar esta incidencia? Vas a poder reactivarla después desde el detalle."
           onConfirmar={async () => {
             const ok = await eliminar()
             if (ok) router.push("/protected/dashboard/incidencias")
