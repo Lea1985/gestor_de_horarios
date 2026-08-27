@@ -1,3 +1,4 @@
+//app/protected/dashboard/incidencias/page.tsx
 "use client"
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -30,11 +31,6 @@ export default function IncidenciasPage() {
     clearError,
   } = useIncidencias(searchParams.get("hoy") === "1", parseVence(searchParams.get("vence")))
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
-  // UX-INC-007: "Reactivar" no tenía confirmación acá, mientras que en el
-  // detalle de la incidencia sí la tiene (ModalConfirmar "¿Reactivar esta
-  // incidencia?"). Mismo botón, misma acción, distinta fricción según la
-  // pantalla -- se unifica con el mismo patrón que ya usa "Eliminar" acá
-  // arriba (confirmarId + ModalConfirmar).
   const [confirmarReactivarId, setConfirmarReactivarId] = useState<number | null>(null)
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
@@ -52,7 +48,7 @@ export default function IncidenciasPage() {
       {confirmarId !== null && (
         <ModalConfirmar
           mensaje="¿Eliminar esta incidencia? Vas a poder reactivarla después desde el listado."
-          onConfirmar={() => { eliminar(confirmarId); setConfirmarId(null) }}
+          onConfirmar={async () => { await eliminar(confirmarId); setConfirmarId(null) }}
           onCancelar={() => setConfirmarId(null)}
         />
       )}
@@ -60,7 +56,7 @@ export default function IncidenciasPage() {
         <ModalConfirmar
           mensaje="¿Reactivar esta incidencia?"
           labelConfirmar="Reactivar"
-          onConfirmar={() => { reactivar(confirmarReactivarId); setConfirmarReactivarId(null) }}
+          onConfirmar={async () => { await reactivar(confirmarReactivarId); setConfirmarReactivarId(null) }}
           onCancelar={() => setConfirmarReactivarId(null)}
         />
       )}
