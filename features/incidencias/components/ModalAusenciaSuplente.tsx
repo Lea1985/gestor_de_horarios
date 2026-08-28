@@ -1,5 +1,5 @@
 // features/incidencias/components/ModalAusenciaSuplente.tsx
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import {
   fetchCodigarios,
@@ -7,7 +7,8 @@ import {
   crearIncidencia,
   reasignarReemplazoService,
 } from "../services/incidenciasService"
-import type { Codigario, CodigarioItem, AgenteParaReemplazo } from "../types"
+import type { Codigario, CodigarioItem, AgenteParaReemplazo, ClaseAfectada } from "../types"
+
 const inputStyle = {
   width:        "100%",
   background:   "var(--color-surface)",
@@ -25,6 +26,7 @@ const labelStyle = {
   display:      "block" as const,
   marginBottom: "var(--space-1)",
 }
+
 // UX-INC-003: cuando la reasignación de alguna clase al nuevo suplente
 // falla, no navegamos en silencio (antes: Promise.allSettled sin
 // inspeccionar resultados). La incidencia SÍ se creó -- eso no se
@@ -35,12 +37,26 @@ type ResultadoParcial = {
   fallidas:          number
   total:             number
 }
+
+// UX-102: la incidencia puede tener más de un suplente cubriendo tramos
+// distintos (mismo titular, mismo período). En vez de pedirle al usuario
+// que elija cuál se ausentó, se deduce a partir de las fechas que carga:
+// se buscan las clases del padre que caen en ese rango y se mira qué
+// agenteSuplente cubre esas clases. Si el rango no cae en ningún tramo
+// con reemplazo activo, o cae en más de uno distinto, se bloquea el guardado.
+type SuplenteResuelto =
+  | { estado: "incompleto" }
+  | { estado: "sin-cobertura" }
+  | { estado: "ambiguo" }
+  | { estado: "resuelto"; agente: { id: number; nombre: string; apellido: string } }
+
 export function ModalAusenciaSuplente({
   incidenciaPadreId,
   asignacionId,
   asignacionTitularId,
+  fechaMinima,
   fechaMaxima,
-  nombreSuplente,
+  clases,
   agentes,
   onCreada,
   onCancelar,
@@ -48,8 +64,9 @@ export function ModalAusenciaSuplente({
   incidenciaPadreId:   number
   asignacionId:        number
   asignacionTitularId: number
+  fechaMinima:         string
   fechaMaxima:         string
-  nombreSuplente:      string
+  clases:              ClaseAfectada[]
   agentes:             AgenteParaReemplazo[]
   onCreada:            (nuevaIncidenciaId: number) => void
   onCancelar:          () => void
@@ -67,12 +84,14 @@ export function ModalAusenciaSuplente({
   const [error,        setError]        = useState<string | null>(null)
   const [loadingItems, setLoadingItems] = useState(false)
   const [resultadoParcial, setResultadoParcial] = useState<ResultadoParcial | null>(null)
+
   useEffect(() => {
     if (authHeaders.Authorization === "Bearer ") return
     fetchCodigarios(authHeaders)
       .then(setCodigarios)
       .catch(() => setError("Error cargando codigarios"))
   }, [authHeaders.Authorization])
+
   useEffect(() => {
     if (!codigarioId) { setItems([]); setItemId(""); return }
     if (authHeaders.Authorization === "Bearer ") return
@@ -82,13 +101,49 @@ export function ModalAusenciaSuplente({
       .catch(() => setItems([]))
       .finally(() => setLoadingItems(false))
   }, [codigarioId, authHeaders.Authorization])
+
+  const suplenteResuelto: SuplenteResuelto = useMemo(() => {
+    if (!fechaDesde || !fechaHasta || fechaDesde > fechaHasta) return { estado: "incompleto" }
+    const enRango = clases.filter(c => {
+      const f = c.fecha.slice(0, 10)
+      return f >= fechaDesde && f <= fechaHasta
+    })
+    const distintos = new Map<number, { id: number; nombre: string; apellido: string }>()
+    for (const c of enRango) {
+      for (const r of c.reemplazos) {
+        if (r.activo && r.agenteSuplente) {
+          distintos.set(r.agenteSuplente.id, r.agenteSuplente)
+        }
+      }
+    }
+    if (distintos.size === 0) return { estado: "sin-cobertura" }
+    if (distintos.size > 1)   return { estado: "ambiguo" }
+    return { estado: "resuelto", agente: [...distintos.values()][0] }
+  }, [fechaDesde, fechaHasta, clases])
+
   async function confirmar() {
     if (!itemId || !fechaDesde || !fechaHasta) {
       setError("Código, fecha desde y fecha hasta son obligatorios")
       return
     }
+    if (fechaDesde < fechaMinima.slice(0, 10)) {
+      setError(`La fecha desde no puede ser anterior al ${fechaMinima.slice(0, 10).split("-").reverse().join("/")}`)
+      return
+    }
     if (fechaHasta > fechaMaxima.slice(0, 10)) {
       setError(`La fecha hasta no puede superar el ${fechaMaxima.slice(0, 10).split("-").reverse().join("/")}`)
+      return
+    }
+    if (suplenteResuelto.estado === "sin-cobertura") {
+      setError("No hay suplente cubriendo esas fechas")
+      return
+    }
+    if (suplenteResuelto.estado === "ambiguo") {
+      setError("El rango incluye más de un suplente distinto — ajustá las fechas para que corresponda a uno solo")
+      return
+    }
+    if (suplenteResuelto.estado !== "resuelto") {
+      setError("No se pudo determinar el suplente para estas fechas")
       return
     }
     setGuardando(true)
@@ -112,10 +167,10 @@ export function ModalAusenciaSuplente({
           headers: authHeaders,
         })
         if (res.ok) {
-          const clases = await res.json()
+          const clasesNuevaIncidencia = await res.json()
           // Incluye clases sin cubrir (PROGRAMADA) y clases que ya tenían
           // un reemplazo activo (REEMPLAZADA), para poder reasignarlas.
-          const elegibles = clases.filter((c: { estado: string }) =>
+          const elegibles = clasesNuevaIncidencia.filter((c: { estado: string }) =>
             c.estado === "PROGRAMADA" || c.estado === "REEMPLAZADA"
           )
           const resultados = await Promise.allSettled(
@@ -146,6 +201,11 @@ export function ModalAusenciaSuplente({
       setGuardando(false)
     }
   }
+
+  const encabezadoColor = suplenteResuelto.estado === "ambiguo" || suplenteResuelto.estado === "sin-cobertura"
+    ? "var(--color-error)"
+    : "var(--color-text-secondary)"
+
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }}
@@ -181,8 +241,15 @@ export function ModalAusenciaSuplente({
               <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-1)" }}>
                 Registrar ausencia del suplente
               </h3>
-              <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                {nombreSuplente} · hasta {fechaMaxima.slice(0, 10).split("-").reverse().join("/")}
+              <p style={{ fontSize: "var(--text-xs)", color: encabezadoColor }}>
+                {suplenteResuelto.estado === "resuelto" &&
+                  `${suplenteResuelto.agente.apellido}, ${suplenteResuelto.agente.nombre} · hasta ${fechaMaxima.slice(0, 10).split("-").reverse().join("/")}`}
+                {suplenteResuelto.estado === "incompleto" &&
+                  `Completá las fechas para ver qué suplente se ausenta (hasta ${fechaMaxima.slice(0, 10).split("-").reverse().join("/")})`}
+                {suplenteResuelto.estado === "sin-cobertura" &&
+                  "No hay suplente cubriendo esas fechas"}
+                {suplenteResuelto.estado === "ambiguo" &&
+                  "El rango incluye más de un suplente distinto — ajustá las fechas"}
               </p>
             </div>
             {error && (
@@ -237,6 +304,7 @@ export function ModalAusenciaSuplente({
                 <input
                   type="date"
                   value={fechaDesde}
+                  min={fechaMinima.slice(0, 10)}
                   max={fechaMaxima.slice(0, 10)}
                   onChange={e => setFechaDesde(e.target.value)}
                   style={inputStyle}
@@ -251,6 +319,7 @@ export function ModalAusenciaSuplente({
                 <input
                   type="date"
                   value={fechaHasta}
+                  min={fechaMinima.slice(0, 10)}
                   max={fechaMaxima.slice(0, 10)}
                   onChange={e => setFechaHasta(e.target.value)}
                   style={inputStyle}
@@ -304,8 +373,8 @@ export function ModalAusenciaSuplente({
               </button>
               <button
                 onClick={confirmar}
-                disabled={guardando}
-                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
+                disabled={guardando || suplenteResuelto.estado !== "resuelto"}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: (guardando || suplenteResuelto.estado !== "resuelto") ? "not-allowed" : "pointer", opacity: (guardando || suplenteResuelto.estado !== "resuelto") ? 0.6 : 1 }}
               >
                 {guardando ? "Guardando..." : "Registrar ausencia"}
               </button>

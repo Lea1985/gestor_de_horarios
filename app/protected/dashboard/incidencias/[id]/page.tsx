@@ -1,6 +1,5 @@
 // app/protected/dashboard/incidencias/[id]/page.tsx
 "use client"
-
 import { useRouter, useParams } from "next/navigation"
 import {
   useIncidenciaDetalle,
@@ -54,16 +53,11 @@ export default function IncidenciaDetallePage() {
   const tieneReemplazos  = clases.some(c => c.reemplazos.some(r => r.activo))
   const puedeEditar      = !tieneHijos && !tieneReemplazos
   const puedeEliminar    = !tieneHijos && !tieneReemplazos
-
   const motivoBloqueo = tieneHijos
     ? "Tiene incidencias hijas en la cadena"
     : tieneReemplazos
     ? "Tiene reemplazos asignados en sus clases"
     : null
-
-  const reemplazoActivoIncidencia = clases
-    .flatMap(c => c.reemplazos)
-    .find(r => r.activo) ?? null
 
   return (
     <>
@@ -77,7 +71,6 @@ export default function IncidenciaDetallePage() {
           onCancelar={() => setConfirmar(false)}
         />
       )}
-
       {confirmarReactivar && (
         <ModalConfirmar
           mensaje="¿Reactivar esta incidencia?"
@@ -86,7 +79,6 @@ export default function IncidenciaDetallePage() {
           onCancelar={() => setConfirmarReactivar(false)}
         />
       )}
-
       {claseSeleccionada && (
         <ModalReemplazo
           clase={claseSeleccionada}
@@ -101,14 +93,14 @@ export default function IncidenciaDetallePage() {
           onCancelar={cerrarModal}
         />
       )}
-
       {modalAusencia && (
         <ModalAusenciaSuplente
           incidenciaPadreId={incidencia.id}
           asignacionId={incidencia.asignacionId}
           asignacionTitularId={asignacionTitularId}
+          fechaMinima={incidencia.fecha_desde}
           fechaMaxima={incidencia.fecha_hasta}
-          nombreSuplente={modalAusencia.nombreSuplente}
+          clases={clases}
           agentes={agentes}
           onCreada={(nuevaId) => {
             cerrarModalAusencia()
@@ -117,9 +109,7 @@ export default function IncidenciaDetallePage() {
           onCancelar={cerrarModalAusencia}
         />
       )}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
@@ -146,7 +136,6 @@ export default function IncidenciaDetallePage() {
               }
             </p>
           </div>
-
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "var(--space-2)" }}>
             {esEliminada ? (
               <button
@@ -157,14 +146,9 @@ export default function IncidenciaDetallePage() {
               </button>
             ) : (
               <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                {reemplazoActivoIncidencia && (
+                {tieneReemplazos && (
                   <button
-                    onClick={() => abrirModalAusencia(
-                      reemplazoActivoIncidencia.id,
-                      reemplazoActivoIncidencia.agenteSuplente
-                        ? `${reemplazoActivoIncidencia.agenteSuplente.apellido}, ${reemplazoActivoIncidencia.agenteSuplente.nombre}`
-                        : "—"
-                    )}
+                    onClick={abrirModalAusencia}
                     style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
                   >
                     Ausencia del suplente
@@ -195,7 +179,6 @@ export default function IncidenciaDetallePage() {
             )}
           </div>
         </div>
-
         {/* Error incidencia */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
@@ -204,7 +187,6 @@ export default function IncidenciaDetallePage() {
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-
         {/* Error clases */}
         {errorClases && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
@@ -212,9 +194,7 @@ export default function IncidenciaDetallePage() {
             {errorClases}
           </div>
         )}
-
         <IncidenciaDetalleHeader incidencia={incidencia} clases={clases} cobertura={cobertura} />
-
         {/* Clases afectadas — solo para incidencias activas */}
         {!esEliminada && (
           loadingClases ? (
@@ -230,9 +210,7 @@ export default function IncidenciaDetallePage() {
             />
           )
         )}
-
         <CadenaTable cadena={cadena} idActual={incidencia.id} />
-
       </div>
     </>
   )

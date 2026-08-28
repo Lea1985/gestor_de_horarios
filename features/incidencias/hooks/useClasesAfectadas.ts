@@ -21,17 +21,16 @@ export function useClasesAfectadas(
   const [agentes,      setAgentes]      = useState<AgenteParaReemplazo[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
+
   // modal reemplazo
   const [claseSeleccionada,    setClaseSeleccionada]    = useState<ClaseAfectada | null>(null)
   const [suplenteId,           setSuplenteId]           = useState<string>("")
   const [observacionReemplazo, setObservacionReemplazo] = useState<string>("")
   const [guardandoReemplazo,   setGuardandoReemplazo]   = useState(false)
   const [errorReemplazo,       setErrorReemplazo]       = useState<string | null>(null)
+
   // modal ausencia suplente
-  const [modalAusencia, setModalAusencia] = useState<{
-    reemplazoId:    number
-    nombreSuplente: string
-  } | null>(null)
+  const [modalAusencia, setModalAusencia] = useState(false)
 
   async function cargar() {
     try {
@@ -61,6 +60,7 @@ export function useClasesAfectadas(
     setObservacionReemplazo("")
     setErrorReemplazo(null)
   }
+
   function cerrarModal() {
     setClaseSeleccionada(null)
     setErrorReemplazo(null)
@@ -102,11 +102,16 @@ export function useClasesAfectadas(
   }
 
   // ── Modal ausencia suplente ───────────────────────────────
-  function abrirModalAusencia(reemplazoId: number, nombreSuplente: string) {
-    setModalAusencia({ reemplazoId, nombreSuplente })
+  // UX-102: ya no recibe reemplazoId/nombreSuplente -- el modal deduce
+  // el suplente correspondiente a partir de las fechas que carga el
+  // usuario y de `clases` (con sus reemplazos por tramo), en vez de
+  // depender de cuál botón se apretó.
+  function abrirModalAusencia() {
+    setModalAusencia(true)
   }
+
   function cerrarModalAusencia() {
-    setModalAusencia(null)
+    setModalAusencia(false)
   }
 
   return {
