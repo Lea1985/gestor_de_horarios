@@ -1,8 +1,8 @@
 //features/incidencias/hooks/useIncidencias.ts
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
-import { fetchIncidencias, deleteIncidencia, reactivarIncidencia } from "../services/incidenciasService"
-import type { Incidencia } from "../types"
+import { fetchIncidencias, deleteIncidencia, reactivarIncidencia, fetchPeriodos } from "../services/incidenciasService"
+import type { Incidencia, PeriodoOperativo } from "../types"
 
 export type VenceFiltro = "hoy" | "manana" | "resto-semana" | "7dias" | null
 
@@ -15,8 +15,58 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
   const [verEliminadas, setVerEliminadas] = useState(false)
   const [soloHoy,     setSoloHoy]     = useState(soloHoyInicial)
   const [venceFiltro, setVenceFiltro] = useState<VenceFiltro>(venceFiltroInicial)
+
+  // UX-101: separar incidencias del período operativo activo de las
+  // históricas. periodoSeleccionadoId === null significa "período
+  // activo" (default); un id puntual significa que se eligió ver un
+  // período cerrado. tramoDesde/tramoHasta acotan más ese período.
+  const [periodos,               setPeriodos]                 = useState<PeriodoOperativo[]>([])
+  const [periodoSeleccionadoId,  setPeriodoSeleccionadoIdState] = useState<number | null>(null)
+  const [tramoDesde,             setTramoDesde]               = useState("")
+  const [tramoHasta,             setTramoHasta]               = useState("")
+
+  function setPeriodoSeleccionadoId(id: number | null) {
+    setPeriodoSeleccionadoIdState(id)
+    setTramoDesde("")
+    setTramoHasta("")
+  }
+
+  const periodoActivo = useMemo(
+    () => periodos.find(p => p.estado === "ACTIVO") ?? null,
+    [periodos]
+  )
+  const periodosHistoricos = useMemo(
+    () => periodos.filter(p => p.estado !== "ACTIVO"),
+    [periodos]
+  )
+  // Período efectivamente usado para filtrar: el elegido a mano, o si no
+  // se eligió ninguno, el activo (si existe -- si no hay ninguno activo
+  // no se filtra por período, se ven todas las incidencias).
+  const periodoFiltro = periodoSeleccionadoId === null
+    ? periodoActivo
+    : periodos.find(p => p.id === periodoSeleccionadoId) ?? null
+
   const incidenciasFiltradas = useMemo(() => {
     let resultado = incidencias
+
+    if (periodoFiltro) {
+      const pDesde = periodoFiltro.fecha_desde.slice(0, 10)
+      const pHasta = periodoFiltro.fecha_hasta.slice(0, 10)
+      resultado = resultado.filter(i => {
+        const iDesde = i.fecha_desde.slice(0, 10)
+        const iHasta = i.fecha_hasta.slice(0, 10)
+        return iDesde <= pHasta && iHasta >= pDesde
+      })
+      // Tramo opcional dentro de un período histórico elegido a mano.
+      if (periodoSeleccionadoId !== null && tramoDesde && tramoHasta) {
+        resultado = resultado.filter(i => {
+          const iDesde = i.fecha_desde.slice(0, 10)
+          const iHasta = i.fecha_hasta.slice(0, 10)
+          return iDesde <= tramoHasta && iHasta >= tramoDesde
+        })
+      }
+    }
+
     if (soloHoy) {
       const hoyStr = new Date().toISOString().split("T")[0]
       resultado = resultado.filter(i =>
@@ -54,16 +104,22 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
         }
       })
     }
-    if (!busqueda.trim()) return resultado
-    const q = busqueda.toLowerCase()
-      return resultado.filter(i =>
-            i.asignacion?.identificadorEstructural.toLowerCase().includes(q) ||
-            i.codigarioItem?.nombre.toLowerCase().includes(q) ||
-            i.codigarioItem?.codigo.toLowerCase().includes(q) ||
-            (i.agenteMostrado?.apellido.toLowerCase().includes(q) ?? false) ||
-            (i.agenteMostrado?.nombre.toLowerCase().includes(q) ?? false)
-          )
-  }, [incidencias, busqueda, soloHoy, venceFiltro])
+
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      resultado = resultado.filter(i =>
+        i.asignacion?.identificadorEstructural.toLowerCase().includes(q) ||
+        i.codigarioItem?.nombre.toLowerCase().includes(q) ||
+        i.codigarioItem?.codigo.toLowerCase().includes(q) ||
+        (i.agenteMostrado?.apellido.toLowerCase().includes(q) ?? false) ||
+        (i.agenteMostrado?.nombre.toLowerCase().includes(q) ?? false)
+      )
+    }
+
+    // UX-101: orden estable por id, ascendente.
+    return [...resultado].sort((a, b) => a.id - b.id)
+  }, [incidencias, busqueda, soloHoy, venceFiltro, periodoFiltro, periodoSeleccionadoId, tramoDesde, tramoHasta])
+
   async function cargar() {
     try {
       setLoading(true)
@@ -75,9 +131,24 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
       setLoading(false)
     }
   }
+
+  async function cargarPeriodos() {
+    try {
+      setPeriodos(await fetchPeriodos(authHeaders))
+    } catch {
+      // No crítico: si falla, no se puede filtrar por período y se ven
+      // todas las incidencias -- mismo comportamiento que "sin período
+      // activo".
+    }
+  }
+
   useEffect(() => {
-    if (authHeaders.Authorization !== "Bearer ") cargar()
+    if (authHeaders.Authorization !== "Bearer ") {
+      cargar()
+      cargarPeriodos()
+    }
   }, [authHeaders.Authorization, verEliminadas])
+
   async function eliminar(id: number) {
     try {
       await deleteIncidencia(id, authHeaders)
@@ -92,6 +163,7 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
       setError(e instanceof Error ? e.message : "Error de red")
     }
   }
+
   async function reactivar(id: number) {
     try {
       await reactivarIncidencia(id, authHeaders)
@@ -102,6 +174,7 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
       setError(e instanceof Error ? e.message : "Error de red")
     }
   }
+
   return {
     incidenciasFiltradas,
     loading,
@@ -117,5 +190,14 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
     eliminar,
     reactivar,
     clearError: () => setError(null),
+    // UX-101
+    periodoActivo,
+    periodosHistoricos,
+    periodoSeleccionadoId,
+    setPeriodoSeleccionadoId,
+    tramoDesde,
+    setTramoDesde,
+    tramoHasta,
+    setTramoHasta,
   }
 }

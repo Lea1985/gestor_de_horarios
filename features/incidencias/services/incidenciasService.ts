@@ -9,6 +9,7 @@ import type {
   Codigario,
   CodigarioItem,
   ClaseAfectada,
+  PeriodoOperativo,
 } from "../types"
 
 export async function fetchIncidencias(
@@ -19,7 +20,16 @@ export async function fetchIncidencias(
   if (!res.ok) throw new Error("Error cargando incidencias")
   return res.json()
 }
-
+// UX-101: trae todos los períodos operativos no eliminados (activo +
+// cerrados). Se usa para separar, en el listado, las incidencias del
+// período vigente de las históricas.
+export async function fetchPeriodos(
+  headers: Record<string, string>
+): Promise<PeriodoOperativo[]> {
+  const res = await fetch("/api/periodos-operativos", { headers })
+  if (!res.ok) throw new Error("Error cargando períodos")
+  return res.json()
+}
 export async function deleteIncidencia(
   id: number,
   headers: Record<string, string>
@@ -30,7 +40,6 @@ export async function deleteIncidencia(
     throw new Error(data.error ?? "Error eliminando")
   }
 }
-
 export async function reactivarIncidencia(
   id: number,
   headers: Record<string, string>
@@ -41,7 +50,6 @@ export async function reactivarIncidencia(
     throw new Error(data.error ?? "Error reactivando incidencia")
   }
 }
-
 export async function fetchIncidenciaDetalle(
   id: string,
   headers: Record<string, string>
@@ -53,7 +61,6 @@ export async function fetchIncidenciaDetalle(
   }
   return res.json()
 }
-
 export async function fetchCadena(
   id: string,
   headers: Record<string, string>
@@ -63,7 +70,6 @@ export async function fetchCadena(
   const data = await res.json()
   return Array.isArray(data) ? data : []
 }
-
 export async function fetchCobertura(
   id: string,
   headers: Record<string, string>
@@ -72,8 +78,7 @@ export async function fetchCobertura(
   if (!res.ok) return []
   const data = await res.json()
   return Array.isArray(data) ? data : []
-} 
-
+}
 export async function fetchClasesAfectadas(
   id: string,
   headers: Record<string, string>
@@ -82,7 +87,6 @@ export async function fetchClasesAfectadas(
   if (!res.ok) throw new Error("Error cargando clases afectadas")
   return res.json()
 }
-
 export async function fetchAsignaciones(
   headers: Record<string, string>
 ): Promise<AsignacionParaIncidencia[]> {
@@ -90,7 +94,6 @@ export async function fetchAsignaciones(
   if (!res.ok) throw new Error("Error cargando asignaciones")
   return res.json()
 }
-
 export async function fetchAgentes(
   headers: Record<string, string>
 ): Promise<AgenteParaReemplazo[]> {
@@ -98,7 +101,6 @@ export async function fetchAgentes(
   if (!res.ok) throw new Error("Error cargando agentes")
   return res.json()
 }
-
 export async function fetchCodigarios(
   headers: Record<string, string>
 ): Promise<Codigario[]> {
@@ -106,7 +108,6 @@ export async function fetchCodigarios(
   if (!res.ok) throw new Error("Error cargando codigarios")
   return res.json()
 }
-
 export async function fetchItemsCodigario(
   id: string,
   headers: Record<string, string>
@@ -116,7 +117,6 @@ export async function fetchItemsCodigario(
   const data = await res.json()
   return data.items ?? []
 }
-
 // Retorna la incidencia creada con su id para poder
 // consultar sus clases en el paso 4 de reemplazos.
 export async function crearIncidencia(
@@ -126,8 +126,7 @@ export async function crearIncidencia(
     fecha_desde:     string
     fecha_hasta:     string
     observacion?:    string
-    incidenciaPadreId?: number 
-
+    incidenciaPadreId?: number
   },
   headers: Record<string, string>
 ): Promise<{ id: number }> {
@@ -142,14 +141,13 @@ export async function crearIncidencia(
   }
   return res.json()
 }
-
 export async function crearReemplazoService(
   payload: {
     claseId:             number
     asignacionTitularId: number
     agenteSuplenteId:    number
     incidenciaId?:       number
-    reemplazoPadreId?:   number  
+    reemplazoPadreId?:   number
     observacion?:        string
   },
   headers: Record<string, string>
@@ -164,7 +162,6 @@ export async function crearReemplazoService(
     throw new Error(data.error ?? "Error creando reemplazo")
   }
 }
-
 export async function eliminarReemplazoService(
   id: number,
   headers: Record<string, string>
@@ -175,7 +172,6 @@ export async function eliminarReemplazoService(
     throw new Error(data.error ?? "Error eliminando reemplazo")
   }
 }
-
 export async function reasignarReemplazoService(
   payload: {
     claseId:             number

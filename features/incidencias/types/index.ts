@@ -28,7 +28,6 @@ export type Incidencia = {
   hijos?:         { id: number }[]
   agenteMostrado: { nombre: string; apellido: string; documento?: string } | null
 }
-
 export type IncidenciaDetalle = {
   id:           number
   asignacionId: number
@@ -79,7 +78,6 @@ export type IncidenciaDetalle = {
   } | null
   hijos?: { id: number }[]
 }
-
 export type CadenaItem = {
   id:          number
   fecha_desde: string
@@ -90,7 +88,6 @@ export type CadenaItem = {
     documento: string
   } | null
 }
-
 export type ReemplazoClase = {
   id:                  number
   asignacionTitularId: number
@@ -108,7 +105,6 @@ export type ReemplazoClase = {
     documento?: string
   } | null
 }
-
 export type ClaseAfectada = {
   id:     number
   fecha:  string
@@ -122,7 +118,6 @@ export type ClaseAfectada = {
   comision?: { id: number; nombre: string } | null
   reemplazos: ReemplazoClase[]
 }
-
 export type AsignacionParaIncidencia = {
   id:                       number
   identificadorEstructural: string
@@ -133,17 +128,14 @@ export type AsignacionParaIncidencia = {
   comision: { id: number; nombre: string; curso?: { id: number; nombre: string } } | null
   turno:    { id: number; nombre: string } | null
 }
-
 export type AgenteParaReemplazo = {
   id:        number
   nombre:    string
   apellido:  string
   documento: string
 }
-
 export type Codigario     = { id: number; nombre: string }
 export type CodigarioItem = { id: number; codigo: string; nombre: string }
-
 export type DatosComunes = {
   codigarioId:     string
   codigarioItemId: string
@@ -151,7 +143,6 @@ export type DatosComunes = {
   fecha_hasta:     string
   observacion:     string
 }
-
 export type ResultadoCarga = {
   asignacionId:  number
   identificador: string
@@ -159,7 +150,6 @@ export type ResultadoCarga = {
   ok:            boolean
   error?:        string
 }
-
 // UX-INC-002: resultado de cada intento de POST /api/reemplazos en el
 // paso 4 del wizard de "Nueva incidencia". Antes esto se descartaba
 // (Promise.all sin capturar resultados) y el usuario nunca se enteraba
@@ -173,13 +163,19 @@ export type ResultadoReemplazo = {
   ok:            boolean
   error?:        string
 }
-
 export const DATOS_VACIO: DatosComunes = {
   codigarioId: "", codigarioItemId: "", fecha_desde: "", fecha_hasta: "", observacion: "",
 }
-
 export type TramoCobertura = {
   desde:    string
   hasta:    string
   suplente: { id: number; nombre: string; apellido: string } | null
+}
+// UX-101: separar incidencias del período activo de las históricas.
+export type PeriodoOperativo = {
+  id:          number
+  nombre:      string
+  fecha_desde: string
+  fecha_hasta: string
+  estado:      string
 }

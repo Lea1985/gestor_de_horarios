@@ -1,8 +1,6 @@
 //features/incidencias/components/IncidenciasTable.tsx
 import { useRouter } from "next/navigation"
 import type { Incidencia } from "../types"
-
-
 const th = {
   textAlign:     "left"      as const,
   fontSize:      "var(--text-2xs)",
@@ -14,7 +12,6 @@ const th = {
   borderBottom:  "1px solid var(--color-border-strong)",
   background:    "var(--color-surface-raised)",
 }
-
 const td = {
   padding:       "10px 12px",
   fontSize:      "var(--text-sm)",
@@ -22,7 +19,6 @@ const td = {
   borderBottom:  "1px solid var(--color-border)",
   verticalAlign: "middle" as const,
 }
-
 export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onReactivar }: {
   incidencias:   Incidencia[]
   verEliminadas: boolean
@@ -30,13 +26,12 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
   onReactivar:   (id: number) => void | Promise<void>
 }) {
   const router = useRouter()
-
   return (
     <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
-            {["Agente", "Asignación", "Tipo", "Desde", "Hasta", "Cadena", ""].map(col => (
+            {["ID", "Agente", "Asignación", "Tipo", "Desde", "Hasta", "Cadena", ""].map(col => (
               <th key={col} style={th}>{col}</th>
             ))}
           </tr>
@@ -44,7 +39,7 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
         <tbody>
           {incidencias.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+              <td colSpan={8} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
                 No hay incidencias{!verEliminadas ? " activas" : ""} registradas
               </td>
             </tr>
@@ -66,6 +61,10 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
               onMouseEnter={e => (e.currentTarget.style.background = "var(--color-surface-raised)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
+              {/* ID -- UX-101 */}
+              <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                #{i.id}
+              </td>
               {/* Agente */}
               <td style={td}>
                 {(() => {
@@ -80,7 +79,6 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                   </span>
                 )}
               </td>
-
               {/* Asignación */}
               <td style={td}>
                 {i.asignacion ? (
@@ -115,7 +113,6 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                   </div>
                 ) : "—"}
               </td>
-
               {/* Tipo */}
               <td style={td}>
                 {i.codigarioItem
@@ -126,17 +123,14 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                   : "—"
                 }
               </td>
-
               {/* Desde */}
               <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                 {i.fecha_desde?.slice(0, 10)}
               </td>
-
               {/* Hasta */}
               <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                 {i.fecha_hasta?.slice(0, 10)}
               </td>
-
               {/* Cadena */}
               <td style={td}>
                 {i.padre || (i.hijos?.length ?? 0) > 0
@@ -144,7 +138,6 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                   : <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>No</span>
                 }
               </td>
-
               {/* Acciones */}
               <td style={td}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -154,7 +147,6 @@ export function IncidenciasTable({ incidencias, verEliminadas, onEliminar, onRea
                   >
                     Gestionar
                   </button>
-
                   {i.activo ? (
                     <button
                       onClick={() => !tieneHijos && onEliminar(i.id)}
