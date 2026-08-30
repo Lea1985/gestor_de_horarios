@@ -27,15 +27,34 @@ const labelStyle = {
   marginBottom: "var(--space-1)",
 }
 
+function formatHora(minutos: number): string {
+  const h = Math.floor(minutos / 60).toString().padStart(2, "0")
+  const m = (minutos % 60).toString().padStart(2, "0")
+  return `${h}:${m}`
+}
+
 // UX-INC-003: cuando la reasignación de alguna clase al nuevo suplente
 // falla, no navegamos en silencio (antes: Promise.allSettled sin
 // inspeccionar resultados). La incidencia SÍ se creó -- eso no se
 // deshace -- pero avisamos cuántas clases quedaron sin reasignar y
 // dejamos que el usuario decida cuándo continuar hacia el detalle.
+//
+// UX-REE-003: antes solo se guardaba el conteo de fallidas, se
+// descartaba el motivo de cada rechazo -- el aviso decía "N de M no se
+// pudieron reasignar" sin distinguir un conflicto de negocio real
+// (auto-reemplazo, superposición) de un error de red transitorio.
+// Ahora se guarda el detalle por clase.
+type ReasignacionFallida = {
+  claseId: number
+  fecha:   string
+  modulo:  string
+  motivo:  string
+}
 type ResultadoParcial = {
   nuevaIncidenciaId: number
   fallidas:          number
   total:             number
+  detalleFallidas:   ReasignacionFallida[]
 }
 
 // UX-102: la incidencia puede tener más de un suplente cubriendo tramos
@@ -167,14 +186,14 @@ export function ModalAusenciaSuplente({
           headers: authHeaders,
         })
         if (res.ok) {
-          const clasesNuevaIncidencia = await res.json()
+          const clasesNuevaIncidencia: ClaseAfectada[] = await res.json()
           // Incluye clases sin cubrir (PROGRAMADA) y clases que ya tenían
           // un reemplazo activo (REEMPLAZADA), para poder reasignarlas.
-          const elegibles = clasesNuevaIncidencia.filter((c: { estado: string }) =>
+          const elegibles = clasesNuevaIncidencia.filter(c =>
             c.estado === "PROGRAMADA" || c.estado === "REEMPLAZADA"
           )
           const resultados = await Promise.allSettled(
-            elegibles.map((clase: { id: number }) =>
+            elegibles.map(clase =>
               reasignarReemplazoService({
                 claseId:             clase.id,
                 nuevaIncidenciaId:   nueva.id,
@@ -183,14 +202,35 @@ export function ModalAusenciaSuplente({
               }, authHeaders)
             )
           )
-          const fallidas = resultados.filter(r => r.status === "rejected").length
-          if (fallidas > 0) {
+          // UX-REE-003: antes acá solo se contaba .filter(rejected).length
+          // y se descartaba el "reason" de cada promesa. Ahora se arma el
+          // detalle por clase (fecha, módulo, motivo) para mostrarlo.
+          const detalleFallidas: ReasignacionFallida[] = []
+          resultados.forEach((r, i) => {
+            if (r.status === "rejected") {
+              const clase = elegibles[i]
+              detalleFallidas.push({
+                claseId: clase.id,
+                fecha:   clase.fecha.slice(0, 10).split("-").reverse().join("/"),
+                modulo:  clase.modulo
+                  ? `${clase.modulo.dia_semana} ${formatHora(clase.modulo.hora_desde)}–${formatHora(clase.modulo.hora_hasta)}`
+                  : "",
+                motivo:  r.reason instanceof Error ? r.reason.message : "Error desconocido",
+              })
+            }
+          })
+          if (detalleFallidas.length > 0) {
             // La incidencia ya existe (no se deshace) pero no todas
             // las clases se reasignaron. No navegamos solos: mostramos
             // el resumen y dejamos que el usuario continúe cuando
             // quiera, en vez de ocultar el problema.
             setGuardando(false)
-            setResultadoParcial({ nuevaIncidenciaId: nueva.id, fallidas, total: elegibles.length })
+            setResultadoParcial({
+              nuevaIncidenciaId: nueva.id,
+              fallidas:          detalleFallidas.length,
+              total:             elegibles.length,
+              detalleFallidas,
+            })
             return
           }
         }
@@ -226,6 +266,18 @@ export function ModalAusenciaSuplente({
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginTop: 2, flexShrink: 0 }}><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
               La incidencia se creó correctamente, pero {resultadoParcial.fallidas} de {resultadoParcial.total} clase{resultadoParcial.total !== 1 ? "s" : ""} no se pudo{resultadoParcial.fallidas !== 1 ? "n" : ""} reasignar al nuevo suplente. Vas a poder asignarlas manualmente desde el detalle de la incidencia nueva.
             </div>
+            {resultadoParcial.detalleFallidas.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 160, overflowY: "auto", padding: "8px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-surface-raised)" }}>
+                {resultadoParcial.detalleFallidas.map(f => (
+                  <div key={f.claseId} style={{ fontSize: "var(--text-2xs)", color: "var(--color-text-secondary)" }}>
+                    <strong style={{ color: "var(--color-text-primary)" }}>
+                      {f.fecha}{f.modulo ? ` · ${f.modulo}` : ""}
+                    </strong>
+                    {" — "}{f.motivo}
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
               <button
                 onClick={() => onCreada(resultadoParcial.nuevaIncidenciaId)}
@@ -343,11 +395,6 @@ export function ModalAusenciaSuplente({
               >
                 <option value="">Sin reemplazo por ahora...</option>
                 {agentes
-                  // UX-REE-001: excluir al suplente que ya se identificó como
-                  // el que se está reemplazando -- elegirlo de nuevo acá
-                  // dispararía AutoReemplazoError en el backend. El backend
-                  // sigue siendo la guarda real, esto solo evita ofrecer una
-                  // opción que de todas formas va a fallar.
                   .filter(a => !(suplenteResuelto.estado === "resuelto" && a.id === suplenteResuelto.agente.id))
                   .map(a => (
                     <option key={a.id} value={a.id}>
