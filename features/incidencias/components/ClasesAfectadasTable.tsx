@@ -42,11 +42,15 @@ export function ClasesAfectadasTable({
   esRaiz,
   onAgregarReemplazo,
   onEliminarReemplazo,
+  eliminandoReemplazoId,
+  errorEliminarReemplazo,
 }: {
-  clases:               ClaseAfectada[]
-  esRaiz:               boolean
-  onAgregarReemplazo:   (clase: ClaseAfectada) => void
-  onEliminarReemplazo:  (reemplazoId: number) => void
+  clases:                  ClaseAfectada[]
+  esRaiz:                  boolean
+  onAgregarReemplazo:      (clase: ClaseAfectada) => void
+  onEliminarReemplazo:     (reemplazoId: number) => void
+  eliminandoReemplazoId:   number | null
+  errorEliminarReemplazo:  { reemplazoId: number; mensaje: string } | null
 }) {
 const hayPendientes = clases.some(
   c => c.estado === "PROGRAMADA" && c.reemplazos.every(r => !r.activo)
@@ -107,6 +111,11 @@ const hayPendientes = clases.some(
             ) : clases.map(clase => {
               const badge          = estadoBadge[clase.estado]
               const reemplazoActivo = clase.reemplazos.find(r => r.activo) ?? null
+              // UX-REE-002
+              const estaEliminando = reemplazoActivo !== null && eliminandoReemplazoId === reemplazoActivo.id
+              const errorFila = reemplazoActivo !== null && errorEliminarReemplazo?.reemplazoId === reemplazoActivo.id
+                ? errorEliminarReemplazo.mensaje
+                : null
               return (
                 <tr
                   key={clase.id}
@@ -156,12 +165,27 @@ const hayPendientes = clases.some(
                   <td style={td}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", alignItems: "flex-start" }}>
                       {reemplazoActivo ? (
-                        <button
-                          onClick={() => onEliminarReemplazo(reemplazoActivo.id)}
-                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-error)", cursor: "pointer", padding: 0 }}
-                        >
-                          Quitar
-                        </button>
+                        <>
+                          <button
+                            onClick={() => !estaEliminando && onEliminarReemplazo(reemplazoActivo.id)}
+                            disabled={estaEliminando}
+                            style={{
+                              background: "none", border: "none",
+                              fontSize:   "var(--text-xs)", fontWeight: "var(--font-medium)",
+                              color:      "var(--color-error)",
+                              cursor:     estaEliminando ? "not-allowed" : "pointer",
+                              opacity:    estaEliminando ? 0.6 : 1,
+                              padding:    0,
+                            }}
+                          >
+                            {estaEliminando ? "Quitando..." : "Quitar"}
+                          </button>
+                          {errorFila && (
+                            <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-error)" }}>
+                              {errorFila}
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <button
                           onClick={() => onAgregarReemplazo(clase)}

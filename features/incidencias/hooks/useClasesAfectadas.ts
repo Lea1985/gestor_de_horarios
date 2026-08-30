@@ -11,6 +11,11 @@ import type { ClaseAfectada, AgenteParaReemplazo } from "../types"
 
 export type TipoSuplente = "asignacion" | "agente"
 
+// UX-REE-002: error de eliminación de reemplazo atado a un reemplazoId
+// puntual, para poder mostrarlo cerca de la fila que lo originó en vez
+// de un banner general de la página.
+type ErrorEliminarReemplazo = { reemplazoId: number; mensaje: string }
+
 export function useClasesAfectadas(
   incidenciaId: string,
   asignacionTitularId: number,
@@ -28,6 +33,10 @@ export function useClasesAfectadas(
   const [observacionReemplazo, setObservacionReemplazo] = useState<string>("")
   const [guardandoReemplazo,   setGuardandoReemplazo]   = useState(false)
   const [errorReemplazo,       setErrorReemplazo]       = useState<string | null>(null)
+
+  // UX-REE-002: estado de carga y error por fila para "Quitar" reemplazo.
+  const [eliminandoReemplazoId,   setEliminandoReemplazoId]   = useState<number | null>(null)
+  const [errorEliminarReemplazo,  setErrorEliminarReemplazo]  = useState<ErrorEliminarReemplazo | null>(null)
 
   // modal ausencia suplente
   const [modalAusencia, setModalAusencia] = useState(false)
@@ -91,21 +100,28 @@ export function useClasesAfectadas(
     }
   }
 
+  // UX-REE-002: antes el error de eliminar reemplazo caía en `error`
+  // (el mismo estado que usa `cargar()`) y terminaba en el banner
+  // general de la página, sin relación visual con la fila que lo
+  // originó. Ahora usa su propio estado, atado al reemplazoId.
   async function eliminarReemplazo(reemplazoId: number) {
+    setEliminandoReemplazoId(reemplazoId)
+    setErrorEliminarReemplazo(null)
     try {
       await eliminarReemplazoService(reemplazoId, authHeaders)
       await cargar()
       await onCambio?.()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error eliminando reemplazo")
+      setErrorEliminarReemplazo({
+        reemplazoId,
+        mensaje: e instanceof Error ? e.message : "Error de red",
+      })
+    } finally {
+      setEliminandoReemplazoId(null)
     }
   }
 
   // ── Modal ausencia suplente ───────────────────────────────
-  // UX-102: ya no recibe reemplazoId/nombreSuplente -- el modal deduce
-  // el suplente correspondiente a partir de las fechas que carga el
-  // usuario y de `clases` (con sus reemplazos por tramo), en vez de
-  // depender de cuál botón se apretó.
   function abrirModalAusencia() {
     setModalAusencia(true)
   }
@@ -121,6 +137,7 @@ export function useClasesAfectadas(
     observacionReemplazo, setObservacionReemplazo,
     guardandoReemplazo, errorReemplazo,
     abrirModal, cerrarModal, confirmarReemplazo, eliminarReemplazo,
+    eliminandoReemplazoId, errorEliminarReemplazo,
     modalAusencia, abrirModalAusencia, cerrarModalAusencia,
   }
 }

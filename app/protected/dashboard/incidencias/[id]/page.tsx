@@ -1,5 +1,6 @@
 // app/protected/dashboard/incidencias/[id]/page.tsx
 "use client"
+import { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import {
   useIncidenciaDetalle,
@@ -33,8 +34,12 @@ export default function IncidenciaDetallePage() {
     observacionReemplazo, setObservacionReemplazo,
     guardandoReemplazo, errorReemplazo,
     abrirModal, cerrarModal, confirmarReemplazo, eliminarReemplazo,
+    eliminandoReemplazoId, errorEliminarReemplazo,
     modalAusencia, abrirModalAusencia, cerrarModalAusencia,
   } = useClasesAfectadas(id, asignacionTitularId, recargar)
+
+  // UX-REE-002: confirmación antes de quitar un reemplazo.
+  const [confirmarEliminarReemplazoId, setConfirmarEliminarReemplazoId] = useState<number | null>(null)
 
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
@@ -77,6 +82,17 @@ export default function IncidenciaDetallePage() {
           labelConfirmar="Reactivar"
           onConfirmar={reactivar}
           onCancelar={() => setConfirmarReactivar(false)}
+        />
+      )}
+      {confirmarEliminarReemplazoId !== null && (
+        <ModalConfirmar
+          mensaje="¿Quitar este reemplazo? La clase va a quedar sin cobertura."
+          labelConfirmar="Quitar"
+          onConfirmar={async () => {
+            await eliminarReemplazo(confirmarEliminarReemplazoId)
+            setConfirmarEliminarReemplazoId(null)
+          }}
+          onCancelar={() => setConfirmarEliminarReemplazoId(null)}
         />
       )}
       {claseSeleccionada && (
@@ -206,7 +222,9 @@ export default function IncidenciaDetallePage() {
               clases={clases}
               esRaiz={!incidencia.padre}
               onAgregarReemplazo={abrirModal}
-              onEliminarReemplazo={eliminarReemplazo}
+              onEliminarReemplazo={setConfirmarEliminarReemplazoId}
+              eliminandoReemplazoId={eliminandoReemplazoId}
+              errorEliminarReemplazo={errorEliminarReemplazo}
             />
           )
         )}
