@@ -1,5 +1,4 @@
 // features/asignaciones/components/CambiarTitularForm.tsx
-
 import type { Agente, AsignacionFormData } from "../types"
 
 const s = {
@@ -20,14 +19,22 @@ const s = {
     color:        "var(--color-text-primary)",
     outline:      "none",
   },
+  aviso: {
+    fontSize:     "var(--text-2xs)",
+    color:        "var(--color-text-secondary)",
+    background:   "var(--color-surface-raised)",
+    border:       "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md)",
+    padding:      "8px 10px",
+    lineHeight:   1.4,
+  },
 }
 
-function focusStyle(e: React.FocusEvent<HTMLSelectElement>) {
+function focusStyle(e: React.FocusEvent<HTMLSelectElement | HTMLInputElement>) {
   e.target.style.borderColor = "var(--color-accent)"
   e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
 }
-
-function blurStyle(e: React.FocusEvent<HTMLSelectElement>) {
+function blurStyle(e: React.FocusEvent<HTMLSelectElement | HTMLInputElement>) {
   e.target.style.borderColor = "var(--color-border)"
   e.target.style.boxShadow   = "none"
 }
@@ -64,6 +71,22 @@ export function CambiarTitularForm({ form, agentes, guardando, onCampo, onGuarda
               <option key={a.id} value={a.id}>{a.apellido}, {a.nombre}</option>
             ))}
           </select>
+        </div>
+        <div>
+          <label style={s.label}>
+            Vigente desde <span style={{ color: "var(--color-error)" }}>*</span>
+          </label>
+          <input
+            type="date"
+            value={form.fechaDesde}
+            onChange={e => onCampo("fechaDesde", e.target.value)}
+            style={s.input}
+            onFocus={focusStyle}
+            onBlur={blurStyle}
+          />
+        </div>
+        <div style={s.aviso}>
+          Este cambio cierra la titularidad actual el día anterior a la fecha elegida y abre una nueva desde esa fecha. Si el cambio ya ocurrió, poné la fecha real en la que asumió el nuevo titular.
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button

@@ -1,10 +1,9 @@
 // features/asignaciones/hooks/useAsignacionDetalle.ts
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
-import type { Agente } from "../types"
+import type { Agente, TitularHistorial } from "../types"
 
 type TitularVigente = {
   id: number
@@ -17,7 +16,6 @@ type TitularVigente = {
     telefono?: string
   }
 }
-
 export type AsignacionDetalle = {
   id:                       number
   identificadorEstructural: string
@@ -47,10 +45,15 @@ export type AsignacionDetalle = {
   }[]
 }
 
+function hoyISO() {
+  const d  = new Date()
+  const tz = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tz).toISOString().split("T")[0]
+}
+
 export function useAsignacionDetalle(id: string) {
   const { authHeaders } = useAuth()
   const router          = useRouter()
-
   const [asignacion,          setAsignacion]          = useState<AsignacionDetalle | null>(null)
   const [loading,             setLoading]             = useState(true)
   const [error,               setError]               = useState<string | null>(null)
@@ -59,7 +62,9 @@ export function useAsignacionDetalle(id: string) {
   const [mostrarCambioTitular, setMostrarCambioTitular] = useState(false)
   const [agentes,             setAgentes]             = useState<Agente[]>([])
   const [agenteId,            setAgenteId]            = useState("")
+  const [fechaDesde,          setFechaDesde]          = useState("")
   const [guardando,           setGuardando]           = useState(false)
+  const [historialTitulares,  setHistorialTitulares]  = useState<TitularHistorial[]>([])
 
   async function cargar() {
     setLoading(true)
@@ -79,11 +84,21 @@ export function useAsignacionDetalle(id: string) {
     }
   }
 
+  async function cargarHistorial() {
+    try {
+      const data = await asignacionesService.listarTitulares(Number(id), authHeaders)
+      setHistorialTitulares(data)
+    } catch {
+      // Silencioso: si falla el historial no bloqueamos la pantalla principal.
+    }
+  }
+
   useEffect(() => {
     if (!id) return
     const token = authHeaders.Authorization
     if (!token || token === "Bearer ") return
     cargar()
+    cargarHistorial()
   }, [id, authHeaders.Authorization])
 
   async function eliminar() {
@@ -136,24 +151,28 @@ export function useAsignacionDetalle(id: string) {
     }
     const titularActual = asignacion?.titularidades[0]?.agente
     setAgenteId(titularActual ? String(titularActual.id) : "")
+    setFechaDesde(hoyISO())
     setMostrarCambioTitular(true)
   }
 
   function cancelarCambioTitular() {
     setMostrarCambioTitular(false)
     setAgenteId("")
+    setFechaDesde("")
     setError(null)
   }
 
   async function guardarCambioTitular() {
-    if (!agenteId) return
+    if (!agenteId || !fechaDesde) return
     setGuardando(true)
     setError(null)
     try {
-      await asignacionesService.cambiarTitular(Number(id), Number(agenteId), authHeaders)
+      await asignacionesService.cambiarTitular(Number(id), Number(agenteId), fechaDesde, authHeaders)
       setMostrarCambioTitular(false)
       setAgenteId("")
+      setFechaDesde("")
       await cargar()
+      await cargarHistorial()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
@@ -162,17 +181,14 @@ export function useAsignacionDetalle(id: string) {
   }
 
   const titular = asignacion?.titularidades[0]?.agente ?? null
-
   const contexto = [
     asignacion?.turno?.nombre,
     asignacion?.comision?.nombre,
     asignacion?.materia?.nombre,
   ].filter(Boolean) as string[]
-
   const tieneIncidenciasActivas = (asignacion?.incidencias ?? []).some(i => i.activo)
   const motivoBloqueoEliminar   = tieneIncidenciasActivas ? "Tiene incidencias activas" : null
   const puedeEliminar           = motivoBloqueoEliminar === null
-
   const tieneHistorial = (
     (asignacion?.distribuciones?.length ?? 0) > 0 ||
     (asignacion?.incidencias?.length ?? 0) > 0
@@ -180,7 +196,6 @@ export function useAsignacionDetalle(id: string) {
   const motivoBloqueoEditar = tieneHistorial
     ? "Edición estructural bloqueada · tiene historial"
     : null
-
   const esEliminada = !!asignacion?.deletedAt
 
   return {
@@ -201,6 +216,8 @@ export function useAsignacionDetalle(id: string) {
     agentes,
     agenteId,
     setAgenteId,
+    fechaDesde,
+    setFechaDesde,
     guardando,
     abrirCambiarTitular,
     cancelarCambioTitular,
@@ -209,5 +226,6 @@ export function useAsignacionDetalle(id: string) {
     confirmarReactivar,
     setConfirmarReactivar,
     reactivar,
+    historialTitulares,
   }
 }

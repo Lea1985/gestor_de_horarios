@@ -9,6 +9,7 @@ import {
   CargoCard,
   DistribucionesCard,
   IncidenciasCard,
+  HistorialTitularesCard,
   CambiarTitularForm,
 } from "@/features/asignaciones"
 import type { AsignacionFormData } from "@/features/asignaciones"
@@ -23,8 +24,10 @@ export default function AsignacionDetallePage() {
     puedeEliminar, motivoBloqueoEliminar,
     tieneHistorial, motivoBloqueoEditar,
     mostrarCambioTitular, agentes, agenteId, setAgenteId,
+    fechaDesde, setFechaDesde,
     guardando, abrirCambiarTitular, cancelarCambioTitular, guardarCambioTitular,
     esEliminada, confirmarReactivar, setConfirmarReactivar, reactivar,
+    historialTitulares,
   } = useAsignacionDetalle(id)
 
   if (loading) return (
@@ -40,6 +43,7 @@ export default function AsignacionDetallePage() {
 
   const formTitular: AsignacionFormData = {
     agenteId: agenteId,
+    fechaDesde: fechaDesde,
     unidadId: "", identificadorEstructural: "", fecha_inicio: "",
     fecha_fin: "", materiaId: "", cursoId: "", comisionId: "", turnoId: "",
   }
@@ -85,7 +89,10 @@ export default function AsignacionDetallePage() {
             form={formTitular}
             agentes={agentes}
             guardando={guardando}
-            onCampo={(key, value) => { if (key === "agenteId") setAgenteId(value) }}
+            onCampo={(key, value) => {
+              if (key === "agenteId") setAgenteId(value)
+              if (key === "fechaDesde") setFechaDesde(value)
+            }}
             onGuardar={guardarCambioTitular}
             onCancelar={cancelarCambioTitular}
           />
@@ -95,6 +102,7 @@ export default function AsignacionDetallePage() {
             onCambiarTitular={abrirCambiarTitular}
           />
         ))}
+        <HistorialTitularesCard historial={historialTitulares} />
         <CargoCard asignacion={asignacion} />
         <DistribucionesCard distribuciones={asignacion.distribuciones ?? []} />
         <IncidenciasCard incidencias={asignacion.incidencias ?? []} />

@@ -1,15 +1,12 @@
 // features/asignaciones/services/asignacionesService.ts
-
-import type { Asignacion, Agente, Unidad, Materia, Comision, Turno } from "../types"
+import type { Asignacion, Agente, Unidad, Materia, Comision, Turno, TitularHistorial } from "../types"
 
 export const asignacionesService = {
-
   async listar(headers: Record<string, string>, inactivas: boolean): Promise<Asignacion[]> {
     const res = await fetch(`/api/asignaciones?inactivas=${String(inactivas)}`, { headers })
     if (!res.ok) throw new Error("Error cargando asignaciones")
     return res.json()
   },
-
   async listarCombos(headers: Record<string, string>): Promise<{
     agentes:    Agente[]
     unidades:   Unidad[]
@@ -32,14 +29,12 @@ export const asignacionesService = {
       turnos:     rT.ok  ? await rT.json()  : [],
     }
   },
-
   async tieneHistorial(id: number, headers: Record<string, string>): Promise<boolean> {
     const res = await fetch(`/api/asignaciones/${id}?historial=true`, { headers })
     if (!res.ok) return false
     const data = await res.json()
     return data.tieneHistorial ?? false
   },
-
   async crear(payload: Record<string, unknown>, headers: Record<string, string>): Promise<void> {
     const res = await fetch("/api/asignaciones", {
       method:  "POST",
@@ -51,7 +46,6 @@ export const asignacionesService = {
       throw new Error(data.error ?? "Error creando asignación")
     }
   },
-
   async actualizar(id: number, payload: Record<string, unknown>, headers: Record<string, string>): Promise<void> {
     const res = await fetch(`/api/asignaciones/${id}`, {
       method:  "PATCH",
@@ -63,7 +57,6 @@ export const asignacionesService = {
       throw new Error(data.error ?? "Error actualizando asignación")
     }
   },
-
   async eliminar(id: number, headers: Record<string, string>): Promise<void> {
     const res = await fetch(`/api/asignaciones/${id}`, {
       method:  "DELETE",
@@ -74,7 +67,6 @@ export const asignacionesService = {
       throw new Error(data.error ?? "Error eliminando asignación")
     }
   },
-
   async reactivar(id: number, headers: Record<string, string>): Promise<void> {
     const res = await fetch(`/api/asignaciones/${id}/reactivar`, {
       method:  "POST",
@@ -85,16 +77,20 @@ export const asignacionesService = {
       throw new Error(data.error ?? "Error reactivando asignación")
     }
   },
-
-  async cambiarTitular(id: number, agenteId: number, headers: Record<string, string>): Promise<void> {
+  async cambiarTitular(id: number, agenteId: number, fechaDesde: string, headers: Record<string, string>): Promise<void> {
     const res = await fetch(`/api/asignaciones/${id}/titular`, {
       method:  "POST",
       headers,
-      body:    JSON.stringify({ agenteId }),
+      body:    JSON.stringify({ agenteId, fechaDesde }),
     })
     if (!res.ok) {
       const data = await res.json()
       throw new Error(data.error ?? "Error cambiando titular")
     }
+  },
+  async listarTitulares(id: number, headers: Record<string, string>): Promise<TitularHistorial[]> {
+    const res = await fetch(`/api/asignaciones/${id}/titular`, { headers })
+    if (!res.ok) throw new Error("Error cargando historial de titulares")
+    return res.json()
   },
 }

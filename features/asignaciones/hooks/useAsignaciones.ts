@@ -1,14 +1,18 @@
 // features/asignaciones/hooks/useAsignaciones.ts
-
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
 import type { Asignacion, Agente, Unidad, Materia, Comision, Turno, AsignacionFormData } from "../types"
 import { FORM_VACIO, titularVigente } from "../types"
 
+function hoyISO() {
+  const d  = new Date()
+  const tz = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tz).toISOString().split("T")[0]
+}
+
 export function useAsignaciones() {
   const { authHeaders } = useAuth()
-
   // ── datos ──────────────────────────────────────────────────────────────────
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>([])
   const [agentes,      setAgentes]      = useState<Agente[]>([])
@@ -16,7 +20,6 @@ export function useAsignaciones() {
   const [materias,     setMaterias]     = useState<Materia[]>([])
   const [comisiones,   setComisiones]   = useState<Comision[]>([])
   const [turnos,       setTurnos]       = useState<Turno[]>([])
-
   // ── ui ─────────────────────────────────────────────────────────────────────
   const [loading,              setLoading]              = useState(true)
   const [loadingCombos,        setLoadingCombos]        = useState(false)
@@ -29,10 +32,8 @@ export function useAsignaciones() {
   const [confirmarId,          setConfirmarId]          = useState<number | null>(null)
   const [busqueda,             setBusqueda]             = useState("")
   const [verInactivas,         setVerInactivas]         = useState(false)
-
   // ── form ───────────────────────────────────────────────────────────────────
   const [form, setForm] = useState<AsignacionFormData>(FORM_VACIO)
-
   // ── carga ──────────────────────────────────────────────────────────────────
   async function cargarAsignaciones() {
     try {
@@ -44,11 +45,9 @@ export function useAsignaciones() {
       setLoading(false)
     }
   }
-
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargarAsignaciones()
   }, [authHeaders.Authorization, verInactivas])
-
   async function cargarCombos() {
     setLoadingCombos(true)
     try {
@@ -64,30 +63,23 @@ export function useAsignaciones() {
       setLoadingCombos(false)
     }
   }
-
   // ── derivados ──────────────────────────────────────────────────────────────
   const comisionesDeUnidad = useMemo(() => {
     if (!form.unidadId) return []
     return comisiones.filter(c => c.unidad?.id === Number(form.unidadId))
   }, [comisiones, form.unidadId])
-
   const unidadTieneComisiones = comisionesDeUnidad.length > 0
-
   const materiasFiltradas = useMemo(() => {
     if (!form.cursoId) return []
     return materias.filter(m => m.cursoId === Number(form.cursoId))
   }, [materias, form.cursoId])
-
   const asignacionesFiltradas = useMemo(() => {
     try {
       const base = verInactivas
         ? asignaciones
         : asignaciones.filter(a => a.activo)
-
       if (!busqueda.trim()) return base
-
       const q = busqueda.toLowerCase()
-
       return base.filter(a => {
         const titular = titularVigente(a)
         return (
@@ -101,16 +93,13 @@ export function useAsignaciones() {
       return []
     }
   }, [asignaciones, busqueda, verInactivas])
-
   // ── form helpers ───────────────────────────────────────────────────────────
   function setCampo<K extends keyof AsignacionFormData>(key: K, value: string) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
-
   function onUnidadChange(unidadId: string) {
     setForm(prev => ({ ...prev, unidadId, comisionId: "", cursoId: "", materiaId: "", turnoId: "" }))
   }
-
   function onComisionChange(comisionId: string) {
     setForm(prev => {
       if (!comisionId) return { ...prev, comisionId: "", cursoId: "", materiaId: "", turnoId: "" }
@@ -129,7 +118,6 @@ export function useAsignaciones() {
       }
     })
   }
-
   // ── acciones form ──────────────────────────────────────────────────────────
   async function abrirCrear() {
     setForm(FORM_VACIO)
@@ -140,14 +128,12 @@ export function useAsignaciones() {
     setError(null)
     await cargarCombos()
   }
-
   async function abrirEditar(a: Asignacion) {
     setEditando(a.id)
     setMostrarForm(true)
     setMostrarCambioTitular(false)
     setError(null)
     await cargarCombos()
-
     // Verificar si tiene historial para bloquear campos estructurales
     try {
       const historial = await asignacionesService.tieneHistorial(a.id, authHeaders)
@@ -155,9 +141,9 @@ export function useAsignaciones() {
     } catch {
       setTieneHistorial(false)
     }
-
     setForm({
       agenteId:                 "",
+      fechaDesde:               "",
       unidadId:                 String(a.unidad.id),
       identificadorEstructural: a.identificadorEstructural,
       fecha_inicio:             a.fecha_inicio.split("T")[0],
@@ -168,17 +154,15 @@ export function useAsignaciones() {
       turnoId:                  a.turno    ? String(a.turno.id)   : "",
     })
   }
-
   async function abrirCambiarTitular(a: Asignacion) {
     const titular = titularVigente(a)
-    setForm({ ...FORM_VACIO, agenteId: titular ? String(titular.id) : "" })
+    setForm({ ...FORM_VACIO, agenteId: titular ? String(titular.id) : "", fechaDesde: hoyISO() })
     setEditando(a.id)
     setMostrarCambioTitular(true)
     setMostrarForm(false)
     setError(null)
     await cargarCombos()
   }
-
   function cancelar() {
     setMostrarForm(false)
     setMostrarCambioTitular(false)
@@ -187,7 +171,6 @@ export function useAsignaciones() {
     setForm(FORM_VACIO)
     setError(null)
   }
-
   // ── acciones CRUD ──────────────────────────────────────────────────────────
   async function guardarAsignacion() {
     setGuardando(true)
@@ -214,7 +197,6 @@ export function useAsignaciones() {
             comisionId:               form.comisionId ? Number(form.comisionId) : null,
             turnoId:                  form.turnoId    ? Number(form.turnoId)    : null,
           }
-
       if (isNueva) {
         await asignacionesService.crear(body, authHeaders)
       } else {
@@ -228,7 +210,6 @@ export function useAsignaciones() {
       setGuardando(false)
     }
   }
-
   async function eliminar(id: number) {
     try {
       await asignacionesService.eliminar(id, authHeaders)
@@ -239,7 +220,6 @@ export function useAsignaciones() {
       setConfirmarId(null)
     }
   }
-
   async function reactivar(id: number) {
     try {
       await asignacionesService.reactivar(id, authHeaders)
@@ -250,13 +230,12 @@ export function useAsignaciones() {
       setError(e instanceof Error ? e.message : "Error de red")
     }
   }
-
   async function guardarCambioTitular() {
     if (!editando) return
     setGuardando(true)
     setError(null)
     try {
-      await asignacionesService.cambiarTitular(editando, Number(form.agenteId), authHeaders)
+      await asignacionesService.cambiarTitular(editando, Number(form.agenteId), form.fechaDesde || hoyISO(), authHeaders)
       await cargarAsignaciones()
       cancelar()
     } catch (e) {
@@ -265,7 +244,6 @@ export function useAsignaciones() {
       setGuardando(false)
     }
   }
-
   // ── return ─────────────────────────────────────────────────────────────────
   return {
     asignaciones,

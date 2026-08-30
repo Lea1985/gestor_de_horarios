@@ -17,18 +17,15 @@ export async function cambiarTitularAsignacion(
   if (!asignacion) {
     throw new TitularAsignacionError("Asignación no encontrada")
   }
-
   const agente = await asignacionRepository.verificarAgente(agenteId, tenantId)
   if (!agente) {
     throw new TitularAsignacionError("Agente no encontrado")
   }
-
   const desde = fechaDesde ? new Date(fechaDesde) : new Date()
   desde.setUTCHours(0, 0, 0, 0)
   if (isNaN(desde.getTime())) {
     throw new TitularAsignacionError("Fecha inválida")
   }
-
   const cierreAnterior = new Date(desde)
   cierreAnterior.setUTCDate(cierreAnterior.getUTCDate() - 1)
 
@@ -56,6 +53,26 @@ export async function cambiarTitularAsignacion(
     )
   }
 
+  // UX-ASG-001: ahora que la fecha de vigencia es un campo editable desde la
+  // UI, hay que evitar que el operador elija una fecha anterior (o igual) al
+  // inicio de la titularidad vigente: eso cerraría ese registro con
+  // fecha_hasta < fecha_desde, un rango inválido en el historial.
+  const titularVigente = await prisma.titularAsignacion.findFirst({
+    where: {
+      institucionId: tenantId,
+      asignacionId,
+      fecha_hasta: null,
+      activo: true,
+    },
+    select: { id: true, fecha_desde: true },
+  })
+  if (titularVigente && desde <= titularVigente.fecha_desde) {
+    const inicioVigente = titularVigente.fecha_desde.toISOString().split("T")[0]
+    throw new TitularAsignacionError(
+      `La fecha elegida (${fechaDesde ?? desde.toISOString().split("T")[0]}) es anterior o igual al inicio de la titularidad actual (${inicioVigente}). Elegí una fecha posterior.`
+    )
+  }
+
   return prisma.$transaction(async (tx) => {
     // Cerrar titular vigente si existe
     await tx.titularAsignacion.updateMany({
@@ -70,7 +87,6 @@ export async function cambiarTitularAsignacion(
         activo: false,
       },
     })
-
     // Crear nuevo titular
     await tx.titularAsignacion.create({
       data: {
@@ -80,7 +96,6 @@ export async function cambiarTitularAsignacion(
         fecha_desde: desde,
       },
     })
-
     // Devolver la asignación con el nuevo titular vigente
     return tx.asignacion.findFirst({
       where: { id: asignacionId },
