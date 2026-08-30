@@ -111,7 +111,6 @@ const hayPendientes = clases.some(
             ) : clases.map(clase => {
               const badge          = estadoBadge[clase.estado]
               const reemplazoActivo = clase.reemplazos.find(r => r.activo) ?? null
-              // UX-REE-002
               const estaEliminando = reemplazoActivo !== null && eliminandoReemplazoId === reemplazoActivo.id
               const errorFila = reemplazoActivo !== null && errorEliminarReemplazo?.reemplazoId === reemplazoActivo.id
                 ? errorEliminarReemplazo.mensaje
@@ -186,14 +185,20 @@ const hayPendientes = clases.some(
                             </span>
                           )}
                         </>
-                      ) : (
+                      ) : clase.estado === "SUSPENDIDA" ? (
+                        // UX-REE-005: "+ Agregar" solo tiene sentido sobre una
+                        // clase que quedó sin cubrir por la incidencia. Antes
+                        // se ofrecía también en PROGRAMADA (no afectada) y
+                        // DICTADA (ya pasó), donde no hay nada que reemplazar
+                        // -- mismo criterio que ya usa PasoReemplazos.tsx al
+                        // filtrar clases elegibles del wizard.
                         <button
                           onClick={() => onAgregarReemplazo(clase)}
                           style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
                         >
                           + Agregar
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 </tr>
