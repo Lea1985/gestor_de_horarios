@@ -48,15 +48,20 @@ export async function crearReemplazo(
   if (!await reemplazoRepository.verificarAgente(agenteSuplenteId, tenantId)) {
     throw new AgenteSuplenteNoEncontradoError()
   }
+  // UX-REE-006: se chequea primero -- es el bloqueo más básico (la clase
+  // ya tiene reemplazo activo), no depende de quién sea el suplente
+  // propuesto. Antes iba al final, así que en un escenario de carrera
+  // (dos solicitudes casi simultáneas) podía mostrarse "superposición"
+  // en vez de esta causa, más específica y más fácil de explicar.
+  if (await reemplazoRepository.verificarReemplazoActivo(claseId, tenantId)) {
+    throw new ReemplazoActivoExistenteError()
+  }
   const agenteQueSeReemplaza = await obtenerAgenteQueSeReemplaza(claseId, asignacionTitularId, tenantId)
   if (agenteQueSeReemplaza === agenteSuplenteId) {
     throw new AutoReemplazoError()
   }
   if (await validarSuperposicionSuplente(claseId, agenteSuplenteId, tenantId)) {
     throw new SuperposicionSuplenteError()
-  }
-  if (await reemplazoRepository.verificarReemplazoActivo(claseId, tenantId)) {
-    throw new ReemplazoActivoExistenteError()
   }
   const reemplazo = await reemplazoRepository.crear(tenantId, {
     claseId,
