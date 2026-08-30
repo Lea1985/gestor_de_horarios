@@ -342,11 +342,18 @@ export function ModalAusenciaSuplente({
                 onBlur={e  => { e.target.style.borderColor = "var(--color-border)";  e.target.style.boxShadow = "none" }}
               >
                 <option value="">Sin reemplazo por ahora...</option>
-                {agentes.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.apellido}, {a.nombre} — {a.documento}
-                  </option>
-                ))}
+                {agentes
+                  // UX-REE-001: excluir al suplente que ya se identificó como
+                  // el que se está reemplazando -- elegirlo de nuevo acá
+                  // dispararía AutoReemplazoError en el backend. El backend
+                  // sigue siendo la guarda real, esto solo evita ofrecer una
+                  // opción que de todas formas va a fallar.
+                  .filter(a => !(suplenteResuelto.estado === "resuelto" && a.id === suplenteResuelto.agente.id))
+                  .map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.apellido}, {a.nombre} — {a.documento}
+                    </option>
+                  ))}
               </select>
             </div>
             {/* Observación */}
