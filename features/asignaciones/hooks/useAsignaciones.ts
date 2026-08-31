@@ -1,5 +1,5 @@
 // features/asignaciones/hooks/useAsignaciones.ts
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
 import type { Asignacion, Agente, Unidad, Materia, Comision, Turno, AsignacionFormData } from "../types"
@@ -24,6 +24,7 @@ export function useAsignaciones() {
   const [verInactivas,  setVerInactivas]  = useState(false)
   // ── form ───────────────────────────────────────────────────────────────────
   const [form, setForm] = useState<AsignacionFormData>(FORM_VACIO)
+  const guardandoRef = useRef(false)
   // ── carga ──────────────────────────────────────────────────────────────────
   async function cargarAsignaciones() {
     try {
@@ -122,6 +123,8 @@ export function useAsignaciones() {
   }
   // ── acciones CRUD ──────────────────────────────────────────────────────────
   async function guardarAsignacion() {
+    if (guardandoRef.current) return
+    guardandoRef.current = true
     setGuardando(true)
     setError(null)
     try {
@@ -142,6 +145,7 @@ export function useAsignaciones() {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
       setGuardando(false)
+      guardandoRef.current = false
     }
   }
   // ── return ─────────────────────────────────────────────────────────────────

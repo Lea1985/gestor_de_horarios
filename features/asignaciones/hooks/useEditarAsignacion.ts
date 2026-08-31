@@ -1,5 +1,5 @@
 // features/asignaciones/hooks/useEditarAsignacion.ts
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
@@ -31,6 +31,7 @@ export function useEditarAsignacion(rawId: string | string[]) {
   const [comisiones, setComisiones] = useState<Comision[]>([])
   const [materias,   setMaterias]   = useState<Materia[]>([])
   const [turnos,     setTurnos]     = useState<Turno[]>([])
+  const guardandoRef = useRef(false)
   useEffect(() => {
     if (!id || authHeaders.Authorization === "Bearer ") return
     async function load() {
@@ -41,9 +42,6 @@ export function useEditarAsignacion(rawId: string | string[]) {
           fetch("/api/comisiones",         { headers: authHeaders }),
           fetch("/api/materias",           { headers: authHeaders }),
           fetch("/api/turnos",             { headers: authHeaders }),
-          // UX-ASG-007: misma fuente de verdad que usa el backend para
-          // bloquear la edición (tieneEntidadesRelacionadas), en vez del
-          // criterio propio anterior que usaba "titularidades" como proxy.
           asignacionesService.tieneHistorial(Number(id), authHeaders),
         ])
         const data = await resA.json()
@@ -86,6 +84,8 @@ export function useEditarAsignacion(rawId: string | string[]) {
   }
   async function guardar() {
     if (!form) return
+    if (guardandoRef.current) return
+    guardandoRef.current = true
     setSaving(true)
     setError(null)
     try {
@@ -115,6 +115,7 @@ export function useEditarAsignacion(rawId: string | string[]) {
       setError("Error de red")
     } finally {
       setSaving(false)
+      guardandoRef.current = false
     }
   }
   return {

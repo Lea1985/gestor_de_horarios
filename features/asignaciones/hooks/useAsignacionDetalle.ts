@@ -1,5 +1,5 @@
 // features/asignaciones/hooks/useAsignacionDetalle.ts
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
@@ -74,6 +74,7 @@ export function useAsignacionDetalle(id: string) {
   const [guardando,           setGuardando]           = useState(false)
   const [historialTitulares,  setHistorialTitulares]  = useState<TitularHistorial[]>([])
   const [tieneHistorial,      setTieneHistorial]      = useState(false)
+  const guardandoRef = useRef(false)
 
   async function cargar() {
     setLoading(true)
@@ -200,6 +201,8 @@ export function useAsignacionDetalle(id: string) {
 
   async function guardarCambioTitular() {
     if (!agenteId || !fechaDesde) return
+    if (guardandoRef.current) return
+    guardandoRef.current = true
     setConfirmarCambioTitular(false)
     setGuardando(true)
     setError(null)
@@ -215,6 +218,7 @@ export function useAsignacionDetalle(id: string) {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
       setGuardando(false)
+      guardandoRef.current = false
     }
   }
 
