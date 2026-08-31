@@ -72,6 +72,7 @@ export function useAsignacionDetalle(id: string) {
   const [fechaDesde,          setFechaDesde]          = useState("")
   const [guardando,           setGuardando]           = useState(false)
   const [historialTitulares,  setHistorialTitulares]  = useState<TitularHistorial[]>([])
+  const [tieneHistorial,      setTieneHistorial]      = useState(false)
 
   async function cargar() {
     setLoading(true)
@@ -100,12 +101,27 @@ export function useAsignacionDetalle(id: string) {
     }
   }
 
+  // UX-ASG-007: "tiene historial" ahora viene siempre de la misma fuente de
+  // verdad que usa el backend para bloquear la edición (tieneEntidadesRelacionadas,
+  // vía el endpoint ?historial=true), en vez de recalcularse acá con un
+  // criterio propio que no consideraba ClaseProgramada.
+  async function cargarTieneHistorial() {
+    try {
+      const data = await asignacionesService.tieneHistorial(Number(id), authHeaders)
+      setTieneHistorial(data)
+    } catch {
+      // Silencioso: ante una falla de red, no bloqueamos la pantalla; el
+      // backend igual va a rechazar una edición estructural si corresponde.
+    }
+  }
+
   useEffect(() => {
     if (!id) return
     const token = authHeaders.Authorization
     if (!token || token === "Bearer ") return
     cargar()
     cargarHistorial()
+    cargarTieneHistorial()
   }, [id, authHeaders.Authorization])
 
   async function eliminar() {
@@ -197,6 +213,7 @@ export function useAsignacionDetalle(id: string) {
       setFechaDesde("")
       await cargar()
       await cargarHistorial()
+      await cargarTieneHistorial()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red")
     } finally {
@@ -213,10 +230,6 @@ export function useAsignacionDetalle(id: string) {
   const tieneIncidenciasActivas = (asignacion?.incidencias ?? []).some(i => i.activo)
   const motivoBloqueoEliminar   = tieneIncidenciasActivas ? "Tiene incidencias activas" : null
   const puedeEliminar           = motivoBloqueoEliminar === null
-  const tieneHistorial = (
-    (asignacion?.distribuciones?.length ?? 0) > 0 ||
-    (asignacion?.incidencias?.length ?? 0) > 0
-  )
   const motivoBloqueoEditar = tieneHistorial
     ? "Edición estructural bloqueada · tiene historial"
     : null
