@@ -25,6 +25,7 @@ export type AsignacionDetalle = {
   activo:                   boolean
   deletedAt:                string | null
   titularidades:            TitularVigente[]
+  tieneReemplazosActivos:   boolean
   unidad:   { id: number; nombre: string; codigoUnidad: number; tipo?: string }
   materia:  { id: number; nombre: string } | null
   comision: { id: number; nombre: string } | null
@@ -101,10 +102,6 @@ export function useAsignacionDetalle(id: string) {
     }
   }
 
-  // UX-ASG-007: "tiene historial" ahora viene siempre de la misma fuente de
-  // verdad que usa el backend para bloquear la edición (tieneEntidadesRelacionadas,
-  // vía el endpoint ?historial=true), en vez de recalcularse acá con un
-  // criterio propio que no consideraba ClaseProgramada.
   async function cargarTieneHistorial() {
     try {
       const data = await asignacionesService.tieneHistorial(Number(id), authHeaders)
@@ -228,8 +225,13 @@ export function useAsignacionDetalle(id: string) {
     asignacion?.materia?.nombre,
   ].filter(Boolean) as string[]
   const tieneIncidenciasActivas = (asignacion?.incidencias ?? []).some(i => i.activo)
-  const motivoBloqueoEliminar   = tieneIncidenciasActivas ? "Tiene incidencias activas" : null
-  const puedeEliminar           = motivoBloqueoEliminar === null
+  const tieneReemplazosActivos  = asignacion?.tieneReemplazosActivos ?? false
+  const motivoBloqueoEliminar   = tieneIncidenciasActivas
+    ? "Tiene incidencias activas"
+    : tieneReemplazosActivos
+    ? "Tiene reemplazos activos"
+    : null
+  const puedeEliminar = motivoBloqueoEliminar === null
   const motivoBloqueoEditar = tieneHistorial
     ? "Edición estructural bloqueada · tiene historial"
     : null

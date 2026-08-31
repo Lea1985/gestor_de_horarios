@@ -84,7 +84,7 @@ export function AsignacionForm({
       {/* Aviso de edición restringida */}
       {bloqueado && (
         <div style={{ marginBottom: "var(--space-4)", padding: "8px 12px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-          Los campos estructurales están bloqueados porque esta asignación tiene historial (distribuciones, incidencias o clases programadas). Solo podés modificar fecha fin y estado.
+          Esta asignación tiene historial (distribuciones, incidencias o clases programadas). Solo se puede modificar la fecha de cese. Para cambiar el titular, usá la opción "Cambiar titular" desde el detalle de la asignación.
         </div>
       )}
 

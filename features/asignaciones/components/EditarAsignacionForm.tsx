@@ -66,8 +66,8 @@ export function EditarAsignacionForm({
         {/* Banner restringido */}
         {restringido && (
           <div style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-warning-bg, #fefce8)", border: "1px solid var(--color-warning, #ca8a04)", fontSize: "var(--text-xs)", color: "var(--color-warning-text, #854d0e)" }}>
-            Esta asignación tiene historial. Solo se puede modificar la fecha de cese.
-            Para cambiar el titular, usá la opción "Cambio titular" desde la lista.
+            Esta asignación tiene historial (distribuciones, incidencias o clases programadas). Solo se puede modificar la fecha de cese.
+            Para cambiar el titular, usá la opción "Cambiar titular" desde el detalle de la asignación.
           </div>
         )}
 
