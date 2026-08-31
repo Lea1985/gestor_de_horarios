@@ -54,7 +54,7 @@ export default function AsignacionDetallePage() {
     <>
       {confirmar && (
         <ModalConfirmar
-          mensaje="¿Eliminar esta asignación? Se eliminará toda su información asociada."
+          mensaje="¿Eliminar esta asignación? Quedará inactiva y se suspenderán sus clases futuras; podés reactivarla después."
           onConfirmar={eliminar}
           onCancelar={() => setConfirmar(false)}
         />
