@@ -5,12 +5,6 @@ import { asignacionesService } from "../services/asignacionesService"
 import type { Asignacion, Agente, Unidad, Materia, Comision, Turno, AsignacionFormData } from "../types"
 import { FORM_VACIO, titularVigente } from "../types"
 
-function hoyISO() {
-  const d  = new Date()
-  const tz = d.getTimezoneOffset() * 60000
-  return new Date(d.getTime() - tz).toISOString().split("T")[0]
-}
-
 export function useAsignaciones() {
   const { authHeaders } = useAuth()
   // ── datos ──────────────────────────────────────────────────────────────────
@@ -21,17 +15,13 @@ export function useAsignaciones() {
   const [comisiones,   setComisiones]   = useState<Comision[]>([])
   const [turnos,       setTurnos]       = useState<Turno[]>([])
   // ── ui ─────────────────────────────────────────────────────────────────────
-  const [loading,              setLoading]              = useState(true)
-  const [loadingCombos,        setLoadingCombos]        = useState(false)
-  const [guardando,            setGuardando]            = useState(false)
-  const [error,                setError]                = useState<string | null>(null)
-  const [mostrarForm,          setMostrarForm]          = useState(false)
-  const [mostrarCambioTitular, setMostrarCambioTitular] = useState(false)
-  const [editando,             setEditando]             = useState<number | null>(null)
-  const [tieneHistorial,       setTieneHistorial]       = useState(false)
-  const [confirmarId,          setConfirmarId]          = useState<number | null>(null)
-  const [busqueda,             setBusqueda]             = useState("")
-  const [verInactivas,         setVerInactivas]         = useState(false)
+  const [loading,       setLoading]       = useState(true)
+  const [loadingCombos, setLoadingCombos] = useState(false)
+  const [guardando,     setGuardando]     = useState(false)
+  const [error,         setError]         = useState<string | null>(null)
+  const [mostrarForm,   setMostrarForm]   = useState(false)
+  const [busqueda,      setBusqueda]      = useState("")
+  const [verInactivas,  setVerInactivas]  = useState(false)
   // ── form ───────────────────────────────────────────────────────────────────
   const [form, setForm] = useState<AsignacionFormData>(FORM_VACIO)
   // ── carga ──────────────────────────────────────────────────────────────────
@@ -121,53 +111,12 @@ export function useAsignaciones() {
   // ── acciones form ──────────────────────────────────────────────────────────
   async function abrirCrear() {
     setForm(FORM_VACIO)
-    setEditando(null)
-    setTieneHistorial(false)
     setMostrarForm(true)
-    setMostrarCambioTitular(false)
-    setError(null)
-    await cargarCombos()
-  }
-  async function abrirEditar(a: Asignacion) {
-    setEditando(a.id)
-    setMostrarForm(true)
-    setMostrarCambioTitular(false)
-    setError(null)
-    await cargarCombos()
-    // Verificar si tiene historial para bloquear campos estructurales
-    try {
-      const historial = await asignacionesService.tieneHistorial(a.id, authHeaders)
-      setTieneHistorial(historial)
-    } catch {
-      setTieneHistorial(false)
-    }
-    setForm({
-      agenteId:                 "",
-      fechaDesde:               "",
-      unidadId:                 String(a.unidad.id),
-      identificadorEstructural: a.identificadorEstructural,
-      fecha_inicio:             a.fecha_inicio.split("T")[0],
-      fecha_fin:                a.fecha_fin ? a.fecha_fin.split("T")[0] : "",
-      materiaId:                a.materia ? String(a.materia.id) : "",
-      cursoId:                  a.comision?.curso?.id ? String(a.comision.curso.id) : "",
-      comisionId:               a.comision ? String(a.comision.id) : "",
-      turnoId:                  a.turno    ? String(a.turno.id)   : "",
-    })
-  }
-  async function abrirCambiarTitular(a: Asignacion) {
-    const titular = titularVigente(a)
-    setForm({ ...FORM_VACIO, agenteId: titular ? String(titular.id) : "", fechaDesde: hoyISO() })
-    setEditando(a.id)
-    setMostrarCambioTitular(true)
-    setMostrarForm(false)
     setError(null)
     await cargarCombos()
   }
   function cancelar() {
     setMostrarForm(false)
-    setMostrarCambioTitular(false)
-    setEditando(null)
-    setTieneHistorial(false)
     setForm(FORM_VACIO)
     setError(null)
   }
@@ -176,66 +125,17 @@ export function useAsignaciones() {
     setGuardando(true)
     setError(null)
     try {
-      const isNueva = !editando
-      const body = isNueva
-        ? {
-            agenteId:                 form.agenteId ? Number(form.agenteId) : null,
-            unidadId:                 Number(form.unidadId),
-            identificadorEstructural: form.identificadorEstructural,
-            fecha_inicio:             form.fecha_inicio,
-            fecha_fin:                form.fecha_fin || null,
-            materiaId:                form.materiaId  ? Number(form.materiaId)  : null,
-            comisionId:               form.comisionId ? Number(form.comisionId) : null,
-            turnoId:                  form.turnoId    ? Number(form.turnoId)    : null,
-          }
-        : {
-            unidadId:                 Number(form.unidadId),
-            identificadorEstructural: form.identificadorEstructural,
-            fecha_inicio:             form.fecha_inicio,
-            fecha_fin:                form.fecha_fin || null,
-            materiaId:                form.materiaId  ? Number(form.materiaId)  : null,
-            comisionId:               form.comisionId ? Number(form.comisionId) : null,
-            turnoId:                  form.turnoId    ? Number(form.turnoId)    : null,
-          }
-      if (isNueva) {
-        await asignacionesService.crear(body, authHeaders)
-      } else {
-        await asignacionesService.actualizar(editando!, body, authHeaders)
+      const body = {
+        agenteId:                 form.agenteId ? Number(form.agenteId) : null,
+        unidadId:                 Number(form.unidadId),
+        identificadorEstructural: form.identificadorEstructural,
+        fecha_inicio:             form.fecha_inicio,
+        fecha_fin:                form.fecha_fin || null,
+        materiaId:                form.materiaId  ? Number(form.materiaId)  : null,
+        comisionId:               form.comisionId ? Number(form.comisionId) : null,
+        turnoId:                  form.turnoId    ? Number(form.turnoId)    : null,
       }
-      await cargarAsignaciones()
-      cancelar()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error de red")
-    } finally {
-      setGuardando(false)
-    }
-  }
-  async function eliminar(id: number) {
-    try {
-      await asignacionesService.eliminar(id, authHeaders)
-      await cargarAsignaciones()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error de red")
-    } finally {
-      setConfirmarId(null)
-    }
-  }
-  async function reactivar(id: number) {
-    try {
-      await asignacionesService.reactivar(id, authHeaders)
-      setAsignaciones(prev => prev.map(a =>
-        a.id === id ? { ...a, activo: true, deletedAt: null, estado: "ACTIVO" } : a
-      ))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error de red")
-    }
-  }
-  async function guardarCambioTitular() {
-    if (!editando) return
-    setGuardando(true)
-    setError(null)
-    try {
-      await asignacionesService.cambiarTitular(editando, Number(form.agenteId), form.fechaDesde || hoyISO(), authHeaders)
+      await asignacionesService.crear(body, authHeaders)
       await cargarAsignaciones()
       cancelar()
     } catch (e) {
@@ -250,11 +150,10 @@ export function useAsignaciones() {
     agentes, unidades, materias, comisiones, turnos,
     asignacionesFiltradas, comisionesDeUnidad, materiasFiltradas, unidadTieneComisiones,
     loading, loadingCombos, guardando, error, setError,
-    mostrarForm, mostrarCambioTitular, editando, tieneHistorial,
-    confirmarId, setConfirmarId,
+    mostrarForm,
     busqueda, setBusqueda, verInactivas, setVerInactivas,
     form, setCampo, onUnidadChange, onComisionChange,
-    abrirCrear, abrirEditar, abrirCambiarTitular, cancelar,
-    guardarAsignacion, eliminar, reactivar, guardarCambioTitular,
+    abrirCrear, cancelar,
+    guardarAsignacion,
   }
 }
