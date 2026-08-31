@@ -23,9 +23,11 @@ export default function AsignacionDetallePage() {
     titular, contexto, eliminar,
     puedeEliminar, motivoBloqueoEliminar,
     tieneHistorial, motivoBloqueoEditar,
-    mostrarCambioTitular, agentes, agenteId, setAgenteId,
+    mostrarCambioTitular, confirmarCambioTitular, mensajeConfirmarCambioTitular,
+    agentes, agenteId, setAgenteId,
     fechaDesde, setFechaDesde,
-    guardando, abrirCambiarTitular, cancelarCambioTitular, guardarCambioTitular,
+    guardando, abrirCambiarTitular, cancelarCambioTitular,
+    pedirConfirmarCambioTitular, cancelarConfirmarCambioTitular, guardarCambioTitular,
     esEliminada, confirmarReactivar, setConfirmarReactivar, reactivar,
     historialTitulares,
   } = useAsignacionDetalle(id)
@@ -65,6 +67,14 @@ export default function AsignacionDetallePage() {
           onCancelar={() => setConfirmarReactivar(false)}
         />
       )}
+      {confirmarCambioTitular && (
+        <ModalConfirmar
+          mensaje={mensajeConfirmarCambioTitular}
+          labelConfirmar="Confirmar cambio"
+          onConfirmar={guardarCambioTitular}
+          onCancelar={cancelarConfirmarCambioTitular}
+        />
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
         <AsignacionDetalleHeader
           asignacion={asignacion}
@@ -93,7 +103,7 @@ export default function AsignacionDetallePage() {
               if (key === "agenteId") setAgenteId(value)
               if (key === "fechaDesde") setFechaDesde(value)
             }}
-            onGuardar={guardarCambioTitular}
+            onGuardar={pedirConfirmarCambioTitular}
             onCancelar={cancelarCambioTitular}
           />
         ) : (

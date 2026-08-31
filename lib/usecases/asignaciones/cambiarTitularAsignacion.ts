@@ -53,10 +53,6 @@ export async function cambiarTitularAsignacion(
     )
   }
 
-  // UX-ASG-001: ahora que la fecha de vigencia es un campo editable desde la
-  // UI, hay que evitar que el operador elija una fecha anterior (o igual) al
-  // inicio de la titularidad vigente: eso cerraría ese registro con
-  // fecha_hasta < fecha_desde, un rango inválido en el historial.
   const titularVigente = await prisma.titularAsignacion.findFirst({
     where: {
       institucionId: tenantId,
@@ -64,8 +60,23 @@ export async function cambiarTitularAsignacion(
       fecha_hasta: null,
       activo: true,
     },
-    select: { id: true, fecha_desde: true },
+    select: { id: true, fecha_desde: true, agenteId: true },
   })
+
+  // UX-ASG-004: si el agente elegido ya es el titular vigente, no tiene
+  // sentido cerrar el registro actual y abrir uno idéntico -- eso
+  // fragmenta el historial con un corte artificial sin que haya habido
+  // ningún cambio real de persona.
+  if (titularVigente && titularVigente.agenteId === agenteId) {
+    throw new TitularAsignacionError(
+      "Ese agente ya es el titular actual de esta asignación. No se registró ningún cambio."
+    )
+  }
+
+  // UX-ASG-001: ahora que la fecha de vigencia es un campo editable desde la
+  // UI, hay que evitar que el operador elija una fecha anterior (o igual) al
+  // inicio de la titularidad vigente: eso cerraría ese registro con
+  // fecha_hasta < fecha_desde, un rango inválido en el historial.
   if (titularVigente && desde <= titularVigente.fecha_desde) {
     const inicioVigente = titularVigente.fecha_desde.toISOString().split("T")[0]
     throw new TitularAsignacionError(

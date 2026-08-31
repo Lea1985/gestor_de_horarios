@@ -51,6 +51,12 @@ function hoyISO() {
   return new Date(d.getTime() - tz).toISOString().split("T")[0]
 }
 
+function formatFechaDDMMYYYY(iso: string) {
+  if (!iso) return ""
+  const [y, m, d] = iso.split("-")
+  return `${d}/${m}/${y}`
+}
+
 export function useAsignacionDetalle(id: string) {
   const { authHeaders } = useAuth()
   const router          = useRouter()
@@ -60,6 +66,7 @@ export function useAsignacionDetalle(id: string) {
   const [confirmar,           setConfirmar]           = useState(false)
   const [confirmarReactivar,  setConfirmarReactivar]  = useState(false)
   const [mostrarCambioTitular, setMostrarCambioTitular] = useState(false)
+  const [confirmarCambioTitular, setConfirmarCambioTitular] = useState(false)
   const [agentes,             setAgentes]             = useState<Agente[]>([])
   const [agenteId,            setAgenteId]            = useState("")
   const [fechaDesde,          setFechaDesde]          = useState("")
@@ -157,13 +164,30 @@ export function useAsignacionDetalle(id: string) {
 
   function cancelarCambioTitular() {
     setMostrarCambioTitular(false)
+    setConfirmarCambioTitular(false)
     setAgenteId("")
     setFechaDesde("")
     setError(null)
   }
 
+  function pedirConfirmarCambioTitular() {
+    if (!agenteId || !fechaDesde) return
+    const titularActual = asignacion?.titularidades[0]?.agente
+    if (titularActual && Number(agenteId) === titularActual.id) {
+      setError("Ese agente ya es el titular actual. Elegí otro agente o cancelá.")
+      return
+    }
+    setError(null)
+    setConfirmarCambioTitular(true)
+  }
+
+  function cancelarConfirmarCambioTitular() {
+    setConfirmarCambioTitular(false)
+  }
+
   async function guardarCambioTitular() {
     if (!agenteId || !fechaDesde) return
+    setConfirmarCambioTitular(false)
     setGuardando(true)
     setError(null)
     try {
@@ -198,6 +222,11 @@ export function useAsignacionDetalle(id: string) {
     : null
   const esEliminada = !!asignacion?.deletedAt
 
+  const agenteSeleccionado = agentes.find(a => a.id === Number(agenteId))
+  const mensajeConfirmarCambioTitular = agenteSeleccionado
+    ? `¿Cambiar el titular de "${asignacion?.identificadorEstructural}" a ${agenteSeleccionado.apellido}, ${agenteSeleccionado.nombre} a partir del ${formatFechaDDMMYYYY(fechaDesde)}? La titularidad actual queda cerrada el día anterior.`
+    : ""
+
   return {
     asignacion,
     loading,
@@ -213,6 +242,8 @@ export function useAsignacionDetalle(id: string) {
     tieneHistorial,
     motivoBloqueoEditar,
     mostrarCambioTitular,
+    confirmarCambioTitular,
+    mensajeConfirmarCambioTitular,
     agentes,
     agenteId,
     setAgenteId,
@@ -221,6 +252,8 @@ export function useAsignacionDetalle(id: string) {
     guardando,
     abrirCambiarTitular,
     cancelarCambioTitular,
+    pedirConfirmarCambioTitular,
+    cancelarConfirmarCambioTitular,
     guardarCambioTitular,
     esEliminada,
     confirmarReactivar,
