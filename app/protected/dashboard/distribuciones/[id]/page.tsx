@@ -1,10 +1,8 @@
 // app/protected/dashboard/distribuciones/[id]/page.tsx
 "use client"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
-
 type Distribucion = {
   id:                    number
   version:               number
@@ -16,7 +14,6 @@ type Distribucion = {
     titularidades?: { agente: { nombre: string; apellido: string } }[]
   }
 }
-
 const s = {
   label: {
     fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)" as const,
@@ -27,20 +24,22 @@ const s = {
     borderRadius: "var(--radius-md)", padding: "8px 12px", fontSize: "var(--text-sm)",
     color: "var(--color-text-primary)", outline: "none",
   },
+  readOnly: {
+    width: "100%", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md)", padding: "8px 12px", fontSize: "var(--text-sm)",
+    color: "var(--color-text-secondary)",
+  },
 }
-
 function focusStyle(e: React.FocusEvent<HTMLInputElement>) {
   e.target.style.borderColor = "var(--color-accent)"
   e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
 }
-
 function blurStyle(hasError: boolean) {
   return (e: React.FocusEvent<HTMLInputElement>) => {
     e.target.style.borderColor = hasError ? "var(--color-error)" : "var(--color-border)"
     e.target.style.boxShadow   = "none"
   }
 }
-
 function ModalConfirmar({ onConfirmar, onCancelar }: { onConfirmar: () => void; onCancelar: () => void }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }} onClick={onCancelar}>
@@ -55,7 +54,6 @@ function ModalConfirmar({ onConfirmar, onCancelar }: { onConfirmar: () => void; 
     </div>
   )
 }
-
 export default function EditarDistribucionPage({
   params,
 }: {
@@ -63,22 +61,21 @@ export default function EditarDistribucionPage({
 }) {
   const { authHeaders } = useAuth()
   const router          = useRouter()
-
   const [id,          setId]          = useState("")
   const [dist,        setDist]        = useState<Distribucion | null>(null)
   const [loading,     setLoading]     = useState(true)
   const [guardando,   setGuardando]   = useState(false)
   const [confirmar,   setConfirmar]   = useState(false)
   const [error,       setError]       = useState<string | null>(null)
-  const [formErrors,  setFormErrors]  = useState<{ desde?: string }>({})
-
+  // UX-DIS-002 — "Vigencia desde" quedó como input editable pero el backend
+  // (actualizarDistribucion.ts) nunca procesa ese campo: cambiarla implicaría
+  // reubicar clases ya generadas, algo que no está implementado. El campo se
+  // mostraba editable sin tener ningún efecto real. Se retira del form y se
+  // muestra solo como dato informativo de solo lectura.
   const [form, setForm] = useState({
-    fecha_vigencia_desde: "",
     fecha_vigencia_hasta: "",
   })
-
   useEffect(() => { params.then(p => setId(p.id)) }, [params])
-
   useEffect(() => {
     if (!id || authHeaders.Authorization === "Bearer ") return
     fetch(`/api/distribuciones/${id}`, { headers: authHeaders })
@@ -86,16 +83,13 @@ export default function EditarDistribucionPage({
       .then(data => {
         setDist(data)
         setForm({
-          fecha_vigencia_desde: data.fecha_vigencia_desde.slice(0, 10),
           fecha_vigencia_hasta: data.fecha_vigencia_hasta?.slice(0, 10) ?? "",
         })
       })
       .catch(() => setError("Error cargando distribución"))
       .finally(() => setLoading(false))
   }, [id, authHeaders.Authorization])
-
   async function guardar() {
-    if (!form.fecha_vigencia_desde) { setFormErrors({ desde: "Requerido" }); return }
     setGuardando(true)
     setError(null)
     try {
@@ -103,7 +97,6 @@ export default function EditarDistribucionPage({
         method: "PATCH",
         headers: authHeaders,
         body: JSON.stringify({
-          fecha_vigencia_desde: form.fecha_vigencia_desde,
           fecha_vigencia_hasta: form.fecha_vigencia_hasta || null,
         }),
       })
@@ -116,7 +109,6 @@ export default function EditarDistribucionPage({
       setGuardando(false)
     }
   }
-
   async function eliminar() {
     try {
       const res = await fetch(`/api/distribuciones/${id}`, { method: "DELETE", headers: authHeaders })
@@ -128,25 +120,20 @@ export default function EditarDistribucionPage({
       setConfirmar(false)
     }
   }
-
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando...
     </div>
   )
-
   if (!dist) return (
     <div style={{ padding: "var(--space-8)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
       Distribución no encontrada
     </div>
   )
-
   return (
     <>
       {confirmar && <ModalConfirmar onConfirmar={eliminar} onCancelar={() => setConfirmar(false)} />}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 560 }}>
-
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
@@ -173,7 +160,6 @@ export default function EditarDistribucionPage({
             Eliminar
           </button>
         </div>
-
         {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
@@ -182,36 +168,30 @@ export default function EditarDistribucionPage({
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-
         {/* Formulario */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
-
             <div>
-              <label style={s.label}>Vigencia desde <span style={{ color: "var(--color-error)" }}>*</span></label>
-              <input
-                type="date" value={form.fecha_vigencia_desde}
-                onChange={e => { setForm(p => ({ ...p, fecha_vigencia_desde: e.target.value })); setFormErrors({}) }}
-                style={{ ...s.input, ...(formErrors.desde ? { borderColor: "var(--color-error)" } : {}) }}
-                onFocus={focusStyle} onBlur={blurStyle(!!formErrors.desde)}
-              />
-              {formErrors.desde && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.desde}</span>}
+              <label style={s.label}>Vigencia desde</label>
+              <div style={s.readOnly}>
+                {new Date(dist.fecha_vigencia_desde).toLocaleDateString("es-AR")}
+              </div>
+              <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginTop: "var(--space-1)", display: "block" }}>
+                No se puede modificar una vez creada la distribución.
+              </span>
             </div>
-
             <div>
               <label style={s.label}>
                 Vigencia hasta <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>
               </label>
               <input
                 type="date" value={form.fecha_vigencia_hasta}
-                onChange={e => setForm(p => ({ ...p, fecha_vigencia_hasta: e.target.value }))}
+                onChange={e => setForm({ fecha_vigencia_hasta: e.target.value })}
                 style={s.input}
                 onFocus={focusStyle} onBlur={blurStyle(false)}
               />
             </div>
-
           </div>
-
           <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
             <button
               onClick={() => router.push("/protected/dashboard/distribuciones")}
@@ -228,7 +208,6 @@ export default function EditarDistribucionPage({
             </button>
           </div>
         </div>
-
       </div>
     </>
   )

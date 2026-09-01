@@ -1,6 +1,5 @@
 // app/protected/dashboard/distribuciones/page.tsx
 "use client"
-
 import {
   useDistribuciones,
   DistribucionForm,
@@ -10,7 +9,6 @@ import {
 } from "@/features/distribuciones"
 import { SinModulosBadges } from "@/features/distribuciones/components/SinModulosBadges"
 import { ModalEliminarConReemplazo } from "@/features/distribuciones/components/ModalEliminarConReemplazo"
-
 function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
   mensaje: string; onConfirmar: () => void; onCancelar: () => void
 }) {
@@ -47,14 +45,13 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
     </div>
   )
 }
-
 export default function DistribucionesPage() {
   const {
     distribuciones, loading, error, setError,
     gruposFiltrados, cursosUnicos, turnosUnicos,
     hayFiltros, asignacionesSinDist, distribucionesSinModulos,
     mostrarForm, guardando, confirmarId, setConfirmarId, expandidos,
-    form, formErrors, setCampo, proximaVersion, asignaciones,
+    form, formErrors, setCampo, proximaVersion, distribucionActivaSeleccionada, asignaciones,
     abrirForm, cerrarForm, crear, eliminar, toggleExpandido, limpiarFiltros,
     confirmarEliminacion, cancelarEliminacion, tramoEliminacion,
     filtroTexto, setFiltroTexto,
@@ -62,13 +59,11 @@ export default function DistribucionesPage() {
     filtroTurno, setFiltroTurno,
     filtroEstado, setFiltroEstado,
   } = useDistribuciones()
-
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando distribuciones...
     </div>
   )
-
   return (
     <>
       {confirmarId !== null && tramoEliminacion === null && (
@@ -78,7 +73,6 @@ export default function DistribucionesPage() {
           onCancelar={() => setConfirmarId(null)}
         />
       )}
-
       {tramoEliminacion !== null && (
         <ModalEliminarConReemplazo
           tramo={tramoEliminacion}
@@ -87,9 +81,7 @@ export default function DistribucionesPage() {
           guardando={guardando}
         />
       )}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -109,7 +101,6 @@ export default function DistribucionesPage() {
             </button>
           )}
         </div>
-
         {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
@@ -121,7 +112,6 @@ export default function DistribucionesPage() {
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-
         {/* Formulario */}
         {mostrarForm && (
           <DistribucionForm
@@ -129,13 +119,13 @@ export default function DistribucionesPage() {
             formErrors={formErrors}
             asignaciones={asignaciones}
             proximaVersion={proximaVersion}
+            distribucionActiva={distribucionActivaSeleccionada}
             guardando={guardando}
             onCampo={setCampo}
             onCrear={crear}
             onCancelar={cerrarForm}
           />
         )}
-
         {/* Filtros */}
         {!mostrarForm && distribuciones.length > 0 && (
           <DistribucionFilters
@@ -153,7 +143,6 @@ export default function DistribucionesPage() {
             onLimpiar={limpiarFiltros}
           />
         )}
-
         {/* Resultado filtros */}
         {hayFiltros && (
           <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
@@ -162,7 +151,6 @@ export default function DistribucionesPage() {
               : `${gruposFiltrados.size} asignación${gruposFiltrados.size !== 1 ? "es" : ""} encontrada${gruposFiltrados.size !== 1 ? "s" : ""}`}
           </p>
         )}
-
         {/* Lista */}
         {distribuciones.length === 0 ? (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-12)", textAlign: "center", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
@@ -178,17 +166,14 @@ export default function DistribucionesPage() {
             onLimpiarFiltros={limpiarFiltros}
           />
         )}
-
         {/* Distribuciones activas sin módulos asignados (no generan clases) */}
         {!hayFiltros && (
           <SinModulosBadges distribuciones={distribucionesSinModulos} />
         )}
-
         {/* Asignaciones sin distribución */}
         {!hayFiltros && (
           <SinDistribucionBadges asignaciones={asignacionesSinDist} />
         )}
-
       </div>
     </>
   )

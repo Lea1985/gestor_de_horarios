@@ -1,7 +1,5 @@
 // features/distribuciones/components/DistribucionForm.tsx
-
-import type { Asignacion, DistribucionFormData } from "../types"
-
+import type { Asignacion, Distribucion, DistribucionFormData } from "../types"
 const s = {
   label: {
     fontSize: "var(--text-xs)",
@@ -21,34 +19,32 @@ const s = {
     outline: "none",
   },
 }
-
 function focusStyle(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) {
   e.target.style.borderColor = "var(--color-accent)"
   e.target.style.boxShadow   = "0 0 0 3px rgba(30,155,184,0.12)"
 }
-
 function blurStyle(hasError: boolean) {
   return (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
     e.target.style.borderColor = hasError ? "var(--color-error)" : "var(--color-border)"
     e.target.style.boxShadow   = "none"
   }
 }
-
 type Props = {
-  form:           DistribucionFormData
-  formErrors:     Partial<DistribucionFormData>
-  asignaciones:   Asignacion[]
-  proximaVersion: number
-  guardando:      boolean
-  onCampo:        <K extends keyof DistribucionFormData>(key: K, value: string) => void
-  onCrear:        () => void
-  onCancelar:     () => void
+  form:               DistribucionFormData
+  formErrors:         Partial<DistribucionFormData>
+  asignaciones:       Asignacion[]
+  proximaVersion:     number
+  distribucionActiva: Distribucion | null
+  guardando:          boolean
+  onCampo:            <K extends keyof DistribucionFormData>(key: K, value: string) => void
+  onCrear:            () => void
+  onCancelar:         () => void
 }
-
 export function DistribucionForm({
-  form, formErrors, asignaciones, proximaVersion, guardando,
+  form, formErrors, asignaciones, proximaVersion, distribucionActiva, guardando,
   onCampo, onCrear, onCancelar,
 }: Props) {
+  const bloqueado = !!distribucionActiva
   return (
     <div style={{
       background: "var(--color-surface)",
@@ -65,9 +61,7 @@ export function DistribucionForm({
       }}>
         Nueva distribución
       </h2>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
-
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={s.label}>
             Asignación <span style={{ color: "var(--color-error)" }}>*</span>
@@ -95,25 +89,41 @@ export function DistribucionForm({
             </span>
           )}
         </div>
-
         {form.asignacionId && (
           <div style={{ gridColumn: "1 / -1" }}>
-            <p style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--color-text-secondary)",
-              padding: "6px 10px",
-              background: "var(--color-surface-raised)",
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--color-border)",
-            }}>
-              Se creará la <strong>versión {proximaVersion}</strong>
-              {proximaVersion > 1
-                ? ` (la asignación ya tiene ${proximaVersion - 1} versión${proximaVersion - 1 !== 1 ? "es" : ""})`
-                : " (primera versión)"}
-            </p>
+            {distribucionActiva ? (
+              // UX-DIS-001 — ya existe una distribución ACTIVA para esta asignación.
+              // Crear otra chocaría contra el backend (verificarSolapamiento -> 409).
+              // Avisamos y bloqueamos el submit en vez de dejar que falle.
+              <p style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--color-error)",
+                padding: "8px 10px",
+                background: "var(--color-error-bg)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--color-error)",
+              }}>
+                Esta asignación ya tiene una <strong>distribución activa (versión {distribucionActiva.version})</strong>.
+                No se puede crear otra en paralelo. Para agregar o modificar horarios, gestioná una
+                nueva versión desde Módulos de esa distribución.
+              </p>
+            ) : (
+              <p style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--color-text-secondary)",
+                padding: "6px 10px",
+                background: "var(--color-surface-raised)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--color-border)",
+              }}>
+                Se creará la <strong>versión {proximaVersion}</strong>
+                {proximaVersion > 1
+                  ? ` (la asignación ya tiene ${proximaVersion - 1} versión${proximaVersion - 1 !== 1 ? "es" : ""})`
+                  : " (primera versión)"}
+              </p>
+            )}
           </div>
         )}
-
         <div>
           <label style={s.label}>
             Vigencia desde <span style={{ color: "var(--color-error)" }}>*</span>
@@ -132,7 +142,6 @@ export function DistribucionForm({
             </span>
           )}
         </div>
-
         <div>
           <label style={s.label}>
             Vigencia hasta{" "}
@@ -147,9 +156,7 @@ export function DistribucionForm({
             onBlur={blurStyle(false)}
           />
         </div>
-
       </div>
-
       <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
         <button
           onClick={onCancelar}
@@ -168,7 +175,7 @@ export function DistribucionForm({
         </button>
         <button
           onClick={onCrear}
-          disabled={guardando}
+          disabled={guardando || bloqueado}
           style={{
             padding: "8px 16px",
             borderRadius: "var(--radius-lg)",
@@ -177,14 +184,13 @@ export function DistribucionForm({
             fontSize: "var(--text-sm)",
             fontWeight: "var(--font-medium)",
             color: "white",
-            cursor: guardando ? "not-allowed" : "pointer",
-            opacity: guardando ? 0.6 : 1,
+            cursor: (guardando || bloqueado) ? "not-allowed" : "pointer",
+            opacity: (guardando || bloqueado) ? 0.6 : 1,
           }}
         >
           {guardando ? "Creando..." : "Crear distribución"}
         </button>
       </div>
-
     </div>
   )
 }
