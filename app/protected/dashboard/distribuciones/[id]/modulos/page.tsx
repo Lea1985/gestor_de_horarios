@@ -27,6 +27,12 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
       Cargando módulos...
     </div>
   )
+  // UX-DIS-004 — cargo no-frente-a-curso (preceptor/secretario/director):
+  // se paga por jornal, no por módulo. El criterio ya está resuelto aguas
+  // abajo (Dashboard/reportes filtran por materia == null), pero esta es
+  // la pantalla donde se origina el dato y no explicaba por qué se tildan
+  // "todos los módulos del día" para estos cargos.
+  const esCargoJornalizado = !!dist && !dist.asignacion.materia
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 900 }}>
       {modalVersion && tramoNuevaVersion === null && (
@@ -75,6 +81,12 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
         onCancelarEdicion={cancelarEdicion}
         onNuevaVersion={() => setModalVersion(true)}
       />
+      {esCargoJornalizado && (
+        <div style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+          Este cargo se paga por jornal, no por módulo. Los módulos que selecciones acá se usan
+          únicamente para poder registrar incidencias y reemplazos — no representan clases reales.
+        </div>
+      )}
       {!esActivo && (
         <div style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
           Esta versión está inactiva — solo lectura.
