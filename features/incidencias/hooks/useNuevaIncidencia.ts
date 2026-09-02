@@ -16,13 +16,11 @@ import type {
   ResultadoReemplazo,
 } from "../types"
 import { DATOS_VACIO } from "../types"
-
 export function nombreAgente(a: AsignacionParaIncidencia): string {
   const agente = a.titularidades[0]?.agente
   if (!agente) return "Vacante"
   return `${agente.apellido}, ${agente.nombre}`
 }
-
 // ── Tipos locales para el paso 4 ─────────────────────────────
 export type ClaseParaReemplazo = {
   id:          number
@@ -39,35 +37,29 @@ export type ClaseParaReemplazo = {
   agente:        string
   identificador: string
 }
-
 export type ReemplazoConfig = {
   claseId:             number
   asignacionTitularId: number
   agenteSuplenteId:    number | null
   observacion:         string
 }
-
 // ── Helpers ───────────────────────────────────────────────────
 function minutosAHora(min: number): string {
   const h = Math.floor(min / 60).toString().padStart(2, "0")
   const m = (min % 60).toString().padStart(2, "0")
   return `${h}:${m}`
 }
-
 export function formatearModulo(clase: ClaseParaReemplazo): string {
   if (!clase.modulo) return "Sin módulo"
   return `${clase.modulo.dia_semana} ${minutosAHora(clase.modulo.hora_desde)}–${minutosAHora(clase.modulo.hora_hasta)}`
 }
-
 export function formatearFecha(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" })
 }
-
 // ── Hook ──────────────────────────────────────────────────────
 export function useNuevaIncidencia() {
   const { authHeaders } = useAuth()
-
   // ── Datos base ───────────────────────────────────────────────
   const [asignaciones, setAsignaciones] = useState<AsignacionParaIncidencia[]>([])
   const [codigarios,   setCodigarios]   = useState<Codigario[]>([])
@@ -75,15 +67,12 @@ export function useNuevaIncidencia() {
   const [loadingBase,  setLoadingBase]  = useState(true)
   const [loadingItems, setLoadingItems] = useState(false)
   const [error,        setError]        = useState<string | null>(null)
-
   // ── Pasos ────────────────────────────────────────────────────
   const [paso, setPaso] = useState<1 | 2 | 3 | 4>(1)
-
   // ── Selección ────────────────────────────────────────────────
   const [filtroTexto,   setFiltroTexto]   = useState("")
   const [filtroCurso,   setFiltroCurso]   = useState("")
   const [seleccionados, setSeleccionados] = useState<number[]>([])
-
   // ── Formulario incidencia ────────────────────────────────────
   const [datos,     setDatos]     = useState<DatosComunes>(DATOS_VACIO)
   const [datosErr,  setDatosErr]  = useState<Partial<DatosComunes>>({})
@@ -93,7 +82,6 @@ export function useNuevaIncidencia() {
   // se descartaba silenciosamente). null = no se intentó ningún
   // reemplazo todavía (o se salteó el paso).
   const [resultadoReemplazos, setResultadoReemplazos] = useState<ResultadoReemplazo[] | null>(null)
-
   // ── Paso 4: reemplazos ───────────────────────────────────────
   // Clases reales obtenidas tras crear las incidencias
   const [clasesReemplazo,    setClasesReemplazo]    = useState<ClaseParaReemplazo[]>([])
@@ -107,7 +95,6 @@ export function useNuevaIncidencia() {
   const [guardandoReemplazos, setGuardandoReemplazos] = useState(false)
   // Incidencias creadas (necesitamos asignacionId → incidenciaId para buscar clases)
 const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: number; incidenciaId: number }[]>([])
-
   // ── Carga inicial ────────────────────────────────────────────
   useEffect(() => {
     if (authHeaders.Authorization === "Bearer ") return
@@ -127,7 +114,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     }
     cargar()
   }, [authHeaders.Authorization])
-
   // ── Items cuando cambia codigario ────────────────────────────
   useEffect(() => {
     if (!datos.codigarioId) {
@@ -141,7 +127,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       .catch(() => setItems([]))
       .finally(() => setLoadingItems(false))
   }, [datos.codigarioId])
-
   // ── Derivados ────────────────────────────────────────────────
   const cursosUnicos = useMemo(() => {
     const vistos = new Map<number, string>()
@@ -152,7 +137,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       .map(([id, nombre]) => ({ id, nombre }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
   }, [asignaciones])
-
   const asignacionesFiltradas = useMemo(() => {
     const q = filtroTexto.toLowerCase().trim()
     return asignaciones.filter(a => {
@@ -167,12 +151,10 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       return matchTexto && matchCurso
     })
   }, [asignaciones, filtroTexto, filtroCurso])
-
   const asignacionesLote = useMemo(
     () => asignaciones.filter(a => seleccionados.includes(a.id)),
     [asignaciones, seleccionados]
   )
-
   // ── Selección de asignaciones ────────────────────────────────
   function toggleSeleccion(id: number) {
     setSeleccionados(prev =>
@@ -191,7 +173,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
   function quitarDelLote(id: number) {
     setSeleccionados(prev => prev.filter(x => x !== id))
   }
-
   // ── Validación formulario ────────────────────────────────────
   function validarDatos(): boolean {
     const err: Partial<DatosComunes> = {}
@@ -202,7 +183,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     setDatosErr(err)
     return Object.keys(err).length === 0
   }
-
   // ── Guardar incidencias y cargar clases para paso 4 ──────────
   async function guardarLoteYContinuar() {
     if (!validarDatos()) return
@@ -237,9 +217,16 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       }
     }
     setGuardando(false)
-    // Si todo falló, mostrar resultado directamente
+    // Si todo falló, mostrar resultado directamente.
+    // UX-INC-013: antes esto guardaba el resultado (con el mensaje de
+    // error real de cada asignación, ej. "No hay clases programadas...")
+    // pero nunca navegaba a la pantalla que lo muestra -- el wizard se
+    // quedaba en el paso 3 sin ningún indicio de que falló ni por qué.
+    // La pantalla de resultado (paso 5, componente ResultadoCarga) ya
+    // sabe listar resultados con ok:false y su error.
     if (creadas.length === 0) {
       setResultado(resultados)
+      setPaso(5 as never)
       return
     }
     // Guardar incidencias creadas y resultados parciales para el resultado final
@@ -318,7 +305,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       setLoadingClases(false)
     }
   }
-
   // ── Selección de clases para reemplazo ───────────────────────
   function toggleClase(claseId: number) {
     setClasesSeleccionadas(prev => {
@@ -390,7 +376,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       return m
     })
   }
-
   // ── Guardar reemplazos ───────────────────────────────────────
   async function guardarReemplazos() {
     setGuardandoReemplazos(true)
@@ -442,14 +427,12 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     // Ir al resultado final (el resultado de incidencias ya está en estado)
     setPaso(5 as never) // señal para mostrar resultado
   }
-
   // ── Saltear reemplazos ───────────────────────────────────────
   function saltearReemplazos() {
     // No se intentó crear ningún reemplazo — no hay nada que reportar.
     setResultadoReemplazos(null)
     setPaso(5 as never)
   }
-
   // ── Reintentar solo las fallidas ──────────────────────────────
   // UX-INC-004: antes, "Reintentar fallidas" solo hacía setPaso(3) sin
   // tocar `seleccionados` -- el lote completo (incluidas las asignaciones
@@ -464,7 +447,6 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     setResultado(null)
     setPaso(3)
   }
-
   // Clases agrupadas por asignación para el UI
   const clasesAgrupadasPorAsignacion = useMemo(() => {
     const grupos = new Map<number, { agente: string; identificador: string; clases: ClaseParaReemplazo[] }>()
@@ -483,14 +465,12 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       ...datos,
     }))
   }, [clasesReemplazo])
-
   const clasesConSuplenteIncompleto = useMemo(() => {
     return Array.from(clasesSeleccionadas).filter(id => {
       const config = reemplazos.get(id)
       return !config || config.agenteSuplenteId === null
     })
   }, [clasesSeleccionadas, reemplazos])
-
   return {
     // estado base
     loadingBase, error, setError,
