@@ -1,9 +1,7 @@
 // features/distribuciones/components/DistribucionRow.tsx
-
 import Link from "next/link"
 import type { Distribucion } from "../types"
 import { DiasResumen } from "./DiasResumen"
-
 const s = {
   th: {
     textAlign: "left" as const,
@@ -24,7 +22,6 @@ const s = {
     verticalAlign: "middle" as const,
   },
 }
-
 function Badge({ estado }: { estado: string }) {
   const activo = estado === "ACTIVO"
   return (
@@ -41,7 +38,6 @@ function Badge({ estado }: { estado: string }) {
     </span>
   )
 }
-
 type Props = {
   asignacionId: number
   lista:        Distribucion[]
@@ -49,12 +45,10 @@ type Props = {
   onToggle:     (asignacionId: number) => void
   onEliminar:   (id: number) => void
 }
-
 export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEliminar }: Props) {
   const activa     = lista.find(d => d.estado === "ACTIVO")
   const primera    = lista[0]
   const asignacion = lista[0].asignacion
-
   return (
     <div style={{
       background: "var(--color-surface)",
@@ -87,29 +81,24 @@ export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEl
             }}>
               {asignacion.identificadorEstructural}
             </span>
-
             {asignacion.titularidades?.[0]?.agente && (
               <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", marginLeft: "var(--space-2)" }}>
                 {asignacion.titularidades[0].agente.apellido}, {asignacion.titularidades[0].agente.nombre}
               </span>
             )}
-
             {asignacion.curso && (
               <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-2)" }}>
                 · {asignacion.curso.nombre}
               </span>
             )}
-
             {asignacion.turno && (
               <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-1)" }}>
                 · {asignacion.turno.nombre}
               </span>
             )}
-
             {activa && <DiasResumen distribucion={activa} />}
           </div>
         </div>
-
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
           {activa && <Badge estado="ACTIVO" />}
           <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
@@ -127,7 +116,6 @@ export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEl
           )}
         </div>
       </div>
-
       {/* Tabla de versiones */}
       {expandido && (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -160,6 +148,16 @@ export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEl
                 </td>
                 <td style={s.td}>
                   <div style={{ display: "flex", gap: "var(--space-3)" }}>
+                    {/* UX-DIS-007 — antes esta pantalla era inalcanzable
+                        (ningún link apuntaba acá); se agrega el punto de
+                        entrada real ahora que su Eliminar ya maneja
+                        requiereConfirmacion igual que el listado. */}
+                    <Link
+                      href={`/protected/dashboard/distribuciones/${d.id}`}
+                      style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}
+                    >
+                      Detalle →
+                    </Link>
                     <Link
                       href={`/protected/dashboard/distribuciones/${d.id}/modulos`}
                       style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}

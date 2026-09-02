@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
+import { ModalEliminarConReemplazo } from "@/features/distribuciones/components/ModalEliminarConReemplazo"
+import type { TramoReemplazo } from "@/features/distribuciones/types"
 type Distribucion = {
   id:                    number
   version:               number
@@ -40,15 +42,21 @@ function blurStyle(hasError: boolean) {
     e.target.style.boxShadow   = "none"
   }
 }
-function ModalConfirmar({ onConfirmar, onCancelar }: { onConfirmar: () => void; onCancelar: () => void }) {
+// UX-DIS-005/007 — este modal genérico tenía el mismo problema que ya se
+// corrigió en el listado: no reflejaba estado de carga. Se agrega
+// `guardando` acá también para que el flujo de eliminar desde el detalle
+// sea consistente con el del listado.
+function ModalConfirmar({ onConfirmar, onCancelar, guardando }: { onConfirmar: () => void; onCancelar: () => void; guardando: boolean }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }} onClick={onCancelar}>
       <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-2)" }}>Confirmar eliminación</h3>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>¿Eliminar esta distribución? Se eliminarán también sus módulos asociados.</p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
-          <button onClick={onCancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
-          <button onClick={onConfirmar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}>Eliminar</button>
+          <button onClick={onCancelar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: guardando ? "not-allowed" : "pointer" }}>Cancelar</button>
+          <button onClick={onConfirmar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
+            {guardando ? "Eliminando..." : "Eliminar"}
+          </button>
         </div>
       </div>
     </div>
@@ -67,6 +75,9 @@ export default function EditarDistribucionPage({
   const [guardando,   setGuardando]   = useState(false)
   const [confirmar,   setConfirmar]   = useState(false)
   const [error,       setError]       = useState<string | null>(null)
+  // UX-DIS-007 — segundo paso del borrado, cuando el backend detecta un
+  // reemplazo activo en el tramo (mismo flujo de 2 pasos que useDistribuciones.ts).
+  const [tramoEliminacion, setTramoEliminacion] = useState<TramoReemplazo | null>(null)
   // UX-DIS-002 — "Vigencia desde" quedó como input editable pero el backend
   // (actualizarDistribucion.ts) nunca procesa ese campo: cambiarla implicaría
   // reubicar clases ya generadas, algo que no está implementado. El campo se
@@ -109,16 +120,36 @@ export default function EditarDistribucionPage({
       setGuardando(false)
     }
   }
-  async function eliminar() {
+  // UX-DIS-007 — reescrito para manejar el flujo de 2 pasos: el DELETE
+  // siempre responde 200 (nunca borra nada si requiereConfirmacion es true,
+  // según el comentario explícito en app/api/distribuciones/[id]/route.ts).
+  // Antes esta función solo miraba res.ok y navegaba igual, dando a entender
+  // que se había borrado cuando en realidad no pasó nada.
+  async function eliminar(mantenerReemplazo?: boolean) {
+    setGuardando(true)
+    setError(null)
     try {
-      const res = await fetch(`/api/distribuciones/${id}`, { method: "DELETE", headers: authHeaders })
-      if (!res.ok) { const d = await res.json(); setError(d.error ?? "Error eliminando"); return }
+      const res = await fetch(`/api/distribuciones/${id}`, {
+        method: "DELETE",
+        headers: authHeaders,
+        ...(mantenerReemplazo === undefined ? {} : { body: JSON.stringify({ mantenerReemplazo }) }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? "Error eliminando"); return }
+      if (data.requiereConfirmacion) {
+        setTramoEliminacion(data.tramos?.[0] ?? null)
+        return // no navegamos todavía, el modal de tramo reemplaza a ModalConfirmar
+      }
       router.push("/protected/dashboard/distribuciones")
     } catch {
       setError("Error de red")
     } finally {
       setConfirmar(false)
+      setGuardando(false)
     }
+  }
+  function cancelarEliminacionTramo() {
+    setTramoEliminacion(null)
   }
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
@@ -132,7 +163,17 @@ export default function EditarDistribucionPage({
   )
   return (
     <>
-      {confirmar && <ModalConfirmar onConfirmar={eliminar} onCancelar={() => setConfirmar(false)} />}
+      {confirmar && (
+        <ModalConfirmar onConfirmar={() => eliminar()} onCancelar={() => setConfirmar(false)} guardando={guardando} />
+      )}
+      {tramoEliminacion && (
+        <ModalEliminarConReemplazo
+          tramo={tramoEliminacion}
+          onConfirmar={(mantenerReemplazo) => eliminar(mantenerReemplazo)}
+          onCancelar={cancelarEliminacionTramo}
+          guardando={guardando}
+        />
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 560 }}>
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
