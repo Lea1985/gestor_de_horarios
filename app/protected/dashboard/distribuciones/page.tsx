@@ -9,8 +9,13 @@ import {
 } from "@/features/distribuciones"
 import { SinModulosBadges } from "@/features/distribuciones/components/SinModulosBadges"
 import { ModalEliminarConReemplazo } from "@/features/distribuciones/components/ModalEliminarConReemplazo"
-function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
-  mensaje: string; onConfirmar: () => void; onCancelar: () => void
+// UX-DIS-005 — este modal genérico tenía el mismo problema de raíz que
+// ModalEliminarConReemplazo (que ya se corrigió en el hook): no reflejaba
+// ningún estado de carga mientras se espera la respuesta de eliminar(). Se
+// agrega `guardando` acá también para que el flujo completo de eliminar
+// (con o sin reemplazo de por medio) sea consistente.
+function ModalConfirmar({ mensaje, onConfirmar, onCancelar, guardando }: {
+  mensaje: string; onConfirmar: () => void; onCancelar: () => void; guardando: boolean
 }) {
   return (
     <div
@@ -30,15 +35,17 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button
             onClick={onCancelar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+            disabled={guardando}
+            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: guardando ? "not-allowed" : "pointer" }}
           >
             Cancelar
           </button>
           <button
             onClick={onConfirmar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
+            disabled={guardando}
+            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
           >
-            Eliminar
+            {guardando ? "Eliminando..." : "Eliminar"}
           </button>
         </div>
       </div>
@@ -71,6 +78,7 @@ export default function DistribucionesPage() {
           mensaje="¿Eliminar esta distribución horaria? Se eliminarán también sus módulos asociados."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
+          guardando={guardando}
         />
       )}
       {tramoEliminacion !== null && (

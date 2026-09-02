@@ -168,7 +168,14 @@ export function useDistribuciones() {
   // eliminar(id) — primer llamado, sin decisión sobre reemplazo todavía.
   // Si el backend responde requiereConfirmacion, guardamos el tramo y
   // esperamos a que el usuario decida en el modal (confirmarEliminacion).
+  // UX-DIS-005 — reusamos el mismo flag `guardando` que ya usa crear():
+  // ambos flujos son mutuamente excluyentes en la UI (no hay forma de tener
+  // el form de creación y un modal de eliminar abiertos a la vez), así que
+  // no hace falta un flag dedicado. Se envuelve todo en try/finally para
+  // que se apague incluso en el camino de "requiere confirmación".
   async function eliminar(id: number) {
+    setGuardando(true)
+    setError(null)
     try {
       const result = await distribucionesService.eliminar(id, authHeaders)
       if (result.requiereConfirmacion) {
@@ -181,12 +188,16 @@ export function useDistribuciones() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red")
       setConfirmarId(null)
+    } finally {
+      setGuardando(false)
     }
   }
   // confirmarEliminacion(mantenerReemplazo) — segundo paso, ya con la
   // decisión del usuario sobre el tramo detectado.
   async function confirmarEliminacion(mantenerReemplazo: boolean) {
     if (eliminandoId === null) return
+    setGuardando(true)
+    setError(null)
     try {
       const result = await distribucionesService.eliminar(eliminandoId, authHeaders, mantenerReemplazo)
       if (!result.deleted) {
@@ -200,6 +211,7 @@ export function useDistribuciones() {
       setEliminandoId(null)
       setTramoEliminacion(null)
       setConfirmarId(null)
+      setGuardando(false)
     }
   }
   function cancelarEliminacion() {
