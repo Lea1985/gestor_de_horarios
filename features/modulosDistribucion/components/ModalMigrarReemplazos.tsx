@@ -1,15 +1,19 @@
 // features/modulosDistribucion/components/ModalMigrarReemplazos.tsx
-
 import type { TramoReemplazo } from "../types"
-
 type Props = {
   tramo:       TramoReemplazo
   onConfirmar: (mantenerReemplazo: boolean) => void
   onCancelar:  () => void
   guardando:   boolean
+  // UX-DIS-006 — este modal se reusa desde dos flujos con efectos reales
+  // distintos: "editar módulos" (asignarModulos.ts) suspende Y recrea las
+  // clases del tramo en la misma operación; "nueva versión"
+  // (nuevaVersionDistribucion.ts) solo las suspende — la nueva versión
+  // nace sin módulos, así que no hay nada que recrear todavía. El texto
+  // decía siempre "va a recrear", que era falso para el segundo caso.
+  contexto:    "modulos" | "nuevaVersion"
 }
-
-export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardando }: Props) {
+export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardando, contexto }: Props) {
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }}
@@ -24,9 +28,12 @@ export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardand
             Reemplazo afectado
           </h3>
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
-            Este cambio va a recrear las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} y {new Date(tramo.hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}.          </p>
+            {contexto === "modulos"
+              ? <>Este cambio va a recrear las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} y {new Date(tramo.hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}.</>
+              : <>Este cambio va a suspender las clases entre {new Date(tramo.desde).toLocaleDateString("es-AR", { timeZone: "UTC" })} y {new Date(tramo.hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })} (no se eliminan). Se van a recrear cuando le asignes módulos a la nueva versión.</>
+            }
+          </p>
         </div>
-
         {tramo.migrable && tramo.suplente ? (
           <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border)", fontSize: "var(--text-xs)", color: "var(--color-text-primary)" }}>
             Todo el tramo está cubierto por el mismo suplente:{" "}
@@ -40,7 +47,6 @@ export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardand
             {tramo.clasesConReemplazo} de {tramo.totalClases} clases del tramo tienen reemplazo, pero con más de un suplente distinto (o no cubre el tramo completo) — no se puede mantener automáticamente. Vas a tener que volver a cargar esos reemplazos manualmente después de confirmar.
           </div>
         )}
-
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button
             onClick={onCancelar}
@@ -48,7 +54,6 @@ export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardand
           >
             Cancelar
           </button>
-
           {tramo.migrable && (
             <button
               onClick={() => onConfirmar(false)}
@@ -58,7 +63,6 @@ export function ModalMigrarReemplazos({ tramo, onConfirmar, onCancelar, guardand
               No mantener
             </button>
           )}
-
           <button
             onClick={() => onConfirmar(tramo.migrable)}
             disabled={guardando}

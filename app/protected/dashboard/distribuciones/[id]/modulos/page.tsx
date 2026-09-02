@@ -45,6 +45,7 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
       {tramoNuevaVersion !== null && (
         <ModalMigrarReemplazos
           tramo={tramoNuevaVersion}
+          contexto="nuevaVersion"
           onConfirmar={(mantenerReemplazo) => crearNuevaVersion(mantenerReemplazo)}
           onCancelar={cancelarNuevaVersion}
           guardando={creandoVersion}
@@ -63,6 +64,7 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
       {tramoAConfirmar && (
         <ModalMigrarReemplazos
           tramo={tramoAConfirmar}
+          contexto="modulos"
           onConfirmar={(mantenerReemplazo) => guardar(mantenerReemplazo)}
           onCancelar={cancelarMigracion}
           guardando={guardando}
