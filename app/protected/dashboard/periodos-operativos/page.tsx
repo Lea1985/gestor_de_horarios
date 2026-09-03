@@ -392,7 +392,7 @@ export default function PeriodosOperativosPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este período? Esta acción no se puede deshacer."
+          mensaje="¿Eliminar este período? Vas a poder restaurarlo después desde 'Ver eliminados'."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />

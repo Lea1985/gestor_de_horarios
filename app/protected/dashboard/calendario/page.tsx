@@ -355,7 +355,7 @@ export default function CalendarioEscolarPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este evento? Esta acción no se puede deshacer."
+                    mensaje="¿Eliminar este evento? Vas a poder restaurarlo después desde 'Ver eliminados'."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />
