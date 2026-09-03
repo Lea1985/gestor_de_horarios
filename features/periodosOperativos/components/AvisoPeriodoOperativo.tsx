@@ -41,8 +41,13 @@ type Props = {
   // Si se está renderizando ya dentro de /periodos-operativos, no tiene
   // sentido ofrecer un link a la misma pantalla -- pasar null lo oculta.
   linkDestino?: string | null
+  // Incrementalo desde el padre después de una acción que pueda cambiar
+  // el estado de los períodos (cerrar, activar, eliminar, restaurar,
+  // crear/editar) para forzar un refetch -- este componente tiene su
+  // propio fetch interno y si no, se queda con datos viejos (UX-PER, #162).
+  refreshSignal?: number
 }
-export function AvisoPeriodoOperativo({ linkDestino = "/protected/dashboard/periodos-operativos" }: Props) {
+export function AvisoPeriodoOperativo({ linkDestino = "/protected/dashboard/periodos-operativos", refreshSignal = 0 }: Props) {
   const { authHeaders } = useAuth()
   const router = useRouter()
   const [periodos, setPeriodos] = useState<Periodo[]>([])
@@ -54,7 +59,7 @@ export function AvisoPeriodoOperativo({ linkDestino = "/protected/dashboard/peri
       .then(setPeriodos)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [authHeaders.Authorization])
+  }, [authHeaders.Authorization, refreshSignal])
   const periodoActivo = useMemo(
     () => periodos.find(p => p.estado === "ACTIVO" && !p.deletedAt) ?? null,
     [periodos]

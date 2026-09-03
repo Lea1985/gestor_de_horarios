@@ -136,8 +136,12 @@ export default function PeriodosOperativosPage() {
   const [guardando,    setGuardando]    = useState(false)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
   const [confirmarCierreId, setConfirmarCierreId] = useState<number | null>(null)
+  const [confirmarActivarId, setConfirmarActivarId] = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verEliminados, setVerEliminados] = useState(false)
+  // Incrementado tras cada acción que puede cambiar el estado de los
+  // períodos, para forzar el refetch interno de AvisoPeriodoOperativo (#162).
+  const [refreshSignal, setRefreshSignal] = useState(0)
   // ── Filtro client-side ─────────────────────────────────────
   const periodosFiltrados = useMemo(() => {
     if (!busqueda.trim()) return periodos
@@ -239,6 +243,7 @@ export default function PeriodosOperativosPage() {
         return
       }
       await cargarPeriodos()
+      setRefreshSignal(n => n + 1)
       cancelar()
     } catch {
       setError("Error de red")
@@ -260,6 +265,7 @@ export default function PeriodosOperativosPage() {
         return
       }
       await cargarPeriodos()
+      setRefreshSignal(n => n + 1)
     } catch {
       setError("Error de red")
     } finally {
@@ -272,6 +278,9 @@ export default function PeriodosOperativosPage() {
   // El backend rechaza activar si ya hay otro período ACTIVO —
   // hay que cerrarlo primero. El mensaje de error ya viene armado
   // desde el backend (YaHayPeriodoActivoError), se muestra tal cual.
+  // Genera clases para las distribuciones vigentes y reconcilia TODAS
+  // las clases existentes de la institución contra el nuevo rango —
+  // por eso pasa por un modal de confirmación, igual que "Cerrar" (#139).
   async function activar(id: number) {
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/activar`, {
@@ -297,8 +306,11 @@ export default function PeriodosOperativosPage() {
         )
       }
       await cargarPeriodos()
+      setRefreshSignal(n => n + 1)
     } catch {
       setError("Error de red")
+    } finally {
+      setConfirmarActivarId(null)
     }
   }
   // ── Cerrar (ACTIVO -> CERRADO) ────────────────────────────────
@@ -329,6 +341,7 @@ export default function PeriodosOperativosPage() {
         setAvisoCierre(`Período cerrado. ${partes.join(", ")}.`)
       }
       await cargarPeriodos()
+      setRefreshSignal(n => n + 1)
     } catch {
       setError("Error de red")
     } finally {
@@ -350,6 +363,7 @@ export default function PeriodosOperativosPage() {
         return
       }
       await cargarPeriodos()
+      setRefreshSignal(n => n + 1)
     } catch {
       setError("Error de red")
     }
@@ -384,6 +398,14 @@ export default function PeriodosOperativosPage() {
           onCancelar={() => setConfirmarCierreId(null)}
         />
       )}
+      {confirmarActivarId !== null && (
+        <ModalConfirmar
+          mensaje="¿Activar este período? Se van a generar clases para las distribuciones vigentes con módulos asignados, y se van a reconciliar todas las clases existentes de la institución contra este rango de fechas — algunas podrían quedar suspendidas."
+          textoConfirmar="Activar período"
+          onConfirmar={() => activar(confirmarActivarId)}
+          onCancelar={() => setConfirmarActivarId(null)}
+        />
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -406,7 +428,7 @@ export default function PeriodosOperativosPage() {
           )}
         </div>
         {/* Aviso proactivo: sin período activo, o por vencer (UX-PER-001) */}
-        <AvisoPeriodoOperativo linkDestino={null} />
+        <AvisoPeriodoOperativo linkDestino={null} refreshSignal={refreshSignal} />
         {/* Error global */}
         {error && (
           <div
@@ -618,7 +640,7 @@ export default function PeriodosOperativosPage() {
                               Editar
                             </button>
                             <button
-                              onClick={() => activar(p.id)}
+                              onClick={() => setConfirmarActivarId(p.id)}
                               style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-success, green)", cursor: "pointer", padding: 0 }}
                             >
                               Activar
