@@ -21,6 +21,8 @@ type FormData = {
   fecha_desde: string
   fecha_hasta: string
 }
+
+
 // ── Configuración de campos ──────────────────────────────────
 const CAMPOS: { key: keyof FormData; label: string; required?: boolean }[] = [
   { key: "nombre",      label: "Nombre",          required: true },
@@ -142,6 +144,19 @@ export default function PeriodosOperativosPage() {
     const q = busqueda.toLowerCase()
     return periodos.filter(p => p.nombre.toLowerCase().includes(q))
   }, [periodos, busqueda])
+  // ── Período a cerrar + si el cierre es anticipado (UX-PER-002) ──
+  // "Anticipado" = todavía queda tiempo hasta fecha_hasta: las clases
+  // futuras dentro del período van a quedar SUSPENDIDA, no DICTADA.
+  const periodoACerrar = useMemo(
+    () => periodos.find(p => p.id === confirmarCierreId) ?? null,
+    [periodos, confirmarCierreId]
+  )
+  const cierreAnticipado = useMemo(() => {
+    if (!periodoACerrar) return false
+    const hoy = new Date(); hoy.setUTCHours(0, 0, 0, 0)
+    const hasta = new Date(periodoACerrar.fecha_hasta); hasta.setUTCHours(0, 0, 0, 0)
+    return hasta > hoy
+  }, [periodoACerrar])
   // ── Carga ──────────────────────────────────────────────────
   async function cargarPeriodos() {
     try {
@@ -286,8 +301,9 @@ export default function PeriodosOperativosPage() {
     }
   }
   // ── Cerrar (ACTIVO -> CERRADO) ────────────────────────────────
-  // Congela el período: las clases PROGRAMADA residuales pasan a
-  // DICTADA automáticamente. No se puede deshacer.
+  // Congela el período: las clases PROGRAMADA residuales se resuelven
+  // (DICTADA si fecha ya pasó, SUSPENDIDA/PERIODO_OPERATIVO si es
+  // un cierre anticipado y la fecha es futura). No se puede deshacer.
   async function cerrar(id: number) {
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/cerrar`, {
@@ -345,7 +361,11 @@ export default function PeriodosOperativosPage() {
       )}
       {confirmarCierreId !== null && (
         <ModalConfirmar
-          mensaje="¿Cerrar este período? Las clases pendientes se marcarán como dictadas y no se van a poder hacer más cambios en el período. Esta acción no se puede deshacer."
+          mensaje={
+            cierreAnticipado
+              ? "¿Cerrar este período antes de su fecha de fin? Las clases con fecha ya pasada se van a marcar como dictadas; las clases futuras dentro de este período (hasta su fecha de fin) van a quedar suspendidas, no dictadas. No se van a poder hacer más cambios en el período. Esta acción no se puede deshacer."
+              : "¿Cerrar este período? Las clases pendientes se marcarán como dictadas y no se van a poder hacer más cambios en el período. Esta acción no se puede deshacer."
+          }
           textoConfirmar="Cerrar período"
           onConfirmar={() => cerrar(confirmarCierreId)}
           onCancelar={() => setConfirmarCierreId(null)}
