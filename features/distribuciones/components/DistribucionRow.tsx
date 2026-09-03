@@ -86,11 +86,21 @@ export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEl
                 {asignacion.titularidades[0].agente.apellido}, {asignacion.titularidades[0].agente.nombre}
               </span>
             )}
-            {asignacion.curso && (
-              <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-2)" }}>
-                · {asignacion.curso.nombre}
-              </span>
-            )}
+            {asignacion.unidad && (
+  <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-2)" }}>
+    · {asignacion.unidad.nombre}
+  </span>
+)}
+{asignacion.materia && (
+  <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-1)" }}>
+    · {asignacion.materia.nombre}
+  </span>
+)}
+{asignacion.comision && (
+  <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-1)" }}>
+    · {asignacion.comision.curso.nombre} ({asignacion.comision.nombre})
+  </span>
+)}
             {asignacion.turno && (
               <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginLeft: "var(--space-1)" }}>
                 · {asignacion.turno.nombre}

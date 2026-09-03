@@ -1,6 +1,5 @@
 // features/distribuciones/hooks/useDistribuciones.ts
 // Hook principal de la feature Distribuciones.
-// Absorbe estado, useMemo y handlers desde page.tsx — paso 3.
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { distribucionesService } from "../services/distribucionesService"
@@ -56,10 +55,13 @@ export function useDistribuciones() {
     for (const lista of map.values()) lista.sort((a, b) => b.version - a.version)
     return map
   }, [distribuciones])
+  // #153: el curso solo se llega vía comision.curso -- Asignacion no tiene
+  // relación directa a Curso (era un campo que nunca existió en el tipo
+  // viejo, así que este filtro venía vacío en silencio).
   const cursosUnicos = useMemo(() => {
     const vistos = new Set<string>()
     for (const d of distribuciones) {
-      const nombre = d.asignacion.curso?.nombre
+      const nombre = d.asignacion.comision?.curso?.nombre
       if (nombre) vistos.add(nombre)
     }
     return Array.from(vistos).sort()
@@ -82,7 +84,7 @@ export function useDistribuciones() {
         asignacion.titularidades?.[0]?.agente?.apellido?.toLowerCase().includes(q) ||
         asignacion.titularidades?.[0]?.agente?.nombre?.toLowerCase().includes(q)
       )
-      const matchCurso  = !filtroCurso  || asignacion.curso?.nombre  === filtroCurso
+      const matchCurso  = !filtroCurso  || asignacion.comision?.curso?.nombre === filtroCurso
       const matchTurno  = !filtroTurno  || asignacion.turno?.nombre  === filtroTurno
       const matchEstado = !filtroEstado || lista.some(d => d.estado  === filtroEstado)
       if (matchTexto && matchCurso && matchTurno && matchEstado) resultado.set(asignacionId, lista)

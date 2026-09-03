@@ -1,8 +1,6 @@
 // lib/repositories/asignacionRepository.ts
-
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
-
 const includeBase = {
   unidad: true,
   materia: {
@@ -12,7 +10,9 @@ const includeBase = {
       cursoId: true,
     },
   },
-  comision: true,
+  comision: {
+    include: { curso: true },
+  },
   turno: true,
   titularidades: {
     where: {
@@ -23,11 +23,9 @@ const includeBase = {
     take: 1,
   },
 }
-
 export type AsignacionConTitular = Prisma.AsignacionGetPayload<{
   include: typeof includeBase
 }>
-
 export const asignacionRepository = {
   listar(tenantId: number, incluirInactivas = false) {
     return prisma.asignacion.findMany({
@@ -39,7 +37,6 @@ export const asignacionRepository = {
       orderBy: { createdAt: "desc" },
     })
   },
-
   obtenerPorId(id: number, tenantId: number, incluirEliminados = false) {
     return prisma.asignacion.findFirst({
       where: {
@@ -56,7 +53,6 @@ export const asignacionRepository = {
       },
     })
   },
-
   existeEnTenant(id: number, tenantId: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -67,7 +63,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   async tieneEntidadesRelacionadas(id: number): Promise<boolean> {
     const counts = await prisma.asignacion.findUnique({
       where: { id },
@@ -81,18 +76,14 @@ export const asignacionRepository = {
         },
       },
     })
-
     if (!counts) return false
-
     const { distribuciones, incidencias, ClaseProgramada } = counts._count
-
     return (
       distribuciones > 0 ||
       incidencias > 0 ||
       ClaseProgramada > 0
     )
   },
-
   verificarIdentificador(identificador: string, tenantId: number, excludeId?: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -104,7 +95,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   async actualizar(
     id: number,
     tenantId: number,
@@ -118,18 +108,15 @@ export const asignacionRepository = {
       },
       select: { id: true },
     })
-
     if (!existente) {
       throw new Error("Asignación no encontrada")
     }
-
     return prisma.asignacion.update({
       where: { id: existente.id },
       data,
       include: includeBase,
     })
   },
-
   async softDelete(id: number, tenantId: number) {
     const existente = await prisma.asignacion.findFirst({
       where: {
@@ -139,13 +126,10 @@ export const asignacionRepository = {
       },
       select: { id: true },
     })
-
     if (!existente) {
       throw new Error("Asignación no encontrada")
     }
-
     const ahora = new Date()
-
     return prisma.$transaction([
       prisma.titularAsignacion.updateMany({
         where: {
@@ -158,7 +142,6 @@ export const asignacionRepository = {
           activo: false,
         },
       }),
-
       prisma.asignacion.update({
         where: { id: existente.id },
         data: {
@@ -169,7 +152,6 @@ export const asignacionRepository = {
       }),
     ])
   },
-
   verificarAgente(agenteId: number, tenantId: number) {
     return prisma.agente.findFirst({
       where: {
@@ -180,7 +162,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   verificarUnidad(unidadId: number, tenantId: number) {
     return prisma.unidadOrganizativa.findFirst({
       where: {
@@ -191,7 +172,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   verificarMateria(materiaId: number, tenantId: number) {
     return prisma.materia.findFirst({
       where: {
@@ -202,7 +182,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   verificarComision(comisionId: number, tenantId: number) {
     return prisma.comision.findFirst({
       where: {
@@ -217,7 +196,6 @@ export const asignacionRepository = {
       },
     })
   },
-
   verificarTurno(turnoId: number, tenantId: number) {
     return prisma.turno.findFirst({
       where: {
@@ -228,7 +206,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   existeEliminada(id: number, tenantId: number) {
     return prisma.asignacion.findFirst({
       where: {
@@ -239,7 +216,6 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-
   async reactivar(id: number, tenantId: number) {
     return prisma.$transaction(async (tx) => {
       await tx.asignacion.update({
@@ -250,7 +226,6 @@ export const asignacionRepository = {
           estado:    "ACTIVO",
         },
       })
-
       const ultimaTitularidad = await tx.titularAsignacion.findFirst({
         where: {
           asignacionId: id,
@@ -259,7 +234,6 @@ export const asignacionRepository = {
         },
         orderBy: { fecha_desde: "desc" },
       })
-
       if (ultimaTitularidad) {
         await tx.titularAsignacion.update({
           where: { id: ultimaTitularidad.id },

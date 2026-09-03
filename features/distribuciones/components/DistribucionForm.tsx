@@ -78,8 +78,11 @@ export function DistribucionForm({
               .sort((a, b) => a.identificadorEstructural.localeCompare(b.identificadorEstructural))
               .map(a => (
                 <option key={a.id} value={a.id}>
-                  {a.identificadorEstructural} — {a.titularidades?.[0]?.agente?.apellido}, {a.titularidades?.[0]?.agente?.nombre}
-                  {a.curso ? ` (${a.curso.nombre})` : ""}
+                  {a.identificadorEstructural}
+                  {" · "}{a.unidad.nombre}
+                  {a.materia ? ` · ${a.materia.nombre}` : ""}
+                  {a.comision ? ` · ${a.comision.curso.nombre} (${a.comision.nombre})` : ""}
+                  {" — "}{a.titularidades?.[0]?.agente?.apellido}, {a.titularidades?.[0]?.agente?.nombre}
                 </option>
               ))}
           </select>

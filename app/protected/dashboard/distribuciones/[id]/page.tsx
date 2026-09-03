@@ -16,6 +16,9 @@ type Distribucion = {
   asignacion: {
     identificadorEstructural: string
     titularidades?: { agente: { nombre: string; apellido: string } }[]
+    unidad?:   { nombre: string } | null
+    materia?:  { nombre: string } | null
+    comision?: { nombre: string; curso: { nombre: string } } | null
   }
 }
 const s = {
@@ -195,11 +198,14 @@ export default function EditarDistribucionPage({
               )}
             </div>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{dist.asignacion.identificadorEstructural}</span>
-              {dist.asignacion.titularidades?.[0] && (
-                <span> · {dist.asignacion.titularidades[0].agente.apellido}, {dist.asignacion.titularidades[0].agente.nombre}</span>
-              )}
-            </p>
+  <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{dist.asignacion.identificadorEstructural}</span>
+  {dist.asignacion.titularidades?.[0] && (
+    <span> · {dist.asignacion.titularidades[0].agente.apellido}, {dist.asignacion.titularidades[0].agente.nombre}</span>
+  )}
+  {dist.asignacion.unidad && <span> · {dist.asignacion.unidad.nombre}</span>}
+  {dist.asignacion.materia && <span> · {dist.asignacion.materia.nombre}</span>}
+  {dist.asignacion.comision && <span> · {dist.asignacion.comision.curso.nombre} ({dist.asignacion.comision.nombre})</span>}
+</p>
           </div>
           {esEliminada ? (
             <button

@@ -1,14 +1,10 @@
 // features/distribuciones/components/SinDistribucionBadges.tsx
-
 import type { Asignacion } from "../types"
-
 type Props = {
   asignaciones: Asignacion[]
 }
-
 export function SinDistribucionBadges({ asignaciones }: Props) {
   if (asignaciones.length === 0) return null
-
   return (
     <div style={{
       background: "var(--color-surface)",
@@ -42,9 +38,24 @@ export function SinDistribucionBadges({ asignaciones }: Props) {
             }}
           >
             {a.identificadorEstructural}
+            {a.unidad && (
+              <span style={{ marginLeft: "var(--space-1)", fontFamily: "var(--font-sans)" }}>
+                · {a.unidad.nombre}
+              </span>
+            )}
             {a.materia && (
               <span style={{ marginLeft: "var(--space-1)", fontFamily: "var(--font-sans)" }}>
                 · {a.materia.nombre}
+              </span>
+            )}
+            {a.comision && (
+              <span style={{ marginLeft: "var(--space-1)", fontFamily: "var(--font-sans)" }}>
+                · {a.comision.curso.nombre} ({a.comision.nombre})
+              </span>
+            )}
+            {a.turno && (
+              <span style={{ marginLeft: "var(--space-1)", fontFamily: "var(--font-sans)" }}>
+                · {a.turno.nombre}
               </span>
             )}
           </span>

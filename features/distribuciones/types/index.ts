@@ -1,6 +1,5 @@
 // features/distribuciones/types/index.ts
 // Tipos de dominio de la feature Distribuciones.
-// Extraídos de app/protected/dashboard/distribuciones/page.tsx — paso 1.
 export type Distribucion = {
   id:                   number
   asignacionId:         number
@@ -18,17 +17,27 @@ export type Distribucion = {
   asignacion: {
     identificadorEstructural: string
     titularidades?: { agente: { nombre: string; apellido: string } }[]
-    curso?:  { nombre: string } | null
-    turno?:  { nombre: string } | null
+    // #153: unidad siempre existe en el modelo (Asignacion.unidadId no es
+    // opcional); materia/comision sí son opcionales -- una asignación
+    // jornalizada (preceptor/secretario/director, ver #75/#128) no tiene
+    // ninguna de las dos. Comision no guarda el nombre del curso, solo
+    // cursoId -- por eso el curso siempre se muestra anidado ahí adentro,
+    // nunca hay un "asignacion.curso" directo (el modelo no tiene esa
+    // relación -- antes de #153 este código leía un campo que nunca existió).
+    unidad?:   { nombre: string } | null
+    materia?:  { nombre: string } | null
+    comision?: { nombre: string; curso: { nombre: string } } | null
+    turno?:    { nombre: string } | null
   }
 }
 export type Asignacion = {
   id: number
   identificadorEstructural: string
   titularidades: { agente: { nombre: string; apellido: string } }[]
-  curso:   { nombre: string } | null
-  turno:   { nombre: string } | null
-  materia: { nombre: string } | null
+  unidad:   { nombre: string }
+  materia:  { nombre: string } | null
+  comision: { nombre: string; curso: { nombre: string } } | null
+  turno:    { nombre: string } | null
 }
 export type DistribucionFormData = {
   asignacionId:         string
