@@ -1,12 +1,19 @@
 // lib/usecases/distribuciones/nuevaVersionDistribucion.ts
 import prisma from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
-
 export class DistribucionNoEncontradaError extends Error {
   constructor() { super("Distribución no encontrada") }
 }
-
+// UX-DIS-009: dos pestañas/doble click generando nueva versión al mismo
+// tiempo -- el @@unique([asignacionId, version]) de la DB ya lo impedía a
+// nivel de datos (nunca se corrompía nada), pero el P2002 subía sin
+// capturar y el usuario veía un 500 crudo. Ahora se traduce a un error de
+// dominio con mensaje claro.
+export class VersionEnConflictoError extends Error {
+  constructor() { super("Ya se creó una nueva versión para esta asignación -- recargá la página e intentá de nuevo.") }
+}
 /**
  * Cierra la distribución actual (fecha_vigencia_hasta = ayer, INACTIVO) y
  * crea una nueva versión vacía (sin módulos, a asignar después vía
@@ -30,6 +37,19 @@ export class DistribucionNoEncontradaError extends Error {
  *
  * Nunca se elimina ninguna ClaseProgramada en este flujo — la historia y
  * la identidad de cada clase se preservan, solo cambia su Estado/Causa.
+ *
+ * UX-DIS-009: cerrar la vieja + calcular la próxima versión + crear la
+ * nueva van dentro de un único prisma.$transaction -- si algo falla a
+ * mitad de camino (ej. se corta la conexión), ya no puede quedar la
+ * asignación sin ninguna distribución ACTIVO (la vieja cerrada, la nueva
+ * nunca creada). La suspensión de clases (suspenderNoVigentes) queda
+ * deliberadamente afuera de esta transacción: claseProgramadaService no
+ * acepta hoy un cliente de transacción (lo usan también asignarModulos y
+ * eliminarDistribucion, tocarlo es un cambio de mayor alcance), y es una
+ * operación idempotente/autocorregible -- un updateMany dirigido; si el
+ * swap de versión fallara después, reintentar todo el flujo no duplica
+ * nada. El riesgo real que describía la tarea era la asignación sin
+ * versión ACTIVO, no la suspensión en sí.
  */
 export async function nuevaVersionDistribucion(
   distribucionId: number,
@@ -41,26 +61,20 @@ export async function nuevaVersionDistribucion(
     include: { asignacion: { select: { id: true, unidadId: true, comisionId: true } } },
   })
   if (!actual) throw new DistribucionNoEncontradaError()
-
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
-
   let clasesSuspendidas = 0
   let avisoReemplazoNoAplica = false
-
   if (periodo) {
     const hoy = new Date()
     hoy.setUTCHours(0, 0, 0, 0)
     const hasta = periodo.fecha_hasta
-
     if (hoy <= hasta) {
       const tramos = await claseProgramadaService.resolverCoberturaDelTramo({
         asignacionId: actual.asignacion.id, desde: hoy, hasta,
       })
-
       if (tramos.length > 0 && body?.mantenerReemplazo === undefined) {
         return { ok: false, requiereConfirmacion: true, tramos }
       }
-
       const r = await claseProgramadaService.suspenderNoVigentes({
         institucionId: tenantId,
         asignacionId:  actual.asignacion.id,
@@ -73,46 +87,51 @@ export async function nuevaVersionDistribucion(
       avisoReemplazoNoAplica = body?.mantenerReemplazo === true && tramos.length > 0
     }
   }
-
   const hoy = new Date()
   hoy.setUTCHours(0, 0, 0, 0)
   const ayerFin = new Date(hoy)
   ayerFin.setUTCDate(ayerFin.getUTCDate() - 1)
   ayerFin.setUTCHours(23, 59, 59, 999)
-
-  // Cerrar la distribución actual
-  await prisma.distribucionHoraria.update({
-    where: { id: distribucionId },
-    data: {
-      fecha_vigencia_hasta: ayerFin,
-      estado:               "INACTIVO",
-      activo:               false,
-    },
-  })
-
-  // Calcular nueva versión
-  const ultima = await prisma.distribucionHoraria.findFirst({
-    where:   { asignacionId: actual.asignacionId },
-    orderBy: { version: "desc" },
-    select:  { version: true },
-  })
-  const nuevaVersion = (ultima?.version ?? 0) + 1
-
-  // Crear nueva distribución sin módulos
-  const nueva = await prisma.distribucionHoraria.create({
-    data: {
-      institucionId:        tenantId,
-      asignacionId:         actual.asignacionId,
-      version:              nuevaVersion,
-      fecha_vigencia_desde: hoy,
-      estado:               "ACTIVO",
-    },
-  })
-
+  let nueva
+  try {
+    nueva = await prisma.$transaction(async (tx) => {
+      // Cerrar la distribución actual
+      await tx.distribucionHoraria.update({
+        where: { id: distribucionId },
+        data: {
+          fecha_vigencia_hasta: ayerFin,
+          estado:               "INACTIVO",
+          activo:               false,
+        },
+      })
+      // Calcular nueva versión
+      const ultima = await tx.distribucionHoraria.findFirst({
+        where:   { asignacionId: actual.asignacionId },
+        orderBy: { version: "desc" },
+        select:  { version: true },
+      })
+      const nuevaVersion = (ultima?.version ?? 0) + 1
+      // Crear nueva distribución sin módulos
+      return tx.distribucionHoraria.create({
+        data: {
+          institucionId:        tenantId,
+          asignacionId:         actual.asignacionId,
+          version:              nuevaVersion,
+          fecha_vigencia_desde: hoy,
+          estado:               "ACTIVO",
+        },
+      })
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new VersionEnConflictoError()
+    }
+    throw error
+  }
   return {
     ok:             true,
     nuevaVersionId: nueva.id,
-    version:        nuevaVersion,
+    version:        nueva.version,
     clasesSuspendidas,
     avisoReemplazoNoAplica,
   }
