@@ -1,43 +1,36 @@
 // app/api/periodos-operativos/[id]/route.ts
-
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
-
 import {
   obtenerPeriodo,
   PeriodoNoEncontradoError as ObtenerNotFound,
 } from "@/lib/usecases/periodosOperativos/obtenerPeriodo"
-
 import {
   actualizarPeriodo,
   PeriodoNoEncontradoError as ActualizarNotFound,
   FechasInvalidasError,
   PeriodoCerradoError,
   CampoEstructuralEnPeriodoActivoError,
+  SuperposicionPeriodoError,
 } from "@/lib/usecases/periodosOperativos/actualizarPeriodo"
-
 import {
   eliminarPeriodo,
   PeriodoNoEncontradoError as EliminarNotFound,
   NoSePuedeEliminarPeriodoActivoError,
 } from "@/lib/usecases/periodosOperativos/eliminarPeriodo"
-
 function parseId(id: string) {
   const n = Number(id)
   return isNaN(n) ? null : n
 }
-
 export async function GET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params
   const periodoId = parseId(id)
-
   if (!periodoId) {
     return Response.json({ error: "ID inválido" }, { status: 400 })
   }
-
   return withContext(req, async ({ tenantId }) => {
     try {
       const periodo = await obtenerPeriodo(periodoId, tenantId)
@@ -51,18 +44,15 @@ export async function GET(
     }
   })
 }
-
 export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params
   const periodoId = parseId(id)
-
   if (!periodoId) {
     return Response.json({ error: "ID inválido" }, { status: 400 })
   }
-
   return withContext(req, async ({ tenantId }) => {
     let body
     try {
@@ -70,7 +60,6 @@ export async function PATCH(
     } catch {
       return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
-
     try {
       const periodo = await actualizarPeriodo(periodoId, tenantId, body)
       return Response.json(periodo)
@@ -87,6 +76,9 @@ export async function PATCH(
       if (error instanceof CampoEstructuralEnPeriodoActivoError) {
         return Response.json({ error: error.message }, { status: 409 })
       }
+      if (error instanceof SuperposicionPeriodoError) {
+        return Response.json({ error: error.message }, { status: 409 })
+      }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
@@ -101,18 +93,15 @@ export async function PATCH(
     }
   })
 }
-
 export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params
   const periodoId = parseId(id)
-
   if (!periodoId) {
     return Response.json({ error: "ID inválido" }, { status: 400 })
   }
-
   return withContext(req, async ({ tenantId }) => {
     try {
       const result = await eliminarPeriodo(periodoId, tenantId)

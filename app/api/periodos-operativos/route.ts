@@ -2,8 +2,7 @@
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { listarPeriodos } from "@/lib/usecases/periodosOperativos/listarPeriodos"
-import { crearPeriodo, DatosPeriodoInvalidosError, FechasInvalidasError } from "@/lib/usecases/periodosOperativos/crearPeriodo"
-
+import { crearPeriodo, DatosPeriodoInvalidosError, FechasInvalidasError, SuperposicionPeriodoError } from "@/lib/usecases/periodosOperativos/crearPeriodo"
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     const { searchParams } = new URL(req.url)
@@ -12,7 +11,6 @@ export async function GET(req: Request) {
     return Response.json(periodos)
   })
 }
-
 export async function POST(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     let body
@@ -21,13 +19,15 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
-
     try {
       const result = await crearPeriodo(tenantId, body)
       return Response.json(result, { status: 201 })
     } catch (error) {
       if (error instanceof DatosPeriodoInvalidosError || error instanceof FechasInvalidasError) {
         return Response.json({ error: error.message }, { status: 400 })
+      }
+      if (error instanceof SuperposicionPeriodoError) {
+        return Response.json({ error: error.message }, { status: 409 })
       }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

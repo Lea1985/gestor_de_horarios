@@ -103,7 +103,7 @@ export const periodoOperativoRepository = {
     })
   },
 
-  verificarSuperposicion(
+    verificarSuperposicion(
     tenantId: number,
     fechaDesde: Date,
     fechaHasta: Date,
@@ -117,6 +117,10 @@ export const periodoOperativoRepository = {
         fecha_desde: { lte: fechaHasta },
         fecha_hasta: { gte: fechaDesde },
       },
+      // Si el rango choca con varios períodos a la vez, priorizar el que
+      // sigue vigente (ACTIVO/BORRADOR) sobre uno ya CERRADO -- "ACTIVO" 
+      // "BORRADOR" < "CERRADO" alfabéticamente, así que alcanza con esto.
+      orderBy: { estado: "asc" },
       select: { id: true, nombre: true, fecha_desde: true, fecha_hasta: true },
     })
   },
