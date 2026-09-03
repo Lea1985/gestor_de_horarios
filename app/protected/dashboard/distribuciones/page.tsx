@@ -6,54 +6,9 @@ import {
   DistribucionFilters,
   DistribucionList,
   SinDistribucionBadges,
+  ModalConfirmar,
 } from "@/features/distribuciones"
 import { SinModulosBadges } from "@/features/distribuciones/components/SinModulosBadges"
-// UX-DIS-005 — este modal genérico tenía el mismo problema de raíz que
-// ModalEliminarConReemplazo (que ya se corrigió en el hook): no reflejaba
-// ningún estado de carga mientras se espera la respuesta de eliminar(). Se
-// agrega `guardando` acá también para que el flujo de eliminar sea
-// consistente con el resto del módulo.
-// UX-DIS-011/151: ya no hay segundo paso con ModalEliminarConReemplazo --
-// el bloqueo ahora es directo y anticipado (botón deshabilitado con
-// motivo), así que este es el único modal del flujo de eliminar.
-function ModalConfirmar({ mensaje, onConfirmar, onCancelar, guardando }: {
-  mensaje: string; onConfirmar: () => void; onCancelar: () => void; guardando: boolean
-}) {
-  return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }}
-      onClick={onCancelar}
-    >
-      <div
-        style={{ background: "var(--color-surface)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-2)" }}>
-          Confirmar acción
-        </h3>
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>
-          {mensaje}
-        </p>
-        <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
-          <button
-            onClick={onCancelar}
-            disabled={guardando}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: guardando ? "not-allowed" : "pointer" }}
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirmar}
-            disabled={guardando}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
-          >
-            {guardando ? "Eliminando..." : "Eliminar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 export default function DistribucionesPage() {
   const {
     distribuciones, loading, error, setError,
@@ -76,7 +31,6 @@ export default function DistribucionesPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar esta distribución horaria? Se eliminarán también sus módulos asociados."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
           guardando={guardando}
