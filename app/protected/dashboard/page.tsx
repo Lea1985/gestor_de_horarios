@@ -11,6 +11,7 @@ import { CoberturaPorComision } from "@/lib/reporting/datasets/obtenerCoberturaP
 import { useCoberturaPorComision } from "@/features/dashboard/hooks/useCoberturaPorComision"
 import { MapaCalorSemanal } from "@/features/dashboard/components/MapaCalorSemanal"
 import { ProximosVencimientos } from "@/features/dashboard/components/ProximosVencimientos"
+import { AvisoPeriodoOperativo } from "@/features/periodosOperativos"
 
 const MAX_COMISIONES = 3
 
@@ -488,6 +489,9 @@ export default function DashboardPage() {
           {error}
         </div>
       )}
+
+      {/* ── Aviso de período operativo (UX-PER-001) ─────────────────────────── */}
+      <AvisoPeriodoOperativo />
 
       {/* ── Fila 1: Alertas | Pendientes | Riesgo ──────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 200px", gap: "var(--space-3)", alignItems: "stretch" }}>

@@ -2,6 +2,7 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
+import { AvisoPeriodoOperativo } from "@/features/periodosOperativos"
 // ── Tipos ────────────────────────────────────────────────────
 type EstadoPeriodo = "BORRADOR" | "ACTIVO" | "CERRADO"
 type Periodo = {
@@ -27,8 +28,7 @@ const CAMPOS: { key: keyof FormData; label: string; required?: boolean }[] = [
   { key: "fecha_hasta", label: "Fecha de fin",     required: true },
 ]
 const FORM_VACIO: FormData = { nombre: "", fecha_desde: "", fecha_hasta: "" }
-// Umbral (en días) para avisar que el período activo está por vencer.
-const DIAS_AVISO_VENCIMIENTO = 7
+
 // ── Estilos compartidos ──────────────────────────────────────
 const s = {
   label: {
@@ -66,17 +66,6 @@ const s = {
     color:         "var(--color-text-primary)",
     borderBottom:  "1px solid var(--color-border)",
     verticalAlign: "middle" as const,
-  },
-  avisoSobrio: {
-    display:      "flex",
-    alignItems:   "center",
-    gap:          "var(--space-2)",
-    padding:      "10px 14px",
-    borderRadius: "var(--radius-md)",
-    background:   "var(--color-surface-raised)",
-    border:       "1px solid var(--color-border-strong)",
-    fontSize:     "var(--text-xs)",
-    color:        "var(--color-text-secondary)",
   },
 }
 // ── Modal de confirmación genérico ───────────────────────────
@@ -147,19 +136,6 @@ export default function PeriodosOperativosPage() {
   const [confirmarCierreId, setConfirmarCierreId] = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verEliminados, setVerEliminados] = useState(false)
-  // ── Aviso proactivo: sin período activo / por vencer ────────
-  // Calculado en el cliente a partir de lo que ya se carga -- no hace
-  // falta ningún endpoint nuevo (#81, 24/08/2026).
-  const periodoActivo = useMemo(
-    () => periodos.find(p => p.estado === "ACTIVO" && !p.deletedAt) ?? null,
-    [periodos]
-  )
-  const diasParaVencer = useMemo(() => {
-    if (!periodoActivo) return null
-    const hoy = new Date(); hoy.setUTCHours(0, 0, 0, 0)
-    const hasta = new Date(periodoActivo.fecha_hasta); hasta.setUTCHours(0, 0, 0, 0)
-    return Math.round((hasta.getTime() - hoy.getTime()) / 86_400_000)
-  }, [periodoActivo])
   // ── Filtro client-side ─────────────────────────────────────
   const periodosFiltrados = useMemo(() => {
     if (!busqueda.trim()) return periodos
@@ -396,22 +372,8 @@ export default function PeriodosOperativosPage() {
             </button>
           )}
         </div>
-        {/* Aviso proactivo: sin período activo, o por vencer */}
-        {!periodoActivo ? (
-          <div style={s.avisoSobrio} role="status">
-            No hay ningún período operativo ACTIVO. Las clases no se van a generar ni resolver correctamente hasta que actives uno.
-          </div>
-        ) : diasParaVencer !== null && diasParaVencer <= DIAS_AVISO_VENCIMIENTO ? (
-          <div style={s.avisoSobrio} role="status">
-            El período &quot;{periodoActivo.nombre}&quot; vence{" "}
-            {diasParaVencer < 0
-              ? `hace ${Math.abs(diasParaVencer)} día${Math.abs(diasParaVencer) !== 1 ? "s" : ""}`
-              : diasParaVencer === 0
-              ? "hoy"
-              : `en ${diasParaVencer} día${diasParaVencer !== 1 ? "s" : ""}`}
-            {" "}({new Date(periodoActivo.fecha_hasta).toLocaleDateString("es-AR", { timeZone: "UTC" })}). Preparate para activar el próximo.
-          </div>
-        ) : null}
+        {/* Aviso proactivo: sin período activo, o por vencer (UX-PER-001) */}
+        <AvisoPeriodoOperativo linkDestino={null} />
         {/* Error global */}
         {error && (
           <div
