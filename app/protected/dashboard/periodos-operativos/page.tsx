@@ -305,6 +305,17 @@ export default function PeriodosOperativosPage() {
           `${prev} ${data.distribucionesSinModulos.length} distribución${data.distribucionesSinModulos.length !== 1 ? "es" : ""} sin módulos asignados, sin generar: ${nombres}.`
         )
       }
+      // Reconciliación contra TODAS las clases existentes de la institución
+      // (no solo las de las distribuciones vigentes) — se descartaba
+      // silenciosamente pese a que el backend ya la calcula (UX-PER-006).
+      const { suspendidasPorPeriodo, revertidasACalendario, revertidasAProgramada } = data
+      if (suspendidasPorPeriodo > 0 || revertidasACalendario > 0 || revertidasAProgramada > 0) {
+        const partesReconciliacion: string[] = []
+        if (revertidasAProgramada > 0) partesReconciliacion.push(`${revertidasAProgramada} clase${revertidasAProgramada !== 1 ? "s" : ""} volvieron a quedar programadas`)
+        if (revertidasACalendario > 0) partesReconciliacion.push(`${revertidasACalendario} clase${revertidasACalendario !== 1 ? "s" : ""} quedaron suspendidas por coincidir con el calendario escolar`)
+        if (suspendidasPorPeriodo > 0) partesReconciliacion.push(`${suspendidasPorPeriodo} clase${suspendidasPorPeriodo !== 1 ? "s" : ""} quedaron suspendidas por estar fuera del rango de este período`)
+        setAvisoActivacion(prev => `${prev} Además, ${partesReconciliacion.join("; ")}.`)
+      }
       await cargarPeriodos()
       setRefreshSignal(n => n + 1)
     } catch {
@@ -447,7 +458,7 @@ export default function PeriodosOperativosPage() {
             >×</button>
           </div>
         )}
-        {/* Aviso de activación (informa cuántas clases se generaron) */}
+        {/* Aviso de activación (informa cuántas clases se generaron y la reconciliación) */}
         {avisoActivacion && (
           <div
             style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-success, green)", fontSize: "var(--text-xs)", color: "var(--color-success, green)" }}
