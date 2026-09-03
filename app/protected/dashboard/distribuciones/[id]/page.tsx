@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
-import { ModalEliminarConReemplazo } from "@/features/distribuciones/components/ModalEliminarConReemplazo"
-import type { TramoReemplazo } from "@/features/distribuciones/types"
 type Distribucion = {
   id:                    number
   version:               number
   fecha_vigencia_desde:  string
   fecha_vigencia_hasta:  string | null
   estado:                string
+  deletedAt:             string | null
+  puedeEliminar:         boolean
+  motivoBloqueoEliminar: string | null
   asignacion: {
     identificadorEstructural: string
     titularidades?: { agente: { nombre: string; apellido: string } }[]
@@ -42,20 +43,43 @@ function blurStyle(hasError: boolean) {
     e.target.style.boxShadow   = "none"
   }
 }
-// UX-DIS-005/007 — este modal genérico tenía el mismo problema que ya se
-// corrigió en el listado: no reflejaba estado de carga. Se agrega
-// `guardando` acá también para que el flujo de eliminar desde el detalle
-// sea consistente con el del listado.
-function ModalConfirmar({ onConfirmar, onCancelar, guardando }: { onConfirmar: () => void; onCancelar: () => void; guardando: boolean }) {
+// UX-DIS-005/007/008: modal genérico reutilizado para "Eliminar" y
+// "Reactivar" (antes solo existía para eliminar, sin reflejar guardando).
+// UX-DIS-011/151: ya no hay segundo paso con ModalEliminarConReemplazo --
+// el bloqueo de eliminar ahora es directo y anticipado.
+function ModalConfirmar({
+  titulo         = "Confirmar eliminación",
+  mensaje        = "¿Eliminar esta distribución? Se eliminarán también sus módulos asociados.",
+  labelConfirmar = "Eliminar",
+  destructivo    = true,
+  onConfirmar, onCancelar, guardando,
+}: {
+  titulo?:         string
+  mensaje?:        string
+  labelConfirmar?: string
+  destructivo?:    boolean
+  onConfirmar:     () => void
+  onCancelar:      () => void
+  guardando:       boolean
+}) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }} onClick={onCancelar}>
       <div style={{ background: "var(--color-surface)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 360, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-2)" }}>Confirmar eliminación</h3>
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>¿Eliminar esta distribución? Se eliminarán también sus módulos asociados.</p>
+        <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-2)" }}>{titulo}</h3>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>{mensaje}</p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button onClick={onCancelar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: guardando ? "not-allowed" : "pointer" }}>Cancelar</button>
-          <button onClick={onConfirmar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
-            {guardando ? "Eliminando..." : "Eliminar"}
+          <button
+            onClick={onConfirmar}
+            disabled={guardando}
+            style={{
+              padding: "8px 16px", borderRadius: "var(--radius-lg)", border: destructivo ? "none" : "1px solid var(--color-border-strong)",
+              background: destructivo ? "var(--color-error)" : "var(--color-primary)",
+              fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white",
+              cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1,
+            }}
+          >
+            {guardando ? `${labelConfirmar === "Reactivar" ? "Reactivando" : "Eliminando"}...` : labelConfirmar}
           </button>
         </div>
       </div>
@@ -74,11 +98,9 @@ export default function EditarDistribucionPage({
   const [loading,     setLoading]     = useState(true)
   const [guardando,   setGuardando]   = useState(false)
   const [confirmar,   setConfirmar]   = useState(false)
+  const [confirmarReactivar, setConfirmarReactivar] = useState(false)
   const [error,       setError]       = useState<string | null>(null)
-  // UX-DIS-007 — segundo paso del borrado, cuando el backend detecta un
-  // reemplazo activo en el tramo (mismo flujo de 2 pasos que useDistribuciones.ts).
-  const [tramoEliminacion, setTramoEliminacion] = useState<TramoReemplazo | null>(null)
-  // UX-DIS-002 — "Vigencia desde" quedó como input editable pero el backend
+  // UX-DIS-002: "Vigencia desde" quedó como input editable pero el backend
   // (actualizarDistribucion.ts) nunca procesa ese campo: cambiarla implicaría
   // reubicar clases ya generadas, algo que no está implementado. El campo se
   // mostraba editable sin tener ningún efecto real. Se retira del form y se
@@ -87,16 +109,17 @@ export default function EditarDistribucionPage({
     fecha_vigencia_hasta: "",
   })
   useEffect(() => { params.then(p => setId(p.id)) }, [params])
+  async function cargar() {
+    if (!id || authHeaders.Authorization === "Bearer ") return
+    const data = await fetch(`/api/distribuciones/${id}`, { headers: authHeaders }).then(r => r.json())
+    setDist(data)
+    setForm({
+      fecha_vigencia_hasta: data.fecha_vigencia_hasta?.slice(0, 10) ?? "",
+    })
+  }
   useEffect(() => {
     if (!id || authHeaders.Authorization === "Bearer ") return
-    fetch(`/api/distribuciones/${id}`, { headers: authHeaders })
-      .then(r => r.json())
-      .then(data => {
-        setDist(data)
-        setForm({
-          fecha_vigencia_hasta: data.fecha_vigencia_hasta?.slice(0, 10) ?? "",
-        })
-      })
+    cargar()
       .catch(() => setError("Error cargando distribución"))
       .finally(() => setLoading(false))
   }, [id, authHeaders.Authorization])
@@ -120,26 +143,22 @@ export default function EditarDistribucionPage({
       setGuardando(false)
     }
   }
-  // UX-DIS-007 — reescrito para manejar el flujo de 2 pasos: el DELETE
-  // siempre responde 200 (nunca borra nada si requiereConfirmacion es true,
-  // según el comentario explícito en app/api/distribuciones/[id]/route.ts).
-  // Antes esta función solo miraba res.ok y navegaba igual, dando a entender
-  // que se había borrado cuando en realidad no pasó nada.
-  async function eliminar(mantenerReemplazo?: boolean) {
+  // UX-DIS-011/151: eliminar() simplificado -- ya no hay segundo paso con
+  // tramo de reemplazo. El backend bloquea de entrada (409) si la
+  // distribución no está ACTIVO o tiene incidencias asociadas; el botón
+  // ya está deshabilitado en ese caso (ver dist.puedeEliminar), así que
+  // llegar acá con un bloqueo debería ser raro -- se maneja igual por si
+  // el estado cambió entre que se cargó la pantalla y que se confirmó.
+  async function eliminar() {
     setGuardando(true)
     setError(null)
     try {
       const res = await fetch(`/api/distribuciones/${id}`, {
         method: "DELETE",
         headers: authHeaders,
-        ...(mantenerReemplazo === undefined ? {} : { body: JSON.stringify({ mantenerReemplazo }) }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? "Error eliminando"); return }
-      if (data.requiereConfirmacion) {
-        setTramoEliminacion(data.tramos?.[0] ?? null)
-        return // no navegamos todavía, el modal de tramo reemplaza a ModalConfirmar
-      }
       router.push("/protected/dashboard/distribuciones")
     } catch {
       setError("Error de red")
@@ -148,8 +167,26 @@ export default function EditarDistribucionPage({
       setGuardando(false)
     }
   }
-  function cancelarEliminacionTramo() {
-    setTramoEliminacion(null)
+  // UX-DIS-008: reactivar una distribución eliminada. Recarga los datos
+  // al terminar (en vez de navegar) para que la misma pantalla pase de
+  // mostrar "Eliminada" a mostrar el formulario normal.
+  async function reactivar() {
+    setGuardando(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/distribuciones/${id}/reactivar`, {
+        method:  "POST",
+        headers: authHeaders,
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? "Error reactivando"); return }
+      await cargar()
+    } catch {
+      setError("Error de red")
+    } finally {
+      setConfirmarReactivar(false)
+      setGuardando(false)
+    }
   }
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
@@ -161,16 +198,20 @@ export default function EditarDistribucionPage({
       Distribución no encontrada
     </div>
   )
+  const esEliminada = !!dist.deletedAt
   return (
     <>
       {confirmar && (
-        <ModalConfirmar onConfirmar={() => eliminar()} onCancelar={() => setConfirmar(false)} guardando={guardando} />
+        <ModalConfirmar onConfirmar={eliminar} onCancelar={() => setConfirmar(false)} guardando={guardando} />
       )}
-      {tramoEliminacion && (
-        <ModalEliminarConReemplazo
-          tramo={tramoEliminacion}
-          onConfirmar={(mantenerReemplazo) => eliminar(mantenerReemplazo)}
-          onCancelar={cancelarEliminacionTramo}
+      {confirmarReactivar && (
+        <ModalConfirmar
+          titulo="Confirmar reactivación"
+          mensaje="¿Reactivar esta distribución?"
+          labelConfirmar="Reactivar"
+          destructivo={false}
+          onConfirmar={reactivar}
+          onCancelar={() => setConfirmarReactivar(false)}
           guardando={guardando}
         />
       )}
@@ -184,9 +225,16 @@ export default function EditarDistribucionPage({
             >
               ← Volver
             </button>
-            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
-              Distribución v{dist.version}
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+              <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
+                Distribución v{dist.version}
+              </h1>
+              {esEliminada && (
+                <span style={{ fontSize: "var(--text-2xs)", padding: "2px 8px", borderRadius: "var(--radius-full)", background: "var(--color-surface-raised)", color: "var(--color-text-hint)", border: "1px solid var(--color-border)" }}>
+                  Eliminada
+                </span>
+              )}
+            </div>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginTop: "var(--space-1)" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{dist.asignacion.identificadorEstructural}</span>
               {dist.asignacion.titularidades?.[0] && (
@@ -194,12 +242,37 @@ export default function EditarDistribucionPage({
               )}
             </p>
           </div>
-          <button
-            onClick={() => setConfirmar(true)}
-            style={{ padding: "8px 14px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", color: "white", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
-          >
-            Eliminar
-          </button>
+          {esEliminada ? (
+            <button
+              onClick={() => setConfirmarReactivar(true)}
+              style={{ padding: "9px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", color: "var(--color-text-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", cursor: "pointer" }}
+            >
+              Reactivar
+            </button>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "var(--space-1)" }}>
+              <button
+                onClick={() => dist.puedeEliminar && setConfirmar(true)}
+                disabled={!dist.puedeEliminar}
+                title={dist.motivoBloqueoEliminar ?? undefined}
+                style={{
+                  padding: "8px 14px", borderRadius: "var(--radius-lg)", border: "none",
+                  background: dist.puedeEliminar ? "var(--color-error)" : "var(--color-surface-raised)",
+                  color: dist.puedeEliminar ? "white" : "var(--color-text-hint)",
+                  fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)",
+                  cursor: dist.puedeEliminar ? "pointer" : "not-allowed",
+                  opacity: dist.puedeEliminar ? 1 : 0.6,
+                }}
+              >
+                Eliminar
+              </button>
+              {dist.motivoBloqueoEliminar && (
+                <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-text-hint)" }}>
+                  {dist.motivoBloqueoEliminar}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {/* Error */}
         {error && (
@@ -209,46 +282,48 @@ export default function EditarDistribucionPage({
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-        {/* Formulario */}
-        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
-            <div>
-              <label style={s.label}>Vigencia desde</label>
-              <div style={s.readOnly}>
-                {new Date(dist.fecha_vigencia_desde).toLocaleDateString("es-AR")}
+        {/* Formulario — oculto si está eliminada, no tiene sentido editar vigencia de algo eliminado */}
+        {!esEliminada && (
+          <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+              <div>
+                <label style={s.label}>Vigencia desde</label>
+                <div style={s.readOnly}>
+                  {new Date(dist.fecha_vigencia_desde).toLocaleDateString("es-AR")}
+                </div>
+                <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginTop: "var(--space-1)", display: "block" }}>
+                  No se puede modificar una vez creada la distribución.
+                </span>
               </div>
-              <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginTop: "var(--space-1)", display: "block" }}>
-                No se puede modificar una vez creada la distribución.
-              </span>
+              <div>
+                <label style={s.label}>
+                  Vigencia hasta <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>
+                </label>
+                <input
+                  type="date" value={form.fecha_vigencia_hasta}
+                  onChange={e => setForm({ fecha_vigencia_hasta: e.target.value })}
+                  style={s.input}
+                  onFocus={focusStyle} onBlur={blurStyle(false)}
+                />
+              </div>
             </div>
-            <div>
-              <label style={s.label}>
-                Vigencia hasta <span style={{ color: "var(--color-text-hint)", fontWeight: 400 }}>(opcional)</span>
-              </label>
-              <input
-                type="date" value={form.fecha_vigencia_hasta}
-                onChange={e => setForm({ fecha_vigencia_hasta: e.target.value })}
-                style={s.input}
-                onFocus={focusStyle} onBlur={blurStyle(false)}
-              />
+            <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => router.push("/protected/dashboard/distribuciones")}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardar}
+                disabled={guardando}
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
+              >
+                {guardando ? "Guardando..." : "Guardar cambios"}
+              </button>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
-            <button
-              onClick={() => router.push("/protected/dashboard/distribuciones")}
-              style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={guardar}
-              disabled={guardando}
-              style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}
-            >
-              {guardando ? "Guardando..." : "Guardar cambios"}
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </>
   )

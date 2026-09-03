@@ -3,18 +3,15 @@ import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { obtenerDistribucion, DistribucionNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/distribuciones/obtenerDistribucion"
 import { actualizarDistribucion, DistribucionNoEncontradaError as ActualizarNotFound, SinCamposError } from "@/lib/usecases/distribuciones/actualizarDistribucion"
-import { eliminarDistribucion } from "@/lib/usecases/distribuciones/eliminarDistribucion"
-
+import { eliminarDistribucion, DistribucionNoActivaError, TieneIncidenciasError } from "@/lib/usecases/distribuciones/eliminarDistribucion"
 function parseId(id: string) {
   const n = Number(id)
   return isNaN(n) ? null : n
 }
-
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
   const distId = parseId(id)
   if (!distId) return Response.json({ error: "ID inválido" }, { status: 400 })
-
   return withContext(req, async ({ tenantId }) => {
     try {
       return Response.json(await obtenerDistribucion(distId, tenantId))
@@ -24,12 +21,10 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     }
   })
 }
-
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
   const distId = parseId(id)
   if (!distId) return Response.json({ error: "ID inválido" }, { status: 400 })
-
   return withContext(req, async ({ tenantId }) => {
     let body
     try { body = await req.json() } catch {
@@ -47,28 +42,23 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     }
   })
 }
-
+// UX-DIS-011/151: ya no acepta body -- el flujo de dos pasos con
+// mantenerReemplazo/requiereConfirmacion se eliminó. Ahora el bloqueo es
+// directo: si no se puede eliminar, eliminarDistribucion tira un error
+// específico (409) con el motivo.
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params
   const distId = parseId(id)
   if (!distId) return Response.json({ error: "ID inválido" }, { status: 400 })
-
   return withContext(req, async ({ tenantId }) => {
-    // El body es opcional: DELETE sin body = primera llamada (puede volver
-    // requiereConfirmacion). DELETE con { mantenerReemplazo } = confirmación.
-    let body: { mantenerReemplazo?: boolean } = {}
     try {
-      const text = await req.text()
-      if (text) body = JSON.parse(text)
-    } catch {
-      return Response.json({ error: "JSON inválido" }, { status: 400 })
+      const result = await eliminarDistribucion(distId, tenantId)
+      return Response.json(result)
+    } catch (error) {
+      if (error instanceof DistribucionNoActivaError) return Response.json({ error: error.message }, { status: 409 })
+      if (error instanceof TieneIncidenciasError)     return Response.json({ error: error.message }, { status: 409 })
+      console.error("Error eliminando distribución:", error)
+      return Response.json({ error: "Error eliminando distribución" }, { status: 500 })
     }
-
-    const result = await eliminarDistribucion(distId, tenantId, body)
-
-    // IMPORTANTE: si requiereConfirmacion, NO es un borrado exitoso.
-    // Devolvemos 200 igual (es una pregunta, no un error) pero el frontend
-    // DEBE chequear el flag antes de asumir que se borró algo.
-    return Response.json(result)
   })
 }

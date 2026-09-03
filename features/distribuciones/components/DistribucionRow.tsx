@@ -148,10 +148,6 @@ export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEl
                 </td>
                 <td style={s.td}>
                   <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                    {/* UX-DIS-007 — antes esta pantalla era inalcanzable
-                        (ningún link apuntaba acá); se agrega el punto de
-                        entrada real ahora que su Eliminar ya maneja
-                        requiereConfirmacion igual que el listado. */}
                     <Link
                       href={`/protected/dashboard/distribuciones/${d.id}`}
                       style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}
@@ -164,16 +160,24 @@ export function DistribucionRow({ asignacionId, lista, expandido, onToggle, onEl
                     >
                       Módulos {d._count.distribucionModulos > 0 ? `(${d._count.distribucionModulos})` : ""}
                     </Link>
+                    {/* UX-DIS-011/151 — antes se mostraba "Eliminar" para
+                        cualquier versión ACTIVO, y recién al intentarlo se
+                        sabía si el backend lo iba a rechazar. Ahora el
+                        backend ya manda puedeEliminar/motivoBloqueoEliminar
+                        calculados, así que el botón se deshabilita de
+                        entrada con el motivo real en el tooltip. */}
                     {d.estado === "ACTIVO" && (
                       <button
-                        onClick={() => onEliminar(d.id)}
+                        onClick={() => d.puedeEliminar && onEliminar(d.id)}
+                        disabled={!d.puedeEliminar}
+                        title={d.motivoBloqueoEliminar ?? undefined}
                         style={{
                           background: "none",
                           border: "none",
                           fontSize: "var(--text-xs)",
                           fontWeight: "var(--font-medium)",
-                          color: "var(--color-error)",
-                          cursor: "pointer",
+                          color: d.puedeEliminar ? "var(--color-error)" : "var(--color-text-hint)",
+                          cursor: d.puedeEliminar ? "pointer" : "not-allowed",
                           padding: 0,
                         }}
                       >

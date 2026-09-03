@@ -8,12 +8,14 @@ import {
   SinDistribucionBadges,
 } from "@/features/distribuciones"
 import { SinModulosBadges } from "@/features/distribuciones/components/SinModulosBadges"
-import { ModalEliminarConReemplazo } from "@/features/distribuciones/components/ModalEliminarConReemplazo"
 // UX-DIS-005 — este modal genérico tenía el mismo problema de raíz que
 // ModalEliminarConReemplazo (que ya se corrigió en el hook): no reflejaba
 // ningún estado de carga mientras se espera la respuesta de eliminar(). Se
-// agrega `guardando` acá también para que el flujo completo de eliminar
-// (con o sin reemplazo de por medio) sea consistente.
+// agrega `guardando` acá también para que el flujo de eliminar sea
+// consistente con el resto del módulo.
+// UX-DIS-011/151: ya no hay segundo paso con ModalEliminarConReemplazo --
+// el bloqueo ahora es directo y anticipado (botón deshabilitado con
+// motivo), así que este es el único modal del flujo de eliminar.
 function ModalConfirmar({ mensaje, onConfirmar, onCancelar, guardando }: {
   mensaje: string; onConfirmar: () => void; onCancelar: () => void; guardando: boolean
 }) {
@@ -60,7 +62,6 @@ export default function DistribucionesPage() {
     mostrarForm, guardando, confirmarId, setConfirmarId, expandidos,
     form, formErrors, setCampo, proximaVersion, distribucionActivaSeleccionada, asignaciones,
     abrirForm, cerrarForm, crear, eliminar, toggleExpandido, limpiarFiltros,
-    confirmarEliminacion, cancelarEliminacion, tramoEliminacion,
     filtroTexto, setFiltroTexto,
     filtroCurso, setFiltroCurso,
     filtroTurno, setFiltroTurno,
@@ -73,19 +74,11 @@ export default function DistribucionesPage() {
   )
   return (
     <>
-      {confirmarId !== null && tramoEliminacion === null && (
+      {confirmarId !== null && (
         <ModalConfirmar
           mensaje="¿Eliminar esta distribución horaria? Se eliminarán también sus módulos asociados."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
-          guardando={guardando}
-        />
-      )}
-      {tramoEliminacion !== null && (
-        <ModalEliminarConReemplazo
-          tramo={tramoEliminacion}
-          onConfirmar={confirmarEliminacion}
-          onCancelar={cancelarEliminacion}
           guardando={guardando}
         />
       )}

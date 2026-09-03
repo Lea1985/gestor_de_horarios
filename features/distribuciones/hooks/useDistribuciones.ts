@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { distribucionesService } from "../services/distribucionesService"
-import type { Distribucion, Asignacion, DistribucionFormData, TramoReemplazo } from "../types"
+import type { Distribucion, Asignacion, DistribucionFormData } from "../types"
 import { FORM_VACIO } from "../types"
 export function useDistribuciones() {
   const { authHeaders } = useAuth()
@@ -18,9 +18,6 @@ export function useDistribuciones() {
   const [guardando,   setGuardando]   = useState(false)
   const [confirmarId, setConfirmarId] = useState<number | null>(null)
   const [expandidos,  setExpandidos]  = useState<Set<number>>(new Set())
-  // ── eliminación con reemplazo (segundo paso, condicional) ────────────────
-  const [tramoEliminacion, setTramoEliminacion] = useState<TramoReemplazo | null>(null)
-  const [eliminandoId,     setEliminandoId]     = useState<number | null>(null)
   // ── form ───────────────────────────────────────────────────────────────────
   const [form,       setForm]       = useState<DistribucionFormData>(FORM_VACIO)
   const [formErrors, setFormErrors] = useState<Partial<DistribucionFormData>>({})
@@ -165,24 +162,19 @@ export function useDistribuciones() {
       setGuardando(false)
     }
   }
-  // eliminar(id) — primer llamado, sin decisión sobre reemplazo todavía.
-  // Si el backend responde requiereConfirmacion, guardamos el tramo y
-  // esperamos a que el usuario decida en el modal (confirmarEliminacion).
-  // UX-DIS-005 — reusamos el mismo flag `guardando` que ya usa crear():
-  // ambos flujos son mutuamente excluyentes en la UI (no hay forma de tener
-  // el form de creación y un modal de eliminar abiertos a la vez), así que
-  // no hace falta un flag dedicado. Se envuelve todo en try/finally para
-  // que se apague incluso en el camino de "requiere confirmación".
+  // UX-DIS-011/151: eliminar() simplificado -- ya no hay segundo paso con
+  // tramo de reemplazo. El backend ahora bloquea de entrada (409) si la
+  // distribución no está ACTIVO o tiene incidencias asociadas; el motivo
+  // real llega en el mensaje de error. La UI ya deshabilita el botón
+  // "Eliminar" de forma proactiva usando puedeEliminar/motivoBloqueoEliminar
+  // (ver DistribucionRow.tsx), así que llegar acá con un bloqueo debería
+  // ser raro -- pero igual se maneja el error por si el estado cambió
+  // entre que se cargó la lista y que se confirmó el borrado.
   async function eliminar(id: number) {
     setGuardando(true)
     setError(null)
     try {
-      const result = await distribucionesService.eliminar(id, authHeaders)
-      if (result.requiereConfirmacion) {
-        setEliminandoId(id)
-        setTramoEliminacion(result.tramos?.[0] ?? null)
-        return // no cerramos confirmarId todavía, el modal de tramo lo reemplaza
-      }
+      await distribucionesService.eliminar(id, authHeaders)
       await cargar()
       setConfirmarId(null)
     } catch (e) {
@@ -191,33 +183,6 @@ export function useDistribuciones() {
     } finally {
       setGuardando(false)
     }
-  }
-  // confirmarEliminacion(mantenerReemplazo) — segundo paso, ya con la
-  // decisión del usuario sobre el tramo detectado.
-  async function confirmarEliminacion(mantenerReemplazo: boolean) {
-    if (eliminandoId === null) return
-    setGuardando(true)
-    setError(null)
-    try {
-      const result = await distribucionesService.eliminar(eliminandoId, authHeaders, mantenerReemplazo)
-      if (!result.deleted) {
-        setError("No se pudo eliminar la distribución")
-        return
-      }
-      await cargar()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error de red")
-    } finally {
-      setEliminandoId(null)
-      setTramoEliminacion(null)
-      setConfirmarId(null)
-      setGuardando(false)
-    }
-  }
-  function cancelarEliminacion() {
-    setEliminandoId(null)
-    setTramoEliminacion(null)
-    setConfirmarId(null)
   }
   function toggleExpandido(asignacionId: number) {
     setExpandidos(prev => {
@@ -266,9 +231,6 @@ export function useDistribuciones() {
     cerrarForm,
     crear,
     eliminar,
-    confirmarEliminacion,
-    cancelarEliminacion,
-    tramoEliminacion,
     toggleExpandido,
     limpiarFiltros,
     // filtros

@@ -6,7 +6,10 @@ function parseDate(value: unknown): Date | null {
   const d = new Date(value as string)
   return isNaN(d.getTime()) ? null : d
 }
-function solapa(inicioA: Date, finA: Date, inicioB: Date, finB: Date) {
+// UX-DIS-011/151: exportada -- se reusa desde eliminarDistribucion.ts y
+// listarDistribuciones.ts/obtenerDistribucion.ts para el chequeo de
+// incidencias solapadas con el tramo de una distribución puntual.
+export function solapa(inicioA: Date, finA: Date, inicioB: Date, finB: Date) {
   return inicioA <= finB && finA >= inicioB
 }
 // Include completo para la lista — incluye agente, curso y turno
@@ -50,12 +53,16 @@ listar(tenantId: number) {
     },
   })
 },
-  obtenerPorId(id: number, tenantId: number) {
+  // UX-DIS-008: incluirEliminados permite que la pantalla de detalle
+  // pueda cargar una distribución eliminada (para mostrar el badge
+  // "Eliminada" + botón Reactivar), igual que asignacionRepository ya
+  // hace para Asignaciones. El listado sigue sin usar este flag nunca.
+  obtenerPorId(id: number, tenantId: number, incluirEliminados = false) {
     return prisma.distribucionHoraria.findFirst({
       where: {
         id,
         institucionId: tenantId,
-        deletedAt: null,
+        ...(incluirEliminados ? {} : { deletedAt: null }),
       },
       include: {
         asignacion: {
@@ -79,6 +86,48 @@ listar(tenantId: number) {
       select: {
         id: true,
       },
+    })
+  },
+  // UX-DIS-008: para reactivarDistribucion -- confirma que la distribución
+  // existe Y está eliminada, y devuelve asignacionId + estado (el estado
+  // hace falta para decidir si aplica la guarda de "ya existe una activa";
+  // ver reactivarDistribucion.ts).
+  existeEliminada(id: number, tenantId: number) {
+    return prisma.distribucionHoraria.findFirst({
+      where: {
+        id,
+        institucionId: tenantId,
+        deletedAt: { not: null },
+      },
+      select: { id: true, asignacionId: true, estado: true },
+    })
+  },
+  // UX-DIS-008: a propósito NO toca `estado` -- eliminar() tampoco lo
+  // toca (deja lo que ya tenía la fila, ACTIVO o INACTIVO), así que
+  // reactivar() solo revierte el soft-delete y deja el estado real como
+  // estaba. Forzarlo a ACTIVO acá rompería el invariante de "una sola
+  // versión ACTIVO por asignación" si mientras tanto se creó una versión
+  // nueva (ver la guarda YaExisteActivaError en reactivarDistribucion.ts).
+  async reactivar(id: number, tenantId: number) {
+    return prisma.distribucionHoraria.update({
+      where: { id },
+      data: { activo: true, deletedAt: null },
+    })
+  },
+  // UX-DIS-011/151: cierre automático por vencimiento de fecha, disparado
+  // "por tráfico, sin cron" (mismo patrón que resolverClasesVencidas,
+  // #15) -- se llama al principio de listar/obtener, nunca en background.
+  async cerrarVencidas(tenantId: number) {
+    const hoy = new Date()
+    hoy.setUTCHours(0, 0, 0, 0)
+    return prisma.distribucionHoraria.updateMany({
+      where: {
+        institucionId: tenantId,
+        estado: "ACTIVO",
+        deletedAt: null,
+        fecha_vigencia_hasta: { lt: hoy },
+      },
+      data: { estado: "INACTIVO" },
     })
   },
   /**
