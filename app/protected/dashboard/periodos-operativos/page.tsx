@@ -267,6 +267,7 @@ export default function PeriodosOperativosPage() {
     }
   }
   const [avisoActivacion, setAvisoActivacion] = useState<string | null>(null)
+  const [avisoCierre,     setAvisoCierre]     = useState<string | null>(null)
   // ── Activar (BORRADOR -> ACTIVO) ─────────────────────────────
   // El backend rechaza activar si ya hay otro período ACTIVO —
   // hay que cerrarlo primero. El mensaje de error ya viene armado
@@ -304,16 +305,28 @@ export default function PeriodosOperativosPage() {
   // Congela el período: las clases PROGRAMADA residuales se resuelven
   // (DICTADA si fecha ya pasó, SUSPENDIDA/PERIODO_OPERATIVO si es
   // un cierre anticipado y la fecha es futura). No se puede deshacer.
+  // El backend devuelve los contadores reales del impacto — se muestran
+  // acá en vez de descartarse (UX-PER-003).
   async function cerrar(id: number) {
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/cerrar`, {
         method: "POST",
         headers: authHeaders,
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         setError(data.error ?? "Error cerrando período")
         return
+      }
+      const dictadas    = data.clasesMarcadasDictadas ?? 0
+      const suspendidas = data.clasesSuspendidasPorPeriodo ?? 0
+      if (dictadas === 0 && suspendidas === 0) {
+        setAvisoCierre("Período cerrado. No había clases pendientes en este período.")
+      } else {
+        const partes: string[] = []
+        if (dictadas > 0) partes.push(`${dictadas} clase${dictadas !== 1 ? "s" : ""} marcada${dictadas !== 1 ? "s" : ""} como dictada${dictadas !== 1 ? "s" : ""}`)
+        if (suspendidas > 0) partes.push(`${suspendidas} clase${suspendidas !== 1 ? "s" : ""} suspendida${suspendidas !== 1 ? "s" : ""} por cierre de período`)
+        setAvisoCierre(`Período cerrado. ${partes.join(", ")}.`)
       }
       await cargarPeriodos()
     } catch {
@@ -421,6 +434,20 @@ export default function PeriodosOperativosPage() {
             {avisoActivacion}
             <button
               onClick={() => setAvisoActivacion(null)}
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-success, green)", fontSize: "var(--text-base)", lineHeight: 1 }}
+              aria-label="Cerrar"
+            >×</button>
+          </div>
+        )}
+        {/* Aviso de cierre (informa el impacto real: dictadas vs suspendidas) — UX-PER-003 */}
+        {avisoCierre && (
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-success, green)", fontSize: "var(--text-xs)", color: "var(--color-success, green)" }}
+            role="status"
+          >
+            {avisoCierre}
+            <button
+              onClick={() => setAvisoCierre(null)}
               style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-success, green)", fontSize: "var(--text-base)", lineHeight: 1 }}
               aria-label="Cerrar"
             >×</button>
