@@ -1,6 +1,6 @@
 // app/protected/dashboard/periodos-operativos/page.tsx
 "use client"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { AvisoPeriodoOperativo } from "@/features/periodosOperativos"
 // ── Tipos ────────────────────────────────────────────────────
@@ -76,11 +76,13 @@ function ModalConfirmar({
   textoConfirmar = "Eliminar",
   onConfirmar,
   onCancelar,
+  deshabilitado = false,
 }: {
   mensaje:         string
   textoConfirmar?: string
   onConfirmar:     () => void
   onCancelar:      () => void
+  deshabilitado?:  boolean
 }) {
   return (
     <div
@@ -114,7 +116,9 @@ function ModalConfirmar({
           </button>
           <button
             onClick={onConfirmar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
+            disabled={deshabilitado}
+            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: deshabilitado ? "not-allowed" : "pointer", opacity: deshabilitado ? 0.6 : 1 }}
+            aria-busy={deshabilitado}
           >
             {textoConfirmar}
           </button>
@@ -142,6 +146,13 @@ export default function PeriodosOperativosPage() {
   // Incrementado tras cada acción que puede cambiar el estado de los
   // períodos, para forzar el refetch interno de AvisoPeriodoOperativo (#162).
   const [refreshSignal, setRefreshSignal] = useState(0)
+  // Guard anti doble-envío para Activar/Cerrar/Restaurar (#144). Solo un
+  // modal puede estar abierto a la vez y estas tres acciones nunca corren
+  // en simultáneo, así que alcanza con una única bandera compartida. El
+  // ref corta la ejecución de forma síncrona (no depende de que React
+  // re-renderice a tiempo); el state solo maneja el disabled visual.
+  const accionEnCursoRef = useRef(false)
+  const [procesandoAccion, setProcesandoAccion] = useState(false)
   // ── Filtro client-side ─────────────────────────────────────
   const periodosFiltrados = useMemo(() => {
     if (!busqueda.trim()) return periodos
@@ -282,6 +293,9 @@ export default function PeriodosOperativosPage() {
   // las clases existentes de la institución contra el nuevo rango —
   // por eso pasa por un modal de confirmación, igual que "Cerrar" (#139).
   async function activar(id: number) {
+    if (accionEnCursoRef.current) return
+    accionEnCursoRef.current = true
+    setProcesandoAccion(true)
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/activar`, {
         method: "POST",
@@ -322,6 +336,8 @@ export default function PeriodosOperativosPage() {
       setError("Error de red")
     } finally {
       setConfirmarActivarId(null)
+      accionEnCursoRef.current = false
+      setProcesandoAccion(false)
     }
   }
   // ── Cerrar (ACTIVO -> CERRADO) ────────────────────────────────
@@ -331,6 +347,9 @@ export default function PeriodosOperativosPage() {
   // El backend devuelve los contadores reales del impacto — se muestran
   // acá en vez de descartarse (UX-PER-003).
   async function cerrar(id: number) {
+    if (accionEnCursoRef.current) return
+    accionEnCursoRef.current = true
+    setProcesandoAccion(true)
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/cerrar`, {
         method: "POST",
@@ -357,12 +376,17 @@ export default function PeriodosOperativosPage() {
       setError("Error de red")
     } finally {
       setConfirmarCierreId(null)
+      accionEnCursoRef.current = false
+      setProcesandoAccion(false)
     }
   }
   // ── Restaurar (reactivar período eliminado) ────────────────
   // Un período restaurado vuelve en el estado que tenía (no cambia
   // a ACTIVO automáticamente).
   async function restaurar(id: number) {
+    if (accionEnCursoRef.current) return
+    accionEnCursoRef.current = true
+    setProcesandoAccion(true)
     try {
       const res = await fetch(`/api/periodos-operativos/${id}/restaurar`, {
         method: "POST",
@@ -377,6 +401,9 @@ export default function PeriodosOperativosPage() {
       setRefreshSignal(n => n + 1)
     } catch {
       setError("Error de red")
+    } finally {
+      accionEnCursoRef.current = false
+      setProcesandoAccion(false)
     }
   }
   // ── Loading ────────────────────────────────────────────────
@@ -407,6 +434,7 @@ export default function PeriodosOperativosPage() {
           textoConfirmar="Cerrar período"
           onConfirmar={() => cerrar(confirmarCierreId)}
           onCancelar={() => setConfirmarCierreId(null)}
+          deshabilitado={procesandoAccion}
         />
       )}
       {confirmarActivarId !== null && (
@@ -415,6 +443,7 @@ export default function PeriodosOperativosPage() {
           textoConfirmar="Activar período"
           onConfirmar={() => activar(confirmarActivarId)}
           onCancelar={() => setConfirmarActivarId(null)}
+          deshabilitado={procesandoAccion}
         />
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
@@ -627,7 +656,8 @@ export default function PeriodosOperativosPage() {
                         {eliminado ? (
                           <button
                             onClick={() => restaurar(p.id)}
-                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                            disabled={procesandoAccion}
+                            style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: procesandoAccion ? "not-allowed" : "pointer", opacity: procesandoAccion ? 0.6 : 1, padding: 0 }}
                           >
                             Restaurar
                           </button>
