@@ -4,7 +4,6 @@ import { calendarioEscolarRepository }
 import { periodoOperativoRepository }
   from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
-
 export class CalendarioEscolarNoEncontradoError extends Error {
   constructor() {
     super("Evento de calendario escolar no encontrado")
@@ -25,7 +24,6 @@ export class PeriodoCerradoError extends Error {
     super("El período está CERRADO, no se puede modificar su calendario")
   }
 }
-
 export async function actualizarCalendarioEscolar(
   calendarioId: number,
   tenantId: number,
@@ -93,11 +91,14 @@ export async function actualizarCalendarioEscolar(
   // cambio, el motor la deduce solo a partir del estado actual de la base
   // (fix 24/08/2026: el nombre/firma vieja de este método ya no existía en
   // el service, quedó un caller huérfano de un refactor anterior).
+  let clasesActualizadas = 0
   if (actualizado && body.suspendeClases !== undefined) {
-    await claseProgramadaService.resolverClasesPorCalendario({
+    const r = await claseProgramadaService.resolverClasesPorCalendario({
       institucionId: tenantId,
       fecha:         actualizado.fecha,
     })
+    clasesActualizadas = r.actualizadas
   }
-  return actualizado
+  // UX-PER-009: propagar el conteo real en vez de descartarlo.
+  return { ...actualizado, clasesActualizadas }
 }

@@ -2,7 +2,6 @@
 import { calendarioEscolarRepository } from "@/lib/repositories/calendarioEscolarRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
-
 export class DatosCalendarioEscolarInvalidosError extends Error {
   constructor() {
     super("fecha y descripcion son requeridos")
@@ -23,7 +22,6 @@ export class PeriodoCerradoError extends Error {
     super("El período está CERRADO, no se puede modificar su calendario")
   }
 }
-
 export async function crearCalendarioEscolar(
   tenantId: number,
   body: {
@@ -41,11 +39,9 @@ export async function crearCalendarioEscolar(
     esFeriado,
     suspendeClases,
   } = body
-
   if (!fecha || !descripcion || !periodoOperativoId) {
     throw new DatosCalendarioEscolarInvalidosError()
   }
-
   // Verificar período operativo
   const periodo =
     await periodoOperativoRepository.obtenerPorId(
@@ -59,9 +55,7 @@ export async function crearCalendarioEscolar(
   if (periodo.estado === "CERRADO") {
     throw new PeriodoCerradoError()
   }
-
   const fechaDate = new Date(fecha)
-
   // Validar rango del período
   if (
     fechaDate < periodo.fecha_desde ||
@@ -69,7 +63,6 @@ export async function crearCalendarioEscolar(
   ) {
     throw new FechaFueraDePeriodoError()
   }
-
   const creado = await calendarioEscolarRepository.crear({
     tenantId,
     periodoOperativoId,
@@ -78,16 +71,19 @@ export async function crearCalendarioEscolar(
     esFeriado: esFeriado ?? false,
     suspendeClases: suspendeClases ?? false,
   })
-
   // Si marca "suspende clases", revisitar las clases ya generadas en esa
   // fecha (si las hay) y pasarlas de PROGRAMADA a SUSPENDIDA, dejando
   // registrada la causa y el evento que la originó. No hace nada si el
   // período todavía no generó clases para esa fecha.
-if (creado.suspendeClases) {
-    await claseProgramadaService.resolverClasesPorCalendario({
+  let clasesActualizadas = 0
+  if (creado.suspendeClases) {
+    const r = await claseProgramadaService.resolverClasesPorCalendario({
       institucionId: tenantId,
       fecha:         fechaDate,
     })
+    clasesActualizadas = r.actualizadas
   }
-  return creado
+  // UX-PER-009: el conteo real de clases afectadas se descartaba -- ahora
+  // se propaga en la respuesta para que el frontend lo pueda mostrar.
+  return { ...creado, clasesActualizadas }
 }

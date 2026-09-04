@@ -1,12 +1,9 @@
-// app/protected/dashboard/calendario-escolar/page.tsx
+// app/protected/dashboard/calendario/page.tsx
 "use client"
-
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
-
 // ── Tipos ────────────────────────────────────────────────────
 type EstadoPeriodo = "BORRADOR" | "ACTIVO" | "CERRADO"
-
 type PeriodoOperativo = {
   id:          number
   nombre:      string
@@ -15,7 +12,6 @@ type PeriodoOperativo = {
   estado:      EstadoPeriodo
   deletedAt:   string | null
 }
-
 type CalendarioEscolar = {
   id:             number
   fecha:          string
@@ -25,14 +21,12 @@ type CalendarioEscolar = {
   activo:         boolean
   deletedAt:      string | null
 }
-
 type FormData = {
   fecha:          string
   descripcion:    string
   esFeriado:      boolean
   suspendeClases: boolean
 }
-
 // ── Configuración ────────────────────────────────────────────
 const FORM_VACIO: FormData = {
   fecha:          "",
@@ -40,7 +34,6 @@ const FORM_VACIO: FormData = {
   esFeriado:      false,
   suspendeClases: false,
 }
-
 // ── Estilos compartidos ──────────────────────────────────────
 const s = {
   label: {
@@ -79,7 +72,6 @@ const s = {
     verticalAlign: "middle" as const,
   },
 }
-
 // ── Modal confirmación ───────────────────────────────────────
 function ModalConfirmar({
   mensaje,
@@ -131,16 +123,13 @@ function ModalConfirmar({
     </div>
   )
 }
-
 // ── Página ───────────────────────────────────────────────────
 export default function CalendarioEscolarPage() {
   const { authHeaders } = useAuth()
-
   // Todos los períodos de la institución — ya NO solo el activo.
   const [periodos,        setPeriodos]        = useState<PeriodoOperativo[]>([])
   const [periodoId,       setPeriodoId]       = useState<number | null>(null)
   const [loadingPeriodos, setLoadingPeriodos] = useState(true)
-
   const [eventos,        setEventos]        = useState<CalendarioEscolar[]>([])
   const [loadingEventos, setLoadingEventos] = useState(false)
   const [mostrarForm,    setMostrarForm]    = useState(false)
@@ -151,20 +140,21 @@ export default function CalendarioEscolarPage() {
   const [confirmarId,    setConfirmarId]    = useState<number | null>(null)
   const [busqueda,       setBusqueda]       = useState("")
   const [verEliminados,  setVerEliminados]  = useState(false)
-
+  // Feedback de impacto real sobre clases ya generadas (UX-PER-009) --
+  // crear/editar/eliminar/restaurar un evento con suspendeClases puede
+  // resolver clases existentes, y ese conteo se descartaba en silencio.
+  const [avisoImpacto,   setAvisoImpacto]   = useState<string | null>(null)
   const periodoSeleccionado = useMemo(
     () => periodos.find(p => p.id === periodoId) ?? null,
     [periodos, periodoId]
   )
   const soloLectura = periodoSeleccionado?.estado === "CERRADO"
-
   // ── Filtrado ───────────────────────────────────────────────
   const eventosFiltrados = useMemo(() => {
     if (!busqueda.trim()) return eventos
     const q = busqueda.toLowerCase()
     return eventos.filter(e => e.descripcion.toLowerCase().includes(q))
   }, [eventos, busqueda])
-
   // ── Carga de TODOS los períodos (no solo el activo) ─────────
   async function cargarPeriodos() {
     try {
@@ -175,7 +165,6 @@ export default function CalendarioEscolarPage() {
       if (!res.ok) throw new Error()
       const data: PeriodoOperativo[] = await res.json()
       setPeriodos(data)
-
       // Preseleccionar: el ACTIVO si existe, sino el más reciente por fecha_desde.
       if (data.length > 0) {
         const activo = data.find(p => p.estado === "ACTIVO")
@@ -187,7 +176,6 @@ export default function CalendarioEscolarPage() {
       setLoadingPeriodos(false)
     }
   }
-
   // ── Carga eventos del período seleccionado ──────────────────
   async function cargarEventos() {
     if (!periodoId) return
@@ -209,16 +197,13 @@ export default function CalendarioEscolarPage() {
       setLoadingEventos(false)
     }
   }
-
   // ── Effects ────────────────────────────────────────────────
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargarPeriodos()
   }, [authHeaders.Authorization])
-
   useEffect(() => {
     if (periodoId !== null) cargarEventos()
   }, [periodoId, verEliminados])
-
   // ── Form ───────────────────────────────────────────────────
   function abrirCrear() {
     setForm(FORM_VACIO)
@@ -226,7 +211,6 @@ export default function CalendarioEscolarPage() {
     setMostrarForm(true)
     setError(null)
   }
-
   function abrirEditar(evento: CalendarioEscolar) {
     setForm({
       fecha:          evento.fecha.split("T")[0],
@@ -238,14 +222,12 @@ export default function CalendarioEscolarPage() {
     setMostrarForm(true)
     setError(null)
   }
-
   function cancelar() {
     setMostrarForm(false)
     setEditando(null)
     setForm(FORM_VACIO)
     setError(null)
   }
-
   // ── Validación ─────────────────────────────────────────────
   function validar() {
     if (!form.fecha.trim() || !form.descripcion.trim()) {
@@ -254,7 +236,6 @@ export default function CalendarioEscolarPage() {
     }
     return true
   }
-
   // ── Guardar ────────────────────────────────────────────────
   async function guardar() {
     if (!validar() || !periodoId) return
@@ -271,10 +252,15 @@ export default function CalendarioEscolarPage() {
           ...(!editando ? { periodoOperativoId: periodoId } : {}),
         }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         setError(data.error ?? "Error guardando evento")
         return
+      }
+      if (data.clasesActualizadas > 0) {
+        setAvisoImpacto(
+          `${editando ? "Evento actualizado" : "Evento creado"}. ${data.clasesActualizadas} clase${data.clasesActualizadas !== 1 ? "s" : ""} actualizada${data.clasesActualizadas !== 1 ? "s" : ""} por este cambio.`
+        )
       }
       await cargarEventos()
       cancelar()
@@ -284,7 +270,6 @@ export default function CalendarioEscolarPage() {
       setGuardando(false)
     }
   }
-
   // ── Eliminar ───────────────────────────────────────────────
   async function eliminar(id: number) {
     try {
@@ -292,10 +277,15 @@ export default function CalendarioEscolarPage() {
         method: "DELETE",
         headers: authHeaders,
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         setError(data.error ?? "Error eliminando evento")
         return
+      }
+      if (data.clasesActualizadas > 0) {
+        setAvisoImpacto(
+          `Evento eliminado. ${data.clasesActualizadas} clase${data.clasesActualizadas !== 1 ? "s" : ""} volvieron a quedar programadas.`
+        )
       }
       await cargarEventos()
     } catch {
@@ -304,7 +294,6 @@ export default function CalendarioEscolarPage() {
       setConfirmarId(null)
     }
   }
-
   // ── Reactivar ──────────────────────────────────────────────
   async function reactivar(id: number) {
    try {
@@ -312,17 +301,21 @@ export default function CalendarioEscolarPage() {
         method: "POST",
         headers: authHeaders,
       })
+      const data = await res.json()
       if (!res.ok) {
-        const data = await res.json()
         setError(data.error ?? "Error reactivando evento")
         return
+      }
+      if (data.clasesActualizadas > 0) {
+        setAvisoImpacto(
+          `Evento restaurado. ${data.clasesActualizadas} clase${data.clasesActualizadas !== 1 ? "s" : ""} suspendida${data.clasesActualizadas !== 1 ? "s" : ""} nuevamente por este evento.`
+        )
       }
       await cargarEventos()
     } catch {
       setError("Error de red")
     }
   }
-
   // ── Loading períodos ─────────────────────────────────────────
   if (loadingPeriodos) {
     return (
@@ -331,7 +324,6 @@ export default function CalendarioEscolarPage() {
       </div>
     )
   }
-
   // ── Sin ningún período creado todavía ───────────────────────
   if (periodos.length === 0) {
     return (
@@ -349,7 +341,6 @@ export default function CalendarioEscolarPage() {
       </div>
     )
   }
-
   // ── Render ────────────────────────────────────────────────
   return (
     <>
@@ -360,9 +351,7 @@ export default function CalendarioEscolarPage() {
           onCancelar={() => setConfirmarId(null)}
         />
       )}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-3)" }}>
           <div>
@@ -373,7 +362,6 @@ export default function CalendarioEscolarPage() {
               {eventosFiltrados.length} evento{eventosFiltrados.length !== 1 ? "s" : ""}
             </p>
           </div>
-
           {/* Selector de período — el cambio central de este fix */}
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
             <label style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)", whiteSpace: "nowrap" as const }}>
@@ -391,7 +379,6 @@ export default function CalendarioEscolarPage() {
               ))}
             </select>
           </div>
-
           {!mostrarForm && !soloLectura && (
             <button
               onClick={abrirCrear}
@@ -401,14 +388,12 @@ export default function CalendarioEscolarPage() {
             </button>
           )}
         </div>
-
         {/* Aviso de solo lectura */}
         {soloLectura && (
           <div style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
             Este período está <strong>CERRADO</strong> — el calendario queda solo para consulta, no admite cambios.
           </div>
         )}
-
         {/* Error global */}
         {error && (
           <div
@@ -427,16 +412,27 @@ export default function CalendarioEscolarPage() {
             >×</button>
           </div>
         )}
-
+        {/* Aviso de impacto real sobre clases (UX-PER-009) */}
+        {avisoImpacto && (
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-success, green)", fontSize: "var(--text-xs)", color: "var(--color-success, green)" }}
+            role="status"
+          >
+            {avisoImpacto}
+            <button
+              onClick={() => setAvisoImpacto(null)}
+              style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-success, green)", fontSize: "var(--text-base)", lineHeight: 1 }}
+              aria-label="Cerrar"
+            >×</button>
+          </div>
+        )}
         {/* Formulario inline */}
         {mostrarForm && !soloLectura && (
           <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editando ? "Editar evento" : "Nuevo evento"}
             </h2>
-
             <div style={{ display: "grid", gap: "var(--space-4)" }}>
-
               <div>
                 <label style={s.label}>
                   Fecha <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>
@@ -452,7 +448,6 @@ export default function CalendarioEscolarPage() {
                   onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
                 />
               </div>
-
               <div>
                 <label style={s.label}>
                   Descripción <span style={{ color: "var(--color-error)", marginLeft: 2 }}>*</span>
@@ -466,7 +461,6 @@ export default function CalendarioEscolarPage() {
                   onBlur={e => { e.target.style.borderColor = "var(--color-border)"; e.target.style.boxShadow = "none" }}
                 />
               </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--color-text-primary)", cursor: "pointer" }}>
                   <input
@@ -487,9 +481,7 @@ export default function CalendarioEscolarPage() {
                   Suspende clases
                 </label>
               </div>
-
             </div>
-
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
               <button
                 onClick={cancelar}
@@ -508,7 +500,6 @@ export default function CalendarioEscolarPage() {
             </div>
           </div>
         )}
-
         {/* Buscador + toggle */}
         {!mostrarForm && (
           <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
@@ -531,7 +522,6 @@ export default function CalendarioEscolarPage() {
             </label>
           </div>
         )}
-
         {/* Tabla */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -620,7 +610,6 @@ export default function CalendarioEscolarPage() {
             </tbody>
           </table>
         </div>
-
       </div>
     </>
   )
