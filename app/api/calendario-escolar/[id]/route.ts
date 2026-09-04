@@ -56,7 +56,7 @@ export async function DELETE(
   })
 }
 // PATCH: faltaba por completo -- el frontend (app/protected/dashboard/
-// calendario-escolar/page.tsx, función guardar()) ya llama a PATCH
+// calendario/page.tsx, función guardar()) ya llama a PATCH
 // /api/calendario-escolar/[id] al editar, pero esta ruta solo tenía
 // DELETE. El usecase actualizarCalendarioEscolar existía pero nunca
 // estuvo conectado a ningún endpoint (hallazgo 24/08/2026).
