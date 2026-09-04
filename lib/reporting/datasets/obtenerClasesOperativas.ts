@@ -5,6 +5,7 @@ export type ClaseOperativa = {
   id: number
   fecha: Date
   estado: string
+  causa: string
   coberturaEstado: CoberturaEstado
   unidad: {
     id: number
@@ -130,6 +131,7 @@ export async function obtenerClasesOperativas(
       id:     clase.id,
       fecha:  clase.fecha,
       estado: clase.estado,
+      causa:  clase.causa,
       coberturaEstado,
       unidad:   clase.unidad,
       comision: clase.comision,
@@ -233,7 +235,6 @@ const sinCobertura = clasesHoy
     }))
   return { sinCobertura, reemplazosActivos }
 }
-
 /**
  * Filtra las clases operativas a solo las de cargos frente a curso (con
  * materia asociada). Las métricas de cobertura de aula (% de cobertura
@@ -252,7 +253,6 @@ const sinCobertura = clasesHoy
 export function filtrarFrenteACurso(clases: ClaseOperativa[]): ClaseOperativa[] {
   return clases.filter(c => c.asignacion?.materia != null)
 }
-
 export type PersonalNoDocenteHoy = {
   asignacionId: number
   agente:       string
@@ -261,7 +261,6 @@ export type PersonalNoDocenteHoy = {
   suplente:     string | null
   incidenciaId: number | null
 }
-
 /**
  * Espejo de mapearCoberturaHoy, pero para cargos no-frente-a-curso
  * (preceptor/secretario/director -- asignación sin materia). A diferencia
@@ -275,7 +274,6 @@ export type PersonalNoDocenteHoy = {
  */
 export function mapearPersonalNoDocenteHoy(clasesHoy: ClaseOperativa[]): PersonalNoDocenteHoy[] {
   const noFrenteACurso = clasesHoy.filter(c => c.asignacion != null && c.asignacion.materia == null)
-
   const porAsignacion = new Map<number, ClaseOperativa[]>()
   for (const c of noFrenteACurso) {
     const id = c.asignacion!.id
@@ -283,28 +281,23 @@ export function mapearPersonalNoDocenteHoy(clasesHoy: ClaseOperativa[]): Persona
     arr.push(c)
     porAsignacion.set(id, arr)
   }
-
   const prioridad: Record<CoberturaEstado, number> = {
     SIN_COBERTURA: 3,
     REEMPLAZADA:   2,
     NORMAL:        1,
     SUSPENDIDA:    0,
   }
-
   const resultado: PersonalNoDocenteHoy[] = []
   for (const [asignacionId, clases] of porAsignacion) {
     const relevantes = clases.filter(c => c.coberturaEstado !== "SUSPENDIDA")
     if (relevantes.length === 0) continue // feriado o hueco de período operativo -- nada que reportar hoy
-
     const ganadora = relevantes.reduce((mejor, actual) =>
       prioridad[actual.coberturaEstado] > prioridad[mejor.coberturaEstado] ? actual : mejor
     )
-
     const estado: PersonalNoDocenteHoy["estado"] =
       ganadora.coberturaEstado === "SIN_COBERTURA" ? "sin_cobertura" :
       ganadora.coberturaEstado === "REEMPLAZADA"   ? "reemplazado"   :
                                                        "presente"
-
     resultado.push({
       asignacionId,
       agente:       ganadora.titular ? `${ganadora.titular.apellido}, ${ganadora.titular.nombre}` : "Vacante",
@@ -314,6 +307,5 @@ export function mapearPersonalNoDocenteHoy(clasesHoy: ClaseOperativa[]): Persona
       incidenciaId: ganadora.incidencia?.id ?? null,
     })
   }
-
   return resultado.sort((a, b) => a.agente.localeCompare(b.agente))
 }
