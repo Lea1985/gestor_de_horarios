@@ -11,13 +11,12 @@ import {
   SinCamposParaActualizarError,
   FechaFueraDePeriodoError,
   PeriodoCerradoError as PeriodoCerradoErrorAlActualizar,
+  EventoDuplicadoError,
 } from "@/lib/usecases/calendarioEscolar/actualizarCalendarioEscolar"
-
 function parseId(id: string) {
   const n = Number(id)
   return isNaN(n) ? null : n
 }
-
 export async function DELETE(
   req: Request,
   context: { params: Promise<{ id: string }> }
@@ -56,7 +55,6 @@ export async function DELETE(
     }
   })
 }
-
 // PATCH: faltaba por completo -- el frontend (app/protected/dashboard/
 // calendario-escolar/page.tsx, función guardar()) ya llama a PATCH
 // /api/calendario-escolar/[id] al editar, pero esta ruta solo tenía
@@ -95,6 +93,9 @@ export async function PATCH(
         return Response.json({ error: error.message }, { status: 400 })
       }
       if (error instanceof PeriodoCerradoErrorAlActualizar) {
+        return Response.json({ error: error.message }, { status: 409 })
+      }
+      if (error instanceof EventoDuplicadoError) {
         return Response.json({ error: error.message }, { status: 409 })
       }
       console.error("Error actualizando evento de calendario escolar:", error)

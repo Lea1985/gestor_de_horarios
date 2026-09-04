@@ -1,30 +1,24 @@
 // app/api/calendario-escolar/route.ts
-
 import { withContext } from "@/lib/auth/withContext"
-import { Prisma } from "@prisma/client"
-
 import { listarCalendarioEscolar }
   from "@/lib/usecases/calendarioEscolar/listarCalendarioEscolar"
-
 import {
   crearCalendarioEscolar,
   DatosCalendarioEscolarInvalidosError,
   PeriodoOperativoNoEncontradoError,
   FechaFueraDePeriodoError,
   PeriodoCerradoError,
+  EventoDuplicadoError,
 } from "@/lib/usecases/calendarioEscolar/crearCalendarioEscolar"
-
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     const { searchParams } = new URL(req.url)
     const incluirInactivos = searchParams.get("inactivos") === "true"
     const rawId = searchParams.get("periodoOperativoId")
     const periodoOperativoId = rawId ? Number(rawId) : NaN
-
     if (!rawId || isNaN(periodoOperativoId)) {
       return Response.json({ error: "periodoOperativoId es requerido" }, { status: 400 })
     }
-
     try {
       const calendario = await listarCalendarioEscolar(tenantId, periodoOperativoId, incluirInactivos)
       return Response.json(calendario)
@@ -34,7 +28,6 @@ export async function GET(req: Request) {
     }
   })
 }
-
 export async function POST(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     let body
@@ -43,7 +36,6 @@ export async function POST(req: Request) {
     } catch {
       return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
-
     try {
       const result = await crearCalendarioEscolar(tenantId, body)
       return Response.json(result, { status: 201 })
@@ -60,8 +52,8 @@ export async function POST(req: Request) {
       if (error instanceof PeriodoCerradoError) {
         return Response.json({ error: error.message }, { status: 409 })
       }
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return Response.json({ error: "Ya existe un evento para esa fecha en esta institución" }, { status: 409 })
+      if (error instanceof EventoDuplicadoError) {
+        return Response.json({ error: error.message }, { status: 409 })
       }
       console.error("Error creando evento de calendario escolar:", error)
       return Response.json({ error: "Error creando evento de calendario escolar" }, { status: 500 })

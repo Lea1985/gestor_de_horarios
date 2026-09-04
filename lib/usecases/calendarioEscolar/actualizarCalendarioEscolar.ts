@@ -24,6 +24,11 @@ export class PeriodoCerradoError extends Error {
     super("El período está CERRADO, no se puede modificar su calendario")
   }
 }
+export class EventoDuplicadoError extends Error {
+  constructor(descripcionExistente: string) {
+    super(`Ya existe un evento para esta fecha: "${descripcionExistente}". Un día solo puede tener un evento de calendario.`)
+  }
+}
 export async function actualizarCalendarioEscolar(
   calendarioId: number,
   tenantId: number,
@@ -74,6 +79,17 @@ export async function actualizarCalendarioEscolar(
       fecha > periodo.fecha_hasta
     ) {
       throw new FechaFueraDePeriodoError()
+    }
+    // UX-PER-011: un día representa un solo evento de calendario -- solo
+    // hace falta chequear duplicado si la fecha realmente cambia.
+    const duplicado = await calendarioEscolarRepository.verificarDuplicado(
+      tenantId,
+      registro.periodoOperativoId,
+      fecha,
+      calendarioId
+    )
+    if (duplicado) {
+      throw new EventoDuplicadoError(duplicado.descripcion)
     }
   }
   const actualizado = await calendarioEscolarRepository.actualizar(

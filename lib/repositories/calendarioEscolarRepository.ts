@@ -1,41 +1,29 @@
-
 // lib/repositories/calendarioEscolarRepository.ts
-
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
-
 export const calendarioEscolarSelect = {
   id:               true,
   institucionId:    true,
   periodoOperativoId: true,
-
   fecha:            true,
   descripcion:      true,
-
   esFeriado:        true,
   suspendeClases:   true,
-
   activo:           true,
   deletedAt:        true,
-
   createdAt:        true,
   updatedAt:        true,
 }
-
 export const calendarioEscolarRepository = {
-
   listar(
     tenantId: number,
     periodoOperativoId: number,
     incluirInactivos = false
   ) {
-
     return prisma.calendarioEscolar.findMany({
-
       where: {
         institucionId: tenantId,
         periodoOperativoId,
-
         ...(incluirInactivos
           ? {}
           : {
@@ -43,15 +31,12 @@ export const calendarioEscolarRepository = {
               deletedAt: null,
             }),
       },
-
       select: calendarioEscolarSelect,
-
       orderBy: [
         { fecha: "asc" },
       ],
     })
   },
-
   obtenerPorId(calendarioId: number, tenantId: number) {
     return prisma.calendarioEscolar.findFirst({
       where: {
@@ -60,11 +45,9 @@ export const calendarioEscolarRepository = {
         activo: true,
         deletedAt: null,
       },
-
       select: calendarioEscolarSelect,
     })
   },
-
   existeEnTenant(calendarioId: number, tenantId: number) {
     return prisma.calendarioEscolar.findFirst({
       where: {
@@ -73,11 +56,9 @@ export const calendarioEscolarRepository = {
         activo: true,
         deletedAt: null,
       },
-
       select: { id: true },
     })
   },
-
   existeEliminado(calendarioId: number, tenantId: number) {
     return prisma.calendarioEscolar.findFirst({
       where: {
@@ -88,35 +69,48 @@ export const calendarioEscolarRepository = {
       select: { id: true, periodoOperativoId: true, fecha: true, suspendeClases: true },
     })
   },
-
+  // UX-PER-011: un día representa un solo evento de calendario (feriado
+  // y/o suspensión). Chequeo a nivel aplicación, sin constraint real en la
+  // base -- mismo criterio de riesgo aceptado que verificarSuperposicion
+  // de Períodos Operativos (#142).
+  verificarDuplicado(
+    tenantId: number,
+    periodoOperativoId: number,
+    fecha: Date,
+    excludeId?: number
+  ) {
+    return prisma.calendarioEscolar.findFirst({
+      where: {
+        institucionId: tenantId,
+        periodoOperativoId,
+        fecha,
+        activo: true,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true, descripcion: true, fecha: true },
+    })
+  },
   crear(data: {
     tenantId: number
     periodoOperativoId: number
-
     fecha: Date
     descripcion: string
-
     esFeriado: boolean
     suspendeClases: boolean
   }) {
-
     return prisma.calendarioEscolar.create({
-
       data: {
         institucionId: data.tenantId,
         periodoOperativoId: data.periodoOperativoId,
-
         fecha: data.fecha,
         descripcion: data.descripcion,
-
         esFeriado: data.esFeriado,
         suspendeClases: data.suspendeClases,
       },
-
       select: calendarioEscolarSelect,
     })
   },
-
 actualizar(
   calendarioId: number,
   tenantId: number,
@@ -127,30 +121,21 @@ actualizar(
     suspendeClases?: boolean
   }
 ) {
-
   const dataCalendario: Prisma.CalendarioEscolarUpdateInput = {}
-
   if (data.fecha !== undefined) {
     const fecha = new Date(data.fecha)
-
     if (isNaN(fecha.getTime())) {
       throw new Error("Fecha inválida en actualizar calendarioEscolar")
     }
-
     dataCalendario.fecha = fecha
   }
-
   if (data.descripcion !== undefined)
     dataCalendario.descripcion = data.descripcion
-
   if (data.esFeriado !== undefined)
     dataCalendario.esFeriado = data.esFeriado
-
   if (data.suspendeClases !== undefined)
     dataCalendario.suspendeClases = data.suspendeClases
-
   return prisma.$transaction(async (tx) => {
-
     await tx.calendarioEscolar.updateMany({
       where: {
         id: calendarioId,
@@ -158,7 +143,6 @@ actualizar(
       },
       data: dataCalendario,
     })
-
     return tx.calendarioEscolar.findFirst({
       where: {
         id: calendarioId,
@@ -170,43 +154,36 @@ actualizar(
     })
   })
 },
-
   eliminar(calendarioId: number, tenantId: number) {
     return prisma.calendarioEscolar.updateMany({
       where: {
         id: calendarioId,
         institucionId: tenantId,
       },
-
       data: {
         activo: false,
         deletedAt: new Date(),
       },
     })
   },
-
   listarConInactivos(tenantId: number) {
     return prisma.calendarioEscolar.findMany({
       where: {
         institucionId: tenantId,
       },
-
       select: calendarioEscolarSelect,
-
       orderBy: [
         { activo: "desc" },
         { fecha: "asc" },
       ],
     })
   },
-
   reactivar(calendarioId: number, tenantId: number) {
     return prisma.calendarioEscolar.updateMany({
       where: {
         id: calendarioId,
         institucionId: tenantId,
       },
-
       data: {
         activo: true,
         deletedAt: null,
@@ -214,4 +191,3 @@ actualizar(
     })
   },
 }
-
