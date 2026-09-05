@@ -1,5 +1,7 @@
 # Auditoría UX Funcional y Operativa — Módulo Clases Programadas
 
+> **Nota de actualización (05/09/2026):** varios hallazgos de esta auditoría ya fueron resueltos en sesiones posteriores a la fecha de esta auditoría. Cada hallazgo resuelto tiene una línea **Estado:** agregada en la sección 7, y la sección 10 refleja el estado actualizado.
+
 ## 1. Resumen ejecutivo
 
 El módulo "Clases programadas" es, tal como anticipaba el prompt de esta fase, mayormente de **solo lectura**: no hay alta/edición/baja manual de `ClaseProgramada` desde la UI. La única pantalla real es `/protected/dashboard/clases`, que muestra las clases **de hoy únicamente** (no tiene selector de fecha, rango, ni vista semanal — ver hallazgo UX-CLS-001) y cuya única acción de usuario es navegar a la incidencia vinculada.
@@ -90,6 +92,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `app/protected/dashboard/clases/page.tsx:39-58` (única llamada `fetch`), comparado con `lib/usecases/clases/listarClases.ts:22-47` (acepta rango y filtros) y `lib/reporting/datasets/obtenerClasesOperativas.ts:64-68` (`obtenerClasesOperativas` acepta cualquier `desde`/`hasta`, solo el atajo "Hoy" está expuesto).
 **Impacto para el usuario:** no hay forma de consultar, desde esta pantalla, qué clases hubo ayer, qué clases hay programadas para mañana o la semana próxima, ni de revisar el historial de una asignación puntual. Para cualquier consulta fuera de "hoy", el usuario no tiene ruta en la UI.
 **Recomendación:** (no implementar) definir si esto es una decisión de producto deliberada (la pantalla es explícitamente "operación diaria") o una funcionalidad faltante; si es lo segundo, conectar un selector de fecha/rango a los filtros que `listarClases` ya soporta.
+**Estado:** Resuelto (#156) — se agregó selector "Desde"/"Hasta" con atajo "Hoy", conectado al filtro de rango que ya soportaba el backend. Commit `98d7996`.
 
 ### UX-CLS-002 — La `Causa` de una clase suspendida/reemplazada no se muestra en esta pantalla (confirma #138 / UX-PER-004)
 **Prioridad:** P0  **Tipo:** FEEDBACK AUSENTE / ESTADO  **Fuente:** código (inferido)
@@ -100,6 +103,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `lib/reporting/datasets/obtenerClasesOperativas.ts:129-158` (mapeo que omite `causa`); `app/protected/dashboard/clases/page.tsx:9-24` (tipo `Clase` sin `causa`); comparar con `lib/services/resolucionClaseService.ts:33-55` (`resolverEstadoYCausa`, donde `causa` se calcula explícitamente). **Cruce directo con #138 / UX-PER-004** (`docs/auditoria-ux-periodos-calendario-2026-09-01.md:115-122`), que ya documentó esto como hallazgo transversal desde el lado de Períodos Operativos — acá se confirma concretamente que ni siquiera la pantalla dedicada a listar clases lo resuelve.
 **Impacto para el usuario:** un preceptor o directivo que mira esta pantalla no puede distinguir, para una clase suspendida, si fue por un feriado, por el cierre de un período operativo, o por otro motivo — la única causa que sí es indirectamente visible es `INCIDENCIA` (porque en ese caso hay un link a la incidencia). Las otras dos causas de suspensión que se originan exclusivamente en este módulo (`PERIODO_OPERATIVO`, `CALENDARIO_ESCOLAR`) quedan invisibles.
 **Recomendación:** (no implementar) agregar `causa` al `ClaseOperativa` y al tipo `Clase` del frontend, y mostrarla como texto/tooltip junto al badge de estado (mismo lugar que ya resolvería #138).
+**Estado:** Resuelto (#155) — `causa` se propaga hasta el frontend y se muestra combinada con el estado (ej. "Suspendida (período operativo)", "Sin cobertura (incidencia)"). Commit `98d7996`.
 
 ### UX-CLS-003 — El mecanismo automático `resolverClasesVencidas` es completamente invisible para el usuario
 **Prioridad:** P1  **Tipo:** FEEDBACK AUSENTE  **Fuente:** código (inferido)
@@ -110,6 +114,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `lib/auth/withContext.ts:48-69`, `lib/usecases/clases/resolverClasesVencidas.ts:16-37` (retorna datos que nadie lee).
 **Impacto para el usuario:** el usuario no tiene forma de saber, mirando la app, que sus clases de ayer "ya se resolvieron solas" hoy a la mañana, ni de detectar si ese proceso falló silenciosamente para su institución. La única señal indirecta es notar que el estado de una clase cambió entre dos visitas a la pantalla.
 **Recomendación:** (no implementar) al menos loguear a un canal observable (no solo `console.error` del proceso Next.js) los fallos de `resolverClasesVencidas`; evaluar si vale la pena exponer un resumen ("N clases se marcaron dictadas automáticamente hoy") en el dashboard.
+**Estado:** Parcialmente resuelto (#157, 05/09/2026) — se corrigió el riesgo de integridad de datos: antes, si `resolverClasesVencidas` o `cerrarPeriodoSiVencido` fallaban, `ultimaResolucionClases` ya había quedado marcado como "hoy" (se seteaba antes de intentar la operación), por lo que no se reintentaba hasta el día siguiente pese al fallo. Ahora el timestamp se revierte si algo falla, permitiendo reintento en la próxima request del mismo día. Commit `437c820`. **Sigue pendiente** la parte de visibilidad en UI (mostrar timestamp de última resolución / avisar fallos al usuario) — no se implementó, queda como mejora futura.
 
 ### UX-CLS-004 — El badge de "Estado" no tiene color ni diferenciación visual entre PROGRAMADA / DICTADA / SUSPENDIDA / REEMPLAZADA, y no hay leyenda
 **Prioridad:** P1  **Tipo:** ESTADO / CONSISTENCIA  **Fuente:** código (inferido)
@@ -120,6 +125,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `app/protected/dashboard/clases/page.tsx:133-137` (badge) vs. líneas 93-98 (tarjetas de métricas, con color condicional solo en una de las cuatro).
 **Impacto para el usuario:** para distinguir estados, el usuario debe leer el texto de cada fila una por una; no hay escaneo visual rápido posible (ej. "ver de un vistazo cuántas filas están en rojo"). Esto se agrava porque el estado mostrado tampoco distingue la causa (UX-CLS-002): dos filas `SUSPENDIDA` visualmente idénticas pueden requerir acciones completamente distintas (ninguna, si es un feriado; asignar reemplazo, si en verdad la cobertura real es `SIN_COBERTURA` por incidencia — aunque en ese caso hay un link de "Asignar →" que sí ayuda).
 **Recomendación:** (no implementar) aplicar color/ícono consistente por estado (y opcionalmente por `coberturaEstado`, que ya se calcula en el backend pero no se usa para estilizar la fila), y agregar una leyenda breve.
+**Estado:** Resuelto (#158) — badge con color por estado/causa/coberturaEstado (rojo solo para `SIN_COBERTURA`, gris para suspensiones sin acción) y leyenda agregada al pie de la tabla. Commit `98d7996`.
 
 ### UX-CLS-005 — Sin manejo de error visible: si falla la carga, la pantalla se ve igual que "no hay clases"
 **Prioridad:** P1  **Tipo:** ERROR NO INFORMADO  **Fuente:** código (inferido)
@@ -130,6 +136,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `app/protected/dashboard/clases/page.tsx:39-58` (catch que solo loguea a consola) y `123-127` (el `ternary` de la tabla no distingue error de vacío real).
 **Impacto para el usuario:** si el backend falla (por ejemplo, un error 500 en `obtenerClasesOperativasHoy`), el usuario ve "No hay clases para mostrar hoy" — un mensaje que sugiere tranquilamente que no hay nada que atender, cuando en realidad la información no pudo cargarse. Esto es particularmente riesgoso porque esta pantalla es la fuente principal para detectar "clases sin cobertura hoy" (ver enlaces desde el dashboard, `app/protected/dashboard/page.tsx:192,196`) — un falso "no hay nada" podría hacer que una ausencia real pase desapercibida.
 **Recomendación:** (no implementar) diferenciar el estado de error del estado vacío, con mensaje explícito y opción de reintentar.
+**Estado:** Resuelto (#159, 05/09/2026) — el `tbody` ahora distingue explícitamente `loading` / `error` / `vacío real` con un mensaje propio para el caso de error ("No se pudieron cargar las clases..."), y las tarjetas de métricas muestran "—" en vez de ceros engañosos durante un error (antes, "Sin cobertura: 0" se pintaba en verde incluso con el fetch fallado). Verificado en vivo bloqueando la request en DevTools. Commit `aa115cf`. No se agregó botón "Reintentar" explícito — queda como posible mejora incremental, no bloqueante.
 
 ### UX-CLS-006 — Sin verificación de rol visible en esta pantalla (mismo patrón que UX-PER-012)
 **Prioridad:** P2  **Tipo:** PERMISOS  **Fuente:** código (inferido) — RIESGO / NO CONFIRMADO
@@ -140,6 +147,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `lib/auth/withContext.ts:71-93`, mismo patrón ya señalado en `docs/auditoria-ux-periodos-calendario-2026-09-01.md` (UX-PER-012).
 **Impacto para el usuario:** no confirmado — depende de la capa de proxy fuera de alcance.
 **Recomendación:** (no implementar) mismo tratamiento que UX-PER-012: confirmar contra el proxy real.
+**Estado:** Pendiente — sin tarea propia en el tracker (se resuelve junto con UX-PER-012 cuando se audite el proxy real, no se abrió como ítem separado).
 
 ### UX-CLS-007 — Existe una API completa de listado/edición de clases sin ningún consumidor en el frontend
 **Prioridad:** P2  **Tipo:** CONSISTENCIA  **Fuente:** código (inferido)
@@ -150,6 +158,7 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `app/api/clases/route.ts`, `app/api/clases/[id]/route.ts`, `lib/usecases/clases/{listarClases,obtenerClase,actualizarClase}.ts`; ausencia de referencias en el frontend.
 **Impacto para el usuario:** ninguno directo (no es user-facing), pero implica que la única forma real de vincular/desvincular una incidencia a una clase puntual desde la UI es indirecta (a través del flujo de Incidencias, no desde este módulo) — y que el "listado con filtros" que un lector del modelo de datos esperaría encontrar en `/clases` en realidad ya está construido en el backend pero nunca se conectó a una pantalla.
 **Recomendación:** (no implementar) decidir si este endpoint se conecta a una futura vista de filtros en `/clases` (ver UX-CLS-001, es la misma pieza faltante) o si se documenta como deliberadamente sin UI.
+**Estado:** Decisión de producto (#160, 05/09/2026) — **se mantiene sin cambios, no se elimina.** El PATCH (`incidenciaId` únicamente) es una capacidad deliberada de corrección manual (vincular/desvincular una incidencia a una clase puntual re-disparando el motor de resolución), preservada a propósito cuando se sacó el bypass de `estado` — no es un descuido. No hay evidencia de una necesidad real de UI para esto hoy, así que no se justifica construir una pantalla especulativa; se documenta como "reservado, sin UI, bajo costo de mantenimiento" en vez de eliminarlo. Si aparece una necesidad concreta (soporte, caso borde que el motor automático no resuelve bien), el backend ya está listo para conectarle un botón.
 
 ### UX-CLS-008 — Los campos `observacion` y `articulo` de la incidencia se traen del backend pero no se muestran en ninguna parte de la fila
 **Prioridad:** P3  **Tipo:** CONSISTENCIA  **Fuente:** código (inferido)
@@ -160,28 +169,29 @@ No se evaluaron `PATCH /api/clases/[id]` ni `listarClases` en esta matriz como "
 **Evidencia:** `app/protected/dashboard/clases/page.tsx:21` vs. `144-157`.
 **Impacto para el usuario:** ninguno funcional — es una oportunidad perdida menor (esos datos ya viajan por la red y podrían ahorrar un click a "Ver →" si se mostraran como tooltip), no un defecto.
 **Recomendación:** (no implementar) evaluar si vale la pena mostrar `articulo`/`observacion` como tooltip sobre el botón, o quitar los campos del tipo si deliberadamente no se van a usar.
+**Estado:** Pendiente (#161) — todavía sin resolver.
 
 ## 8. Pantallas auditadas sin problemas relevantes
 
-- **Estados de carga y vacío básicos** ("Cargando clases...", "No hay clases para mostrar" en el caso genuinamente vacío): el texto es claro y en español, aunque colisiona con el caso de error (ver UX-CLS-005).
+- **Estados de carga y vacío básicos** ("Cargando clases...", "No hay clases para mostrar" en el caso genuinamente vacío): el texto es claro y en español, aunque colisiona con el caso de error (ver UX-CLS-005, ya resuelto).
 - **Diferenciación de la acción en el link de incidencia** ("· Asignar →" para `SIN_COBERTURA` vs. "· Ver →" para el resto): buen patrón — el verbo cambia según si hay algo pendiente de resolver o solo se está consultando un registro histórico.
 - **`resolverClase` es idempotente y re-evaluable en cualquier momento** (comentario en `resolucionClaseService.ts:127-133`): decisión de diseño correcta y bien documentada — una clase `DICTADA` puede corregirse a `SUSPENDIDA`/`REEMPLAZADA` si aparece una incidencia tardía, pero nunca vuelve sola a `PROGRAMADA`. No es user-facing directamente, pero es una garantía de consistencia de datos que sostiene todo lo que sí se muestra en pantalla.
 - **`titularVigenteEn`** (`obtenerClasesOperativas.ts:49-57`): busca correctamente el titular vigente *en la fecha de la clase*, no el titular actual — evita mostrar datos históricamente incorrectos si hubo un cambio de titularidad después.
 
 ## 9. Áreas que no pudieron verificarse
 
-- **Toda prueba en vivo** (ver la pantalla real renderizada, verificar colores reales de los badges, probar el link a incidencia con datos reales, confirmar el comportamiento del disparo diario de `resolverClasesVencidas` con datos del tenant de prueba `Escuela Primaria N°12`): no hubo herramienta de navegador disponible en esta sesión pese a que el dev server está corriendo. Se recomienda repetir la verificación visual en una sesión con navegador para confirmar UX-CLS-004 (contraste/legibilidad real de los badges) y UX-CLS-005 (mensaje real que ve el usuario ante un error de red).
+- **Toda prueba en vivo** (ver la pantalla real renderizada, verificar colores reales de los badges, probar el link a incidencia con datos reales, confirmar el comportamiento del disparo diario de `resolverClasesVencidas` con datos del tenant de prueba `Escuela Primaria N°12`): no hubo herramienta de navegador disponible en esta sesión pese a que el dev server está corriendo. **Actualización:** UX-CLS-005 sí se verificó en vivo en una sesión posterior (bloqueo de request vía DevTools); UX-CLS-004 y el comportamiento real de `resolverClasesVencidas` con datos del tenant de prueba siguen sin verificación visual/en vivo.
 - **Control de rol en el proxy upstream** (UX-CLS-006): mismo límite ya documentado en UX-PER-012, el archivo del proxy no está dentro de los módulos revisados.
 - **Volumen real de datos por día**: no se pudo confirmar si la ausencia de paginación en la tabla (`/clases`) es un problema real en instituciones grandes, o si el volumen de "clases de un solo día" siempre es manejable. No se abrió como hallazgo separado por falta de evidencia de volumen real.
 - **Comportamiento exacto cuando `resolverClasesVencidas` tarda mucho** (institución con muchísimas clases vencidas acumuladas, ej. tras un período de inactividad prolongado del sistema): el bucle en `resolverClasesVencidas.ts:32-35` resuelve una por una de forma secuencial, dentro del mismo request que lo dispara (`withContext`). No se pudo estimar el impacto en latencia del primer request del día sin datos reales de volumen — **RIESGO / NO CONFIRMADO**.
 
-## 10. Lista priorizada de correcciones (sin implementar)
+## 10. Lista priorizada de correcciones
 
-1. **UX-CLS-002 (P0)** — exponer `causa` desde `obtenerClasesOperativas` hasta la UI y mostrarla junto al estado. Es la pieza que resolvería #138/UX-PER-004 en la pantalla donde naturalmente corresponde.
-2. **UX-CLS-001 (P1)** — decidir si la ausencia de filtro de fecha/vista semanal es una decisión de producto o una funcionalidad pendiente; si es lo segundo, conectar los filtros que `listarClases` ya soporta.
-3. **UX-CLS-003 (P1)** — dar visibilidad (al menos en logs observables, idealmente en UI) al resultado de `resolverClasesVencidas`.
-4. **UX-CLS-004 (P1)** — codificación visual (color/ícono) por estado + leyenda.
-5. **UX-CLS-005 (P1)** — diferenciar estado de error del estado "vacío real" en la tabla.
-6. **UX-CLS-006 (P2, condicionado)** — confirmar control de rol contra el proxy real (mismo ítem que UX-PER-012, se resuelve una sola vez para ambos módulos).
-7. **UX-CLS-007 (P2)** — decidir destino del API `GET/PATCH /api/clases` sin consumidor: conectarlo a una futura vista de filtros o documentarlo como deliberado.
-8. **UX-CLS-008 (P3)** — usar o quitar `observacion`/`articulo` del tipo `Clase` del frontend.
+1. ~~**UX-CLS-002 (P0)** — exponer `causa` desde `obtenerClasesOperativas` hasta la UI y mostrarla junto al estado.~~ **Resuelto**, commit `98d7996`.
+2. ~~**UX-CLS-001 (P1)** — decidir/conectar filtro de fecha/rango.~~ **Resuelto**, commit `98d7996`.
+3. **UX-CLS-003 (P1)** — dar visibilidad al resultado de `resolverClasesVencidas`. **Parcialmente resuelto**: se corrigió el riesgo de datos (reintento seguro tras fallo, commit `437c820`); **sigue pendiente** la visibilidad en UI.
+4. ~~**UX-CLS-004 (P1)** — codificación visual (color/ícono) por estado + leyenda.~~ **Resuelto**, commit `98d7996`.
+5. ~~**UX-CLS-005 (P1)** — diferenciar estado de error del estado "vacío real" en la tabla.~~ **Resuelto**, commit `aa115cf`.
+6. **UX-CLS-006 (P2, condicionado)** — confirmar control de rol contra el proxy real (mismo ítem que UX-PER-012). **Pendiente.**
+7. ~~**UX-CLS-007 (P2)** — decidir destino del API `GET/PATCH /api/clases` sin consumidor.~~ **Decidido**: se mantiene sin conectar a UI, documentado como capacidad reservada (no se elimina).
+8. **UX-CLS-008 (P3)** — usar o quitar `observacion`/`articulo` del tipo `Clase` del frontend. **Pendiente.**
