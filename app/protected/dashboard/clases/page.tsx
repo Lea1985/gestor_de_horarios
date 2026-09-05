@@ -254,6 +254,12 @@ export default function ClasesPage() {
                         {clase.incidencia ? (
                           <button
                             onClick={() => router.push(`/protected/dashboard/incidencias/${clase.incidencia!.id}`)}
+                            title={
+                              [
+                                clase.incidencia.articulo ? `Artículo ${clase.incidencia.articulo}` : null,
+                                clase.incidencia.observacion,
+                              ].filter(Boolean).join(" — ") || undefined
+                            }
                             style={{
                               background: "none", border: "none",
                               fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)",
