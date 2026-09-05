@@ -1,9 +1,12 @@
 //protected/dashboard/clases/page.tsx
 "use client"
+
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
+
 type CoberturaEstado = "NORMAL" | "REEMPLAZADA" | "SIN_COBERTURA" | "SUSPENDIDA"
+
 type Clase = {
   id: number
   fecha: string
@@ -21,17 +24,20 @@ type Clase = {
   suplente: { nombre: string; apellido: string } | null
   modulo: { hora_desde: number; hora_hasta: number } | null
 }
+
 function formatHora(minutos?: number | null) {
   if (minutos == null) return "—"
   const horas = Math.floor(minutos / 60)
   const mins = minutos % 60
   return `${String(horas).padStart(2, "0")}:${String(mins).padStart(2, "0")}`
 }
+
 function hoyISO() {
   const hoy = new Date()
   hoy.setUTCHours(0, 0, 0, 0)
   return hoy.toISOString().slice(0, 10)
 }
+
 // UX-CLS-002/UX-CLS-004: la Causa (por qué está suspendida) no se mostraba
 // en ningún lado, y el badge de Estado no distinguía visualmente los casos.
 // Este mapeo combina estado + causa + coberturaEstado (que el backend ya
@@ -46,7 +52,9 @@ const CAUSA_LABEL: Record<string, string> = {
   FIN_ASIGNACION:      "fin de asignación",
   MANUAL:              "manual",
 }
+
 type InfoEstado = { texto: string; bg: string; color: string }
+
 function infoEstado(clase: Clase): InfoEstado {
   switch (clase.estado) {
     case "PROGRAMADA":
@@ -66,6 +74,7 @@ function infoEstado(clase: Clase): InfoEstado {
       return { texto: clase.estado, bg: "#f3f4f6", color: "#6b7280" }
   }
 }
+
 const LEYENDA: { color: string; texto: string }[] = [
   { color: "#2563eb", texto: "Programada" },
   { color: "#16a34a", texto: "Dictada" },
@@ -73,6 +82,7 @@ const LEYENDA: { color: string; texto: string }[] = [
   { color: "#dc2626", texto: "Sin cobertura — requiere acción" },
   { color: "#6b7280", texto: "Suspendida — sin acción (feriado, período, etc.)" },
 ]
+
 const inputStyle = {
   background:   "var(--color-surface)",
   border:       "1px solid var(--color-border)",
@@ -81,17 +91,20 @@ const inputStyle = {
   fontSize:     "var(--text-sm)",
   color:        "var(--color-text-primary)",
 }
+
 export default function ClasesPage() {
   const router = useRouter()
   const { authHeaders } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [clases, setClases] = useState<Clase[]>([])
+
   // UX-CLS-001: rango de fechas, default "hoy" en ambos extremos -- el
   // comportamiento de siempre sigue siendo el default al entrar.
   const [desde, setDesde] = useState(hoyISO())
   const [hasta, setHasta] = useState(hoyISO())
   const esHoy = desde === hoyISO() && hasta === hoyISO()
+
   async function cargarClases() {
     try {
       setLoading(true)
@@ -114,11 +127,13 @@ export default function ClasesPage() {
       setLoading(false)
     }
   }
+
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") {
       cargarClases()
     }
   }, [authHeaders.Authorization, desde, hasta])
+
   const metricas = useMemo(() => {
     const total = clases.length
     let reemplazadas = 0
@@ -133,6 +148,7 @@ export default function ClasesPage() {
     }
     return { total, reemplazadas, suspendidas, sinCobertura }
   }, [clases])
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-3)" }}>
@@ -160,19 +176,21 @@ export default function ClasesPage() {
           )}
         </div>
       </div>
+
       {/* Error */}
       {error && (
         <div style={{ padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
           {error}
         </div>
       )}
+
       {/* Métricas */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--space-4)" }}>
         {[
-          { label: "Clases",             value: metricas.total,        color: undefined as string | undefined },
-          { label: "Reemplazos activos", value: metricas.reemplazadas, color: undefined as string | undefined },
-          { label: "Suspendidas",        value: metricas.suspendidas,  color: undefined as string | undefined },
-          { label: "Sin cobertura",      value: metricas.sinCobertura, color: metricas.sinCobertura > 0 ? "#dc2626" : "#16a34a" },
+          { label: "Clases",             value: error ? "—" : metricas.total,        color: undefined as string | undefined },
+          { label: "Reemplazos activos", value: error ? "—" : metricas.reemplazadas, color: undefined as string | undefined },
+          { label: "Suspendidas",        value: error ? "—" : metricas.suspendidas,  color: undefined as string | undefined },
+          { label: "Sin cobertura",      value: error ? "—" : metricas.sinCobertura, color: error ? undefined : (metricas.sinCobertura > 0 ? "#dc2626" : "#16a34a") },
         ].map(card => (
           <div key={card.label} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-4)" }}>
             <div style={{ fontSize: "var(--text-2xs)", textTransform: "uppercase", color: "var(--color-text-hint)", marginBottom: "var(--space-2)" }}>
@@ -184,6 +202,7 @@ export default function ClasesPage() {
           </div>
         ))}
       </div>
+
       {/* Tabla */}
       <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
@@ -199,9 +218,15 @@ export default function ClasesPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ padding: "var(--space-4)" }}>Cargando clases...</td></tr>
+                <tr><td colSpan={esHoy ? 6 : 7} style={{ padding: "var(--space-4)" }}>Cargando clases...</td></tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={esHoy ? 6 : 7} style={{ padding: "var(--space-4)", color: "var(--color-error)" }}>
+                    No se pudieron cargar las clases. Revisá el error de arriba e intentá de nuevo.
+                  </td>
+                </tr>
               ) : clases.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: "var(--space-4)" }}>No hay clases para mostrar en este rango</td></tr>
+                <tr><td colSpan={esHoy ? 6 : 7} style={{ padding: "var(--space-4)" }}>No hay clases para mostrar en este rango</td></tr>
               ) : (
                 clases.map(clase => {
                   const info = infoEstado(clase)
