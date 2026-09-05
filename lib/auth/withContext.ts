@@ -20,6 +20,10 @@
 //   2. resolverClasesVencidas: hace que las clases PROGRAMADA vencidas
 //      pasen a DICTADA.
 //
+// Si cualquiera de las dos falla, se revierte el claim (ultimaResolucionClases
+// vuelve a null) para que la próxima request de HOY reintente, en vez de
+// quedar marcado como "hecho" hasta mañana pese al fallo (UX-CLS-003).
+//
 // Uso en un handler:
 //
 //   export async function GET(req: Request) {
@@ -33,15 +37,17 @@ import { resolverClasesVencidas } from "@/lib/usecases/clases/resolverClasesVenc
 import { cerrarPeriodo } from "@/lib/usecases/periodosOperativos/cerrarPeriodo"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 
-async function cerrarPeriodoSiVencido(tenantId: number) {
+async function cerrarPeriodoSiVencido(tenantId: number): Promise<boolean> {
   const hoy = new Date()
   hoy.setUTCHours(0, 0, 0, 0)
   const activo = await periodoOperativoRepository.obtenerVigente(tenantId)
-  if (!activo || activo.fecha_hasta >= hoy) return // no hay activo, o todavía no venció
+  if (!activo || activo.fecha_hasta >= hoy) return true // no hay activo, o todavía no venció -- no es un fallo
   try {
     await cerrarPeriodo(tenantId, activo.id)
+    return true
   } catch (error) {
     console.error(`Error auto-cerrando período vencido (institucion ${tenantId}, periodo ${activo.id}):`, error)
+    return false
   }
 }
 
@@ -59,12 +65,27 @@ async function resolverClasesVencidasSiCorresponde(tenantId: number) {
     data: { ultimaResolucionClases: hoy },
   })
   if (count === 0) return // otra request ya se encargó hoy para esta institución
-  await cerrarPeriodoSiVencido(tenantId)
+
+  const periodoOk = await cerrarPeriodoSiVencido(tenantId)
+
+  let clasesOk = true
   try {
     await resolverClasesVencidas(tenantId)
   } catch (error) {
+    clasesOk = false
     console.error(`Error en resolverClasesVencidas (institucion ${tenantId}):`, error)
     // no relanzamos -- que un fallo acá no tumbe el request real
+  }
+
+  if (!periodoOk || !clasesOk) {
+    // Liberar el claim para que la próxima request de HOY reintente,
+    // en vez de quedar "marcado como hecho" hasta mañana pese al fallo.
+    await prisma.institucion.updateMany({
+      where: { id: tenantId, ultimaResolucionClases: hoy },
+      data: { ultimaResolucionClases: null },
+    }).catch((rollbackError) => {
+      console.error(`Error revirtiendo ultimaResolucionClases (institucion ${tenantId}):`, rollbackError)
+    })
   }
 }
 
