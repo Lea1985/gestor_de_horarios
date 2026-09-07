@@ -79,7 +79,7 @@ Modelos: `Codigario`, `CodigarioItem` (`prisma/schema.prisma`).
 ## 6. Hallazgos
 
 ### UX-COD-001 — Editar "% Computable" no comunica su impacto retroactivo sobre liquidaciones ya calculadas
-**Prioridad:** P0  **Tipo:** VALIDACIÓN DE NEGOCIO / MENSAJE  **Fuente:** código (inferido)
+**Prioridad:** P1  **Tipo:** VALIDACIÓN DE NEGOCIO / MENSAJE  **Fuente:** código (inferido)
 **Pantalla:** `/codigarios/[id]` — formulario "Editar item"
 **Acción:** Cambiar el valor de "% Computable" de un item existente y guardar.
 **Resultado esperado:** Antes de confirmar un cambio que afecta cuánto se le paga a un docente por incidencias ya ocurridas (incluso en períodos operativos ya cerrados), el sistema debería advertir esa consecuencia explícitamente.
@@ -95,6 +95,8 @@ Mismo patrón en `lib/reporting/datasets/obtenerJornadas.ts:107,145`. No existe 
 **Evidencia:** `app/protected/dashboard/codigarios/[id]/page.tsx:189-226` (formulario y `guardar()`); `lib/usecases/codigarios/actualizarItem.ts:15-29` (sin ningún control de impacto ni advertencia); `lib/reporting/datasets/obtenerModulosComputables.ts:87-116`; `prisma/schema.prisma:424-448`.
 **Impacto para el usuario:** Un operador que corrige el porcentaje de un código para casos futuros (p. ej. "a partir de ahora ENF paga 85% en vez de 100%") recalcula sin saberlo el pago de **todas** las incidencias pasadas con ese código, incluyendo períodos operativos ya cerrados y liquidaciones ya entregadas al liquidador de sueldos. No hay forma de saber, desde esta pantalla, cuántos registros históricos se verán afectados ni de limitar el cambio "de ahora en adelante".
 **Recomendación:** Antes de guardar un cambio de `porcentajeComputable` sobre un item existente, mostrar cuántas incidencias/clases ya computadas usan ese item y una advertencia explícita ("Este cambio recalcula el pago de N incidencias ya registradas, incluyendo períodos cerrados"). Evaluar a futuro (fuera de esta auditoría, es un cambio de modelo) si conviene versionar el porcentaje o registrar el valor vigente al crear la `Incidencia`. (NO implementar — documentar solamente.)
+
+**Nota de reclasificación (P0→P1, acordado con el usuario):** el disparador directo —editar el % a mano sobre un item existente— es de frecuencia real muy baja (más de 15 años de operación sin cambiar un porcentaje de descuento). Se mantiene como P1 en vez de descartarse porque (a) el costo del fix es mínimo, una advertencia de texto sin cambio de modelo, y (b) el camino más probable hacia el mismo daño no es este formulario sino UX-COD-003 (recrear un código previamente eliminado reactiva el item y su historial en silencio) — la advertencia debería cubrir también ese flujo.
 
 ---
 
@@ -250,9 +252,9 @@ y la pantalla de detalle, ante el 404, renderiza únicamente `<div>No encontrado
 
 ## 9. Lista priorizada de correcciones (sin implementar)
 
-1. **P0 — UX-COD-001:** Advertencia explícita de impacto retroactivo antes de guardar un cambio de "% Computable" sobre un item existente, idealmente mostrando cuántas incidencias ya lo usan.
-2. **P1 — UX-COD-003:** Distinguir "crear item nuevo" de "reactivar item eliminado con mismo código" en el formulario de alta, en vez de fusionarlos en silencio.
-3. **P1 — UX-COD-002:** Unificar el criterio de conteo de items entre la tabla (`_count.items` activos) y el bloqueo de borrado (`tieneItems` total), o al menos alinear el mensaje de error con lo que la pantalla muestra.
+1. **P1 — UX-COD-003:** Distinguir "crear item nuevo" de "reactivar item eliminado con mismo código" en el formulario de alta, en vez de fusionarlos en silencio.
+2. **P1 — UX-COD-002:** Unificar el criterio de conteo de items entre la tabla (`_count.items` activos) y el bloqueo de borrado (`tieneItems` total), o al menos alinear el mensaje de error con lo que la pantalla muestra.
+3. **P1 — UX-COD-001:** Advertencia explícita de impacto retroactivo antes de guardar un cambio de "% Computable" sobre un item existente, idealmente mostrando cuántas incidencias ya lo usan. Reclasificado de P0 a P1 (ver nota en el hallazgo): disparador de baja frecuencia confirmado por el usuario, pero costo de fix mínimo y agravado por UX-COD-003.
 4. **P2 — UX-COD-004:** Corregir el texto "no se puede deshacer" en ambos modales de confirmación, dado que ambas eliminaciones son reversibles vía "Reactivar".
 5. **P2 — UX-COD-006:** Aclarar en el formulario qué significa 100%/0% en "% Computable", o quitar el default de 100 para forzar una elección consciente.
 6. **P2 — UX-COD-005:** Agregar feedback de éxito, al menos para "Reactivar".

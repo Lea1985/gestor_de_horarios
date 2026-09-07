@@ -2,13 +2,12 @@
   import { withContext } from "@/lib/auth/withContext"
   import { Prisma } from "@prisma/client"
   import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
-  import { crearItem, DatosItemInvalidosError, CodigarioNoEncontradoError, PorcentajeComputableInvalidoError } from "@/lib/usecases/codigarios/crearItem"
-
+  import { crearItem, DatosItemInvalidosError, CodigarioNoEncontradoError, PorcentajeComputableInvalidoError, ReactivacionRequeridaError } from "@/lib/usecases/codigarios/crearItem"
+  import { formatFecha } from "@/lib/pdf/generator"
   function parseId(id: string) {
     const n = Number(id)
     return isNaN(n) ? null : n
   }
-
   export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
     const { id } = await context.params
     const codigarioId = parseId(id)
@@ -18,7 +17,6 @@
       return Response.json(items)
     })
   }
-
   export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
     const { id } = await context.params
     const codigarioId = parseId(id)
@@ -35,6 +33,18 @@
       if (error instanceof DatosItemInvalidosError) return Response.json({ error: error.message }, { status: 400 })
       if (error instanceof PorcentajeComputableInvalidoError) return Response.json({ error: error.message }, { status: 400 })
       if (error instanceof CodigarioNoEncontradoError) return Response.json({ error: error.message }, { status: 404 })
+      if (error instanceof ReactivacionRequeridaError) {
+        return Response.json({
+          error: error.message,
+          code: "REACTIVACION_REQUERIDA",
+          itemExistente: {
+            nombre: error.itemExistente.nombre,
+            descripcion: error.itemExistente.descripcion,
+            porcentajeComputable: error.itemExistente.porcentajeComputable,
+            fechaEliminacion: formatFecha(error.itemExistente.deletedAt),
+          },
+        }, { status: 409 })
+      }
       if (error instanceof Error && error.name === "ItemDuplicadoError") {
         return Response.json({ error: error.message }, { status: 409 })
       }

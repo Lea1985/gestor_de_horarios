@@ -3,7 +3,7 @@ import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
 import { actualizarItem, ItemNoEncontradoError, SinCamposError, PorcentajeComputableInvalidoError } from "@/lib/usecases/codigarios/actualizarItem"
-import { eliminarItem } from "@/lib/usecases/codigarios/eliminarItem"
+import { eliminarItem, ItemConHistorialCerradoError } from "@/lib/usecases/codigarios/eliminarItem"
 
 function parseId(id: string) {
   const n = Number(id)
@@ -49,7 +49,14 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   const id = parseId(itemId)
   if (!id) return Response.json({ error: "ID inválido" }, { status: 400 })
   return withContext(req, async ({ tenantId }) => {
-    const result = await eliminarItem(id, tenantId)
-    return Response.json(result)
+    try {
+      const result = await eliminarItem(id, tenantId)
+      return Response.json(result)
+    } catch (error) {
+      if (error instanceof ItemConHistorialCerradoError) {
+        return Response.json({ error: error.message }, { status: 409 })
+      }
+      return Response.json({ error: "Error eliminando item" }, { status: 500 })
+    }
   })
 }

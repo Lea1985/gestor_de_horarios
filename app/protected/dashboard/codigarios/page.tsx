@@ -1,10 +1,7 @@
-// app/protected/dashboard/codigarios/page.tsx
 "use client"
-
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/app/hooks/useAuth"
-
 type Codigario = {
   id:          number
   nombre:      string
@@ -12,15 +9,13 @@ type Codigario = {
   activo:      boolean
   deletedAt:   string | null
   _count:      { items: number }
+  items:       { id: number }[]
 }
-
 type FormData = {
   nombre:      string
   descripcion: string
 }
-
 const FORM_VACIO: FormData = { nombre: "", descripcion: "" }
-
 const s = {
   label: {
     fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)" as const,
@@ -42,7 +37,6 @@ const s = {
     borderBottom: "1px solid var(--color-border)", verticalAlign: "middle" as const,
   },
 }
-
 function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
   mensaje: string; onConfirmar: () => void; onCancelar: () => void
 }) {
@@ -59,10 +53,8 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
     </div>
   )
 }
-
 export default function CodigariosPage() {
   const { authHeaders } = useAuth()
-
   const [codigarios,   setCodigarios]   = useState<Codigario[]>([])
   const [loading,      setLoading]      = useState(true)
   const [mostrarForm,  setMostrarForm]  = useState(false)
@@ -70,11 +62,12 @@ export default function CodigariosPage() {
   const [form,         setForm]         = useState<FormData>(FORM_VACIO)
   const [formErrors,   setFormErrors]   = useState<Partial<FormData>>({})
   const [error,        setError]        = useState<string | null>(null)
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null)
   const [guardando,    setGuardando]    = useState(false)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verInactivos, setVerInactivos] = useState(false)
-
+  const formRef = useRef<HTMLDivElement>(null)
   // ── Filtro client-side ────────────────────────────────────
   const codigariosFiltrados = useMemo(() => {
     let filtrados = codigarios
@@ -88,7 +81,6 @@ export default function CodigariosPage() {
     }
     return filtrados
   }, [codigarios, busqueda, verInactivos])
-
   async function cargar() {
     try {
       setLoading(true)
@@ -101,27 +93,32 @@ export default function CodigariosPage() {
       setLoading(false)
     }
   }
-
   useEffect(() => {
     if (authHeaders.Authorization !== "Bearer ") cargar()
   }, [authHeaders.Authorization, verInactivos])
-
+  useEffect(() => {
+    if (mostrarForm) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [mostrarForm])
+  function mostrarExito(msg: string) {
+    setMensajeExito(msg)
+    setTimeout(() => setMensajeExito(null), 3000)
+  }
   function abrirCrear() {
     setForm(FORM_VACIO)
     setFormErrors({})
     setEditandoId(null)
     setMostrarForm(true)
     setError(null)
+    setMensajeExito(null)
   }
-
   function abrirEditar(c: Codigario) {
     setForm({ nombre: c.nombre, descripcion: c.descripcion ?? "" })
     setFormErrors({})
     setEditandoId(c.id)
     setMostrarForm(true)
     setError(null)
+    setMensajeExito(null)
   }
-
   function cancelar() {
     setMostrarForm(false)
     setEditandoId(null)
@@ -129,7 +126,6 @@ export default function CodigariosPage() {
     setFormErrors({})
     setError(null)
   }
-
   function validar(): boolean {
     const errors: Partial<FormData> = {}
     if (!form.nombre.trim()) errors.nombre = "Campo requerido"
@@ -144,7 +140,6 @@ export default function CodigariosPage() {
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
-
   async function guardar() {
     if (!validar()) return
     setGuardando(true)
@@ -162,6 +157,7 @@ export default function CodigariosPage() {
         return
       }
       await cargar()
+      mostrarExito(editandoId ? "Codigario actualizado" : "Codigario creado")
       cancelar()
     } catch {
       setError("Error de red")
@@ -169,7 +165,6 @@ export default function CodigariosPage() {
       setGuardando(false)
     }
   }
-
   async function eliminar(id: number) {
     try {
       const res = await fetch(`/api/codigarios/${id}`, { method: "DELETE", headers: authHeaders })
@@ -179,13 +174,13 @@ export default function CodigariosPage() {
         return
       }
       await cargar()
+      mostrarExito("Codigario eliminado")
     } catch {
       setError("Error de red")
     } finally {
       setConfirmarId(null)
     }
   }
-
   async function reactivar(id: number) {
     try {
       const res = await fetch(`/api/codigarios/${id}/reactivar`, {
@@ -198,17 +193,16 @@ export default function CodigariosPage() {
         return
       }
       await cargar()
+      mostrarExito("Codigario reactivado")
     } catch {
       setError("Error de red")
     }
   }
-
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-12)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
       Cargando codigarios...
     </div>
   )
-
   return (
     <>
       {confirmarId !== null && (
@@ -218,9 +212,7 @@ export default function CodigariosPage() {
           onCancelar={() => setConfirmarId(null)}
         />
       )}
-
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
-
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -236,7 +228,6 @@ export default function CodigariosPage() {
             </button>
           )}
         </div>
-
         {/* Error */}
         {error && (
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }} role="alert">
@@ -245,14 +236,20 @@ export default function CodigariosPage() {
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
           </div>
         )}
-
+        {/* Éxito */}
+        {mensajeExito && (
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "#f0fdf4", border: "1px solid #16a34a", fontSize: "var(--text-xs)", color: "#16a34a" }} role="status">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {mensajeExito}
+            <button onClick={() => setMensajeExito(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#16a34a", fontSize: "var(--text-base)", lineHeight: 1 }}>×</button>
+          </div>
+        )}
         {/* Formulario */}
         {mostrarForm && (
-          <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
+          <div ref={formRef} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editandoId ? "Editar codigario" : "Nuevo codigario"}
             </h2>
-
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
               <div>
                 <label style={s.label}>Nombre <span style={{ color: "var(--color-error)" }}>*</span></label>
@@ -266,7 +263,6 @@ export default function CodigariosPage() {
                 />
                 {formErrors.nombre && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors.nombre}</span>}
               </div>
-
               <div>
                 <label style={s.label}>Descripción</label>
                 <textarea
@@ -279,7 +275,6 @@ export default function CodigariosPage() {
                 />
               </div>
             </div>
-
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-6)", justifyContent: "flex-end" }}>
               <button onClick={cancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
               <button onClick={guardar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
@@ -288,7 +283,6 @@ export default function CodigariosPage() {
             </div>
           </div>
         )}
-
         {/* Barra de búsqueda + toggle inactivos */}
         {!mostrarForm && (
           <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>
@@ -306,7 +300,6 @@ export default function CodigariosPage() {
             </label>
           </div>
         )}
-
         {/* Tabla */}
         <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -322,7 +315,7 @@ export default function CodigariosPage() {
                 </td></tr>
               ) : codigariosFiltrados.map(c => {
                 const itemCount  = c._count?.items ?? 0
-                const tieneItems = itemCount > 0
+                const tieneHistorialCerrado = (c.items?.length ?? 0) > 0
                 const esInactivo = !c.activo || c.deletedAt !== null
                 return (
                   <tr key={c.id} style={{ transition: "background 0.1s" }}
@@ -338,10 +331,8 @@ export default function CodigariosPage() {
                         </span>
                       )}
                     </td>
-
                     {/* Descripción */}
                     <td style={{ ...s.td, color: "var(--color-text-secondary)" }}>{c.descripcion ?? "—"}</td>
-
                     {/* Items */}
                     <td style={s.td}>
                       {esInactivo ? (
@@ -354,7 +345,6 @@ export default function CodigariosPage() {
                         </Link>
                       )}
                     </td>
-
                     {/* Acciones */}
                     <td style={s.td}>
                       {esInactivo ? (
@@ -372,14 +362,13 @@ export default function CodigariosPage() {
                           >
                             Editar
                           </button>
-
-                          {tieneItems ? (
+                          {tieneHistorialCerrado ? (
                             <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", display: "flex", alignItems: "center", gap: 4 }}>
                               <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
                                 <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/>
                                 <path d="M7 4v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                               </svg>
-                              Tiene {itemCount} item{itemCount !== 1 ? "s" : ""}
+                              No se puede eliminar (historial cerrado)
                             </span>
                           ) : (
                             <button
@@ -398,7 +387,6 @@ export default function CodigariosPage() {
             </tbody>
           </table>
         </div>
-
       </div>
     </>
   )

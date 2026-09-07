@@ -1,9 +1,8 @@
 "use client"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
-
 type Item = {
   id: number
   codigo: string
@@ -68,10 +67,12 @@ const s = {
 }
 function ModalConfirmar({
   mensaje,
+  textoConfirmar = "Eliminar",
   onConfirmar,
   onCancelar,
 }: {
   mensaje: string
+  textoConfirmar?: string
   onConfirmar: () => void
   onCancelar: () => void
 }) {
@@ -116,7 +117,7 @@ function ModalConfirmar({
             onClick={onConfirmar}
             style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
           >
-            Eliminar
+            {textoConfirmar}
           </button>
         </div>
       </div>
@@ -134,10 +135,15 @@ export default function CodigarioDetallePage() {
   const [form,         setForm]         = useState<FormData>(FORM_VACIO)
   const [formErrors,   setFormErrors]   = useState<Partial<FormData>>({})
   const [error,        setError]        = useState<string | null>(null)
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
+  const [reactivacionPendiente, setReactivacionPendiente] = useState<{
+    nombre: string; descripcion: string | null; porcentajeComputable: number; fechaEliminacion: string
+  } | null>(null)
   const [editandoId,   setEditandoId]   = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verInactivos, setVerInactivos] = useState(false)
+  const formRef = useRef<HTMLDivElement>(null)
 const itemsFiltrados = useMemo(() => {
   const items = codigario?.items ?? []
   if (!busqueda.trim()) return items
@@ -165,12 +171,20 @@ async function cargar() {
 useEffect(() => {
   if (authHeaders.Authorization !== "Bearer ") cargar()
 }, [authHeaders.Authorization, verInactivos])
+useEffect(() => {
+  if (mostrarForm) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+}, [mostrarForm])
+  function mostrarExito(msg: string) {
+    setMensajeExito(msg)
+    setTimeout(() => setMensajeExito(null), 3000)
+  }
   function abrirCrear() {
     setEditandoId(null)
     setForm(FORM_VACIO)
     setFormErrors({})
     setMostrarForm(true)
     setError(null)
+    setMensajeExito(null)
   }
   function abrirEditar(item: Item) {
     setEditandoId(item.id)
@@ -178,6 +192,7 @@ useEffect(() => {
     setFormErrors({})
     setMostrarForm(true)
     setError(null)
+    setMensajeExito(null)
   }
   function cancelar() {
     setMostrarForm(false)
@@ -197,7 +212,7 @@ useEffect(() => {
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
-  async function guardar() {
+  async function guardar(confirmarReactivacion = false) {
     if (!validar()) return
     setGuardando(true)
     setError(null)
@@ -209,20 +224,37 @@ useEffect(() => {
       const res = await fetch(url, {
         method,
         headers: authHeaders,
-        body: JSON.stringify({ codigo: form.codigo, nombre: form.nombre, descripcion: form.descripcion || null, porcentajeComputable: Number(form.porcentajeComputable) }),
+        body: JSON.stringify({
+          codigo: form.codigo,
+          nombre: form.nombre,
+          descripcion: form.descripcion || null,
+          porcentajeComputable: Number(form.porcentajeComputable),
+          ...(confirmarReactivacion ? { confirmarReactivacion: true } : {}),
+        }),
       })
       if (!res.ok) {
         const data = await res.json()
+        if (data.code === "REACTIVACION_REQUERIDA") {
+          setReactivacionPendiente(data.itemExistente)
+          return
+        }
         setError(data.error ?? "Error guardando item")
         return
       }
+      setReactivacionPendiente(null)
       await cargar()
+      mostrarExito(
+        confirmarReactivacion ? "Item reactivado" : editandoId === null ? "Item creado" : "Item actualizado"
+      )
       cancelar()
     } catch {
       setError("Error de red")
     } finally {
       setGuardando(false)
     }
+  }
+  function confirmarReactivacionItem() {
+    guardar(true)
   }
   async function eliminarItem(itemId: number) {
     try {
@@ -236,6 +268,7 @@ useEffect(() => {
         return
       }
       await cargar()
+      mostrarExito("Item eliminado")
     } catch {
       setError("Error de red")
     } finally {
@@ -257,6 +290,7 @@ useEffect(() => {
         ...prev,
         items: prev.items.map(i => i.id === itemId ? { ...i, activo: true, deletedAt: null } : i),
       } : prev)
+      mostrarExito("Item reactivado")
     } catch {
       setError("Error de red")
     }
@@ -274,6 +308,14 @@ useEffect(() => {
           mensaje="¿Eliminar este item? Esta acción no se puede deshacer."
           onConfirmar={() => eliminarItem(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
+        />
+      )}
+      {reactivacionPendiente && (
+        <ModalConfirmar
+          mensaje={`Ya existió un item con el código "${form.codigo}" (${reactivacionPendiente.nombre}), eliminado el ${reactivacionPendiente.fechaEliminacion}. Si continuás, se reactiva ese item con los datos que acabás de cargar — incluyendo las incidencias históricas ya asociadas a él. ¿Reactivarlo?`}
+          textoConfirmar="Reactivar con estos datos"
+          onConfirmar={confirmarReactivacionItem}
+          onCancelar={() => setReactivacionPendiente(null)}
         />
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
@@ -311,9 +353,17 @@ useEffect(() => {
             <button onClick={() => setError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }} aria-label="Cerrar">×</button>
           </div>
         )}
+        {/* Éxito */}
+        {mensajeExito && (
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "#f0fdf4", border: "1px solid #16a34a", fontSize: "var(--text-xs)", color: "#16a34a" }} role="status">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {mensajeExito}
+            <button onClick={() => setMensajeExito(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#16a34a", fontSize: "var(--text-base)", lineHeight: 1 }} aria-label="Cerrar">×</button>
+          </div>
+        )}
         {/* Formulario */}
         {mostrarForm && (
-          <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
+          <div ref={formRef} style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: "var(--space-6)", maxWidth: 520 }}>
             <h2 style={{ fontSize: "var(--text-base)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginBottom: "var(--space-6)" }}>
               {editandoId === null ? "Nuevo item" : "Editar item"}
             </h2>
@@ -349,7 +399,7 @@ useEffect(() => {
               <button onClick={cancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>
                 Cancelar
               </button>
-              <button onClick={guardar} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
+              <button onClick={() => guardar()} disabled={guardando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: guardando ? "not-allowed" : "pointer", opacity: guardando ? 0.6 : 1 }}>
                 {guardando ? "Guardando..." : editandoId === null ? "Crear item" : "Guardar cambios"}
               </button>
             </div>
