@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 type Item = {
   id: number
@@ -68,11 +68,13 @@ const s = {
 function ModalConfirmar({
   mensaje,
   textoConfirmar = "Eliminar",
+  cargando = false,
   onConfirmar,
   onCancelar,
 }: {
   mensaje: string
   textoConfirmar?: string
+  cargando?: boolean
   onConfirmar: () => void
   onCancelar: () => void
 }) {
@@ -115,9 +117,10 @@ function ModalConfirmar({
           </button>
           <button
             onClick={onConfirmar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}
+            disabled={cargando}
+            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: cargando ? "not-allowed" : "pointer", opacity: cargando ? 0.6 : 1 }}
           >
-            {textoConfirmar}
+            {cargando ? "Procesando..." : textoConfirmar}
           </button>
         </div>
       </div>
@@ -127,6 +130,8 @@ function ModalConfirmar({
 export default function CodigarioDetallePage() {
   const params = useParams()
   const codigarioId = params.id as string
+  const searchParams = useSearchParams()
+  const volverHref = `/protected/dashboard/codigarios${searchParams.toString() ? `?${searchParams.toString()}` : ""}`
   const { authHeaders } = useAuth()
   const [codigario,    setCodigario]    = useState<Codigario | null>(null)
   const [loading,      setLoading]      = useState(true)
@@ -136,10 +141,13 @@ export default function CodigarioDetallePage() {
   const [formErrors,   setFormErrors]   = useState<Partial<FormData>>({})
   const [error,        setError]        = useState<string | null>(null)
   const [mensajeExito, setMensajeExito] = useState<string | null>(null)
-  const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
-  const [reactivacionPendiente, setReactivacionPendiente] = useState<{
+   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
+  const [eliminandoItem, setEliminandoItem] = useState(false)
+  const [reactivandoItemId, setReactivandoItemId] = useState<number | null>(null)
+    const [reactivacionPendiente, setReactivacionPendiente] = useState<{
     nombre: string; descripcion: string | null; porcentajeComputable: number; fechaEliminacion: string
   } | null>(null)
+  const [impactoRetroactivoPendiente, setImpactoRetroactivoPendiente] = useState<{ cantidadIncidencias: number } | null>(null)
   const [editandoId,   setEditandoId]   = useState<number | null>(null)
   const [busqueda,     setBusqueda]     = useState("")
   const [verInactivos, setVerInactivos] = useState(false)
@@ -178,13 +186,14 @@ useEffect(() => {
     setMensajeExito(msg)
     setTimeout(() => setMensajeExito(null), 3000)
   }
-  function abrirCrear() {
+    function abrirCrear() {
     setEditandoId(null)
     setForm(FORM_VACIO)
     setFormErrors({})
     setMostrarForm(true)
     setError(null)
     setMensajeExito(null)
+    setImpactoRetroactivoPendiente(null)
   }
   function abrirEditar(item: Item) {
     setEditandoId(item.id)
@@ -193,6 +202,7 @@ useEffect(() => {
     setMostrarForm(true)
     setError(null)
     setMensajeExito(null)
+    setImpactoRetroactivoPendiente(null)
   }
   function cancelar() {
     setMostrarForm(false)
@@ -212,7 +222,7 @@ useEffect(() => {
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
-  async function guardar(confirmarReactivacion = false) {
+    async function guardar(opciones: { confirmarReactivacion?: boolean; confirmarImpactoRetroactivo?: boolean } = {}) {
     if (!validar()) return
     setGuardando(true)
     setError(null)
@@ -229,7 +239,8 @@ useEffect(() => {
           nombre: form.nombre,
           descripcion: form.descripcion || null,
           porcentajeComputable: Number(form.porcentajeComputable),
-          ...(confirmarReactivacion ? { confirmarReactivacion: true } : {}),
+          ...(opciones.confirmarReactivacion ? { confirmarReactivacion: true } : {}),
+          ...(opciones.confirmarImpactoRetroactivo ? { confirmarImpactoRetroactivo: true } : {}),
         }),
       })
       if (!res.ok) {
@@ -238,13 +249,18 @@ useEffect(() => {
           setReactivacionPendiente(data.itemExistente)
           return
         }
+        if (data.code === "IMPACTO_RETROACTIVO") {
+          setImpactoRetroactivoPendiente({ cantidadIncidencias: data.cantidadIncidencias })
+          return
+        }
         setError(data.error ?? "Error guardando item")
         return
       }
       setReactivacionPendiente(null)
+      setImpactoRetroactivoPendiente(null)
       await cargar()
       mostrarExito(
-        confirmarReactivacion ? "Item reactivado" : editandoId === null ? "Item creado" : "Item actualizado"
+        opciones.confirmarReactivacion ? "Item reactivado" : editandoId === null ? "Item creado" : "Item actualizado"
       )
       cancelar()
     } catch {
@@ -254,9 +270,10 @@ useEffect(() => {
     }
   }
   function confirmarReactivacionItem() {
-    guardar(true)
+    guardar({ confirmarReactivacion: true })
   }
   async function eliminarItem(itemId: number) {
+    setEliminandoItem(true)
     try {
       const res = await fetch(`/api/codigarios/${codigarioId}/items/${itemId}`, {
         method: "DELETE",
@@ -272,10 +289,12 @@ useEffect(() => {
     } catch {
       setError("Error de red")
     } finally {
+      setEliminandoItem(false)
       setConfirmarId(null)
     }
   }
   async function reactivarItem(itemId: number) {
+    setReactivandoItemId(itemId)
     try {
       const res = await fetch(`/api/codigarios/${codigarioId}/items/${itemId}/reactivar`, {
         method: "POST",
@@ -293,6 +312,8 @@ useEffect(() => {
       mostrarExito("Item reactivado")
     } catch {
       setError("Error de red")
+    } finally {
+      setReactivandoItemId(null)
     }
   }
   if (loading) return (
@@ -300,12 +321,20 @@ useEffect(() => {
       Cargando...
     </div>
   )
-  if (!codigario) return <div>No encontrado</div>
+  if (!codigario) return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-3)", padding: "var(--space-12)" }}>
+      <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>Codigario no encontrado.</p>
+      <Link href={volverHref} style={{ fontSize: "var(--text-sm)", color: "var(--color-accent)" }}>
+        ← Volver a Codigarios
+      </Link>
+    </div>
+  )
   return (
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este item? Esta acción no se puede deshacer."
+          mensaje="¿Eliminar este item? Dejará de estar disponible para nuevas incidencias. Podés reactivarlo después desde 'Ver inactivos'."
+          cargando={eliminandoItem}
           onConfirmar={() => eliminarItem(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />
@@ -314,15 +343,25 @@ useEffect(() => {
         <ModalConfirmar
           mensaje={`Ya existió un item con el código "${form.codigo}" (${reactivacionPendiente.nombre}), eliminado el ${reactivacionPendiente.fechaEliminacion}. Si continuás, se reactiva ese item con los datos que acabás de cargar — incluyendo las incidencias históricas ya asociadas a él. ¿Reactivarlo?`}
           textoConfirmar="Reactivar con estos datos"
+          cargando={guardando}
           onConfirmar={confirmarReactivacionItem}
           onCancelar={() => setReactivacionPendiente(null)}
+        />
+      )}
+      {impactoRetroactivoPendiente && (
+        <ModalConfirmar
+          mensaje={`Este cambio de "% Computable" recalcula el pago de ${impactoRetroactivoPendiente.cantidadIncidencias} incidencia${impactoRetroactivoPendiente.cantidadIncidencias !== 1 ? "s" : ""} ya cerrada${impactoRetroactivoPendiente.cantidadIncidencias !== 1 ? "s" : ""} (períodos ya pasados). ¿Confirmás el cambio?`}
+          textoConfirmar="Confirmar cambio"
+          cargando={guardando}
+          onConfirmar={() => guardar({ confirmarImpactoRetroactivo: true })}
+          onCancelar={() => setImpactoRetroactivoPendiente(null)}
         />
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1100 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <Link href="/protected/dashboard/codigarios" style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
+            <Link href={volverHref} style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)" }}>
               ← Volver
             </Link>
             <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", marginTop: "var(--space-1)" }}>
@@ -372,8 +411,8 @@ useEffect(() => {
                 { key: "codigo" as const, label: "Código", required: true, type: "text" },
                 { key: "nombre" as const, label: "Nombre", required: true, type: "text" },
                 { key: "descripcion" as const, label: "Descripción", type: "text" },
-                { key: "porcentajeComputable" as const, label: "% Computable", required: true, type: "number" },
-              ].map(({ key, label, required, type }) => (
+                { key: "porcentajeComputable" as const, label: "% Computable", required: true, type: "number", hint: "100 = sin descuento (paga completo). 0 = no paga." },
+              ].map(({ key, label, required, type, hint }) => (
                 <div key={key} style={{ gridColumn: key === "descripcion" ? "1 / -1" : undefined }}>
                   <label style={s.label}>
                     {label}
@@ -391,7 +430,10 @@ useEffect(() => {
                     onFocus={e => { e.target.style.borderColor = "var(--color-accent)"; e.target.style.boxShadow = "0 0 0 3px rgba(30,155,184,0.12)" }}
                     onBlur={e => { e.target.style.borderColor = formErrors[key] ? "var(--color-error)" : "var(--color-border)"; e.target.style.boxShadow = "none" }}
                   />
-                  {formErrors[key] && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors[key]}</span>}
+                  {formErrors[key]
+                    ? <span style={{ fontSize: "var(--text-xs)", color: "var(--color-error)", marginTop: "var(--space-1)", display: "block" }}>{formErrors[key]}</span>
+                    : hint && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)", marginTop: "var(--space-1)", display: "block" }}>{hint}</span>
+                  }
                 </div>
               ))}
             </div>
@@ -469,8 +511,8 @@ useEffect(() => {
                           </button>
                         </>
                       ) : (
-                        <button onClick={() => reactivarItem(item.id)} style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}>
-                          Reactivar
+                        <button onClick={() => reactivarItem(item.id)} disabled={reactivandoItemId === item.id} style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: reactivandoItemId === item.id ? "not-allowed" : "pointer", padding: 0, opacity: reactivandoItemId === item.id ? 0.6 : 1 }}>
+                          {reactivandoItemId === item.id ? "Reactivando..." : "Reactivar"}
                         </button>
                       )}
                     </div>

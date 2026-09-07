@@ -2,7 +2,7 @@
 import { withContext } from "@/lib/auth/withContext"
 import { Prisma } from "@prisma/client"
 import { codigarioRepository } from "@/lib/repositories/codigarioRepository"
-import { actualizarItem, ItemNoEncontradoError, SinCamposError, PorcentajeComputableInvalidoError } from "@/lib/usecases/codigarios/actualizarItem"
+import { actualizarItem, ItemNoEncontradoError, SinCamposError, PorcentajeComputableInvalidoError, ImpactoRetroactivoRequiereConfirmacionError } from "@/lib/usecases/codigarios/actualizarItem"
 import { eliminarItem, ItemConHistorialCerradoError } from "@/lib/usecases/codigarios/eliminarItem"
 
 function parseId(id: string) {
@@ -30,12 +30,19 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     try { body = await req.json() } catch {
       return Response.json({ error: "JSON inválido" }, { status: 400 })
     }
-    try {
+        try {
       return Response.json(await actualizarItem(id, tenantId, body))
     } catch (error) {
       if (error instanceof ItemNoEncontradoError) return Response.json({ error: error.message }, { status: 404 })
       if (error instanceof SinCamposError) return Response.json({ error: error.message }, { status: 400 })
       if (error instanceof PorcentajeComputableInvalidoError) return Response.json({ error: error.message }, { status: 400 })
+      if (error instanceof ImpactoRetroactivoRequiereConfirmacionError) {
+        return Response.json({
+          error: error.message,
+          code: "IMPACTO_RETROACTIVO",
+          cantidadIncidencias: error.cantidadIncidencias,
+        }, { status: 409 })
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         return Response.json({ error: "Ya existe un item con ese código en este codigario" }, { status: 409 })
       }

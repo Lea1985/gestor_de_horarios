@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 type Codigario = {
   id:          number
@@ -37,8 +38,8 @@ const s = {
     borderBottom: "1px solid var(--color-border)", verticalAlign: "middle" as const,
   },
 }
-function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
-  mensaje: string; onConfirmar: () => void; onCancelar: () => void
+function ModalConfirmar({ mensaje, cargando = false, onConfirmar, onCancelar }: {
+  mensaje: string; cargando?: boolean; onConfirmar: () => void; onCancelar: () => void
 }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }} onClick={onCancelar}>
@@ -47,7 +48,7 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-secondary)", marginBottom: "var(--space-6)" }}>{mensaje}</p>
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button onClick={onCancelar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}>Cancelar</button>
-          <button onClick={onConfirmar} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: "pointer" }}>Eliminar</button>
+          <button onClick={onConfirmar} disabled={cargando} style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: cargando ? "not-allowed" : "pointer", opacity: cargando ? 0.6 : 1 }}>{cargando ? "Eliminando..." : "Eliminar"}</button>
         </div>
       </div>
     </div>
@@ -55,6 +56,9 @@ function ModalConfirmar({ mensaje, onConfirmar, onCancelar }: {
 }
 export default function CodigariosPage() {
   const { authHeaders } = useAuth()
+  const router      = useRouter()
+  const pathname    = usePathname()
+  const searchParams = useSearchParams()
   const [codigarios,   setCodigarios]   = useState<Codigario[]>([])
   const [loading,      setLoading]      = useState(true)
   const [mostrarForm,  setMostrarForm]  = useState(false)
@@ -64,9 +68,11 @@ export default function CodigariosPage() {
   const [error,        setError]        = useState<string | null>(null)
   const [mensajeExito, setMensajeExito] = useState<string | null>(null)
   const [guardando,    setGuardando]    = useState(false)
+  const [eliminando,   setEliminando]   = useState(false)
+  const [reactivandoId, setReactivandoId] = useState<number | null>(null)
   const [confirmarId,  setConfirmarId]  = useState<number | null>(null)
-  const [busqueda,     setBusqueda]     = useState("")
-  const [verInactivos, setVerInactivos] = useState(false)
+  const [busqueda,     setBusqueda]     = useState(() => searchParams.get("q") ?? "")
+  const [verInactivos, setVerInactivos] = useState(() => searchParams.get("inactivos") === "1")
   const formRef = useRef<HTMLDivElement>(null)
   // ── Filtro client-side ────────────────────────────────────
   const codigariosFiltrados = useMemo(() => {
@@ -99,6 +105,15 @@ export default function CodigariosPage() {
   useEffect(() => {
     if (mostrarForm) formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [mostrarForm])
+  const filtrosQs = useMemo(() => {
+    const params = new URLSearchParams()
+    if (busqueda.trim()) params.set("q", busqueda)
+    if (verInactivos) params.set("inactivos", "1")
+    return params.toString()
+  }, [busqueda, verInactivos])
+  useEffect(() => {
+    router.replace(filtrosQs ? `${pathname}?${filtrosQs}` : pathname, { scroll: false })
+  }, [filtrosQs, pathname, router])
   function mostrarExito(msg: string) {
     setMensajeExito(msg)
     setTimeout(() => setMensajeExito(null), 3000)
@@ -166,6 +181,7 @@ export default function CodigariosPage() {
     }
   }
   async function eliminar(id: number) {
+    setEliminando(true)
     try {
       const res = await fetch(`/api/codigarios/${id}`, { method: "DELETE", headers: authHeaders })
       if (!res.ok) {
@@ -178,10 +194,12 @@ export default function CodigariosPage() {
     } catch {
       setError("Error de red")
     } finally {
+      setEliminando(false)
       setConfirmarId(null)
     }
   }
   async function reactivar(id: number) {
+    setReactivandoId(id)
     try {
       const res = await fetch(`/api/codigarios/${id}/reactivar`, {
         method: "POST",
@@ -196,6 +214,8 @@ export default function CodigariosPage() {
       mostrarExito("Codigario reactivado")
     } catch {
       setError("Error de red")
+    } finally {
+      setReactivandoId(null)
     }
   }
   if (loading) return (
@@ -207,7 +227,8 @@ export default function CodigariosPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este codigario? Esta acción no se puede deshacer."
+          mensaje="¿Eliminar este codigario? Dejará de estar disponible para nuevas incidencias. Podés reactivarlo después desde 'Ver inactivos'."
+          cargando={eliminando}
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />
@@ -340,7 +361,7 @@ export default function CodigariosPage() {
                           {itemCount} item{itemCount !== 1 ? "s" : ""}
                         </span>
                       ) : (
-                        <Link href={`/protected/dashboard/codigarios/${c.id}`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
+                        <Link href={`/protected/dashboard/codigarios/${c.id}${filtrosQs ? `?${filtrosQs}` : ""}`} style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", textDecoration: "none" }}>
                           {itemCount} item{itemCount !== 1 ? "s" : ""} →
                         </Link>
                       )}
@@ -350,9 +371,10 @@ export default function CodigariosPage() {
                       {esInactivo ? (
                         <button
                           onClick={() => reactivar(c.id)}
-                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                          disabled={reactivandoId === c.id}
+                          style={{ background: "none", border: "none", fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-accent)", cursor: reactivandoId === c.id ? "not-allowed" : "pointer", padding: 0, opacity: reactivandoId === c.id ? 0.6 : 1 }}
                         >
-                          Reactivar
+                          {reactivandoId === c.id ? "Reactivando..." : "Reactivar"}
                         </button>
                       ) : (
                         <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center" }}>

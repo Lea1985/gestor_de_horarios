@@ -82,7 +82,7 @@ export const codigarioRepository = {
     })
     return cantidad > 0
   },
-  async itemTieneHistorialCerrado(itemId: number, tenantId: number) {
+    async itemTieneHistorialCerrado(itemId: number, tenantId: number) {
     const cantidad = await prisma.incidencia.count({
       where: {
         codigarioItemId: itemId,
@@ -92,6 +92,18 @@ export const codigarioRepository = {
       },
     })
     return cantidad > 0
+  },
+  // UX-COD-001: cantidad de incidencias cerradas que usan este item, para
+  // avisar el impacto retroactivo antes de cambiar su % Computable.
+  async contarIncidenciasCerradas(itemId: number, tenantId: number) {
+    return prisma.incidencia.count({
+      where: {
+        codigarioItemId: itemId,
+        deletedAt: null,
+        fecha_hasta: { lt: new Date() },
+        codigarioItem: { codigario: { institucionId: tenantId } },
+      },
+    })
   },
   async actualizar(
     id: number,
