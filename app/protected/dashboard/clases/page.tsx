@@ -2,7 +2,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 
 type CoberturaEstado = "NORMAL" | "REEMPLAZADA" | "SIN_COBERTURA" | "SUSPENDIDA"
@@ -52,7 +53,11 @@ const CAUSA_LABEL: Record<string, string> = {
   FIN_ASIGNACION:      "fin de asignación",
   MANUAL:              "manual",
 }
-
+const FILTRO_LABEL: Record<string, string> = {
+  "REEMPLAZADA":   "Reemplazos activos",
+  "SIN_COBERTURA": "Sin cobertura",
+  "SUSPENDIDA":    "Suspendidas",
+}
 type InfoEstado = { texto: string; bg: string; color: string }
 
 function infoEstado(clase: Clase): InfoEstado {
@@ -94,6 +99,9 @@ const inputStyle = {
 
 export default function ClasesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const filtroParam = searchParams.get("filtro")
+  const filtroEstados = filtroParam ? filtroParam.split(",") : null
   const { authHeaders } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -149,6 +157,11 @@ export default function ClasesPage() {
     return { total, reemplazadas, suspendidas, sinCobertura }
   }, [clases])
 
+    const clasesFiltradas = useMemo(() => {
+    if (!filtroEstados) return clases
+    return clases.filter(c => filtroEstados.includes(c.coberturaEstado))
+  }, [clases, filtroEstados])
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" as const, gap: "var(--space-3)" }}>
@@ -203,6 +216,13 @@ export default function ClasesPage() {
         ))}
       </div>
 
+      {filtroEstados && (
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+          Filtrando: {filtroParam!.split(",").map(f => FILTRO_LABEL[f] ?? f).join(" + ")}
+          <Link href="/protected/dashboard/clases" style={{ color: "var(--color-accent)" }}>✕ Quitar filtro</Link>
+        </div>
+      )}
+      
       {/* Tabla */}
       <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
@@ -225,10 +245,10 @@ export default function ClasesPage() {
                     No se pudieron cargar las clases. Revisá el error de arriba e intentá de nuevo.
                   </td>
                 </tr>
-              ) : clases.length === 0 ? (
-                <tr><td colSpan={esHoy ? 6 : 7} style={{ padding: "var(--space-4)" }}>No hay clases para mostrar en este rango</td></tr>
+              ) : clasesFiltradas.length === 0 ? (
+                <tr><td colSpan={esHoy ? 6 : 7} style={{ padding: "var(--space-4)" }}>{filtroEstados ? "No hay clases que coincidan con el filtro" : "No hay clases para mostrar en este rango"}</td></tr>
               ) : (
-                clases.map(clase => {
+                clasesFiltradas.map(clase => {
                   const info = infoEstado(clase)
                   return (
                     <tr key={clase.id} style={{ borderBottom: "1px solid var(--color-border)" }}>

@@ -416,7 +416,7 @@ export default function DashboardPage() {
 
   const cardsSecundarias = [
     { label: "Clases hoy",      value: kpis?.clasesHoy      ?? VALOR_VACIO, path: "/protected/dashboard/clases" },
-    { label: "Suspendidas hoy", value: kpis?.suspendidasHoy ?? VALOR_VACIO, path: "/protected/dashboard/clases" },
+    { label: "Suspendidas hoy", value: kpis?.suspendidasHoy ?? VALOR_VACIO, path: "/protected/dashboard/clases?filtro=SUSPENDIDA" },
   ]
 
   // ── Comisiones para selects (timeline + mapa de calor) ──────────────────
@@ -562,7 +562,7 @@ export default function DashboardPage() {
           delta={toNum(kpis?.deltaCobertura) ?? undefined}
           meta={95}
           loading={loading}
-          onClick={() => router.push("/protected/dashboard/clases")}
+          onClick={() => router.push("/protected/dashboard/clases?filtro=SIN_COBERTURA")}
           colorValor={(() => {
             const n = toNum(kpis?.coberturaPorcentaje)
             if (n === undefined) return undefined
@@ -573,14 +573,14 @@ export default function DashboardPage() {
           label="Reemplazos activos"
           valor={error ? VALOR_VACIO : (toNum(kpis?.reemplazosActivos) !== undefined ? String(toNum(kpis?.reemplazosActivos)) : String(reemplazosActivos.length))}
           loading={loading}
-          onClick={() => router.push("/protected/dashboard/clases")}
+          onClick={() => router.push("/protected/dashboard/clases?filtro=REEMPLAZADA")}
         />
         <KpiHero
           label="Clases sin cobertura"
           valor={error ? VALOR_VACIO : (toNum(kpis?.sinCoberturaHoy) !== undefined ? String(toNum(kpis?.sinCoberturaHoy)) : String(sinCobertura.length))}
           loading={loading}
           colorValor={error ? undefined : (sinCobertura.length > 0 ? "#dc2626" : "#16a34a")}
-          onClick={() => router.push("/protected/dashboard/clases")}
+          onClick={() => router.push("/protected/dashboard/clases?filtro=SIN_COBERTURA")}
         />
         <KpiHero
           label="Incidencias activas"
