@@ -203,13 +203,9 @@ function BandaAlertas({
   const sinCob = sinCobertura.length
   const suspendidas = toNum(kpis?.suspendidasHoy)  ?? 0
   const incidencias = toNum(kpis?.incidenciasActivas) ?? 0
-  // sinSuplente = clases con incidencia activa pero sin reemplazo asignado
-  const sinSuplente = sinCobertura.filter((c: any) => !c.incidenciaId).length
 
   if (sinCob > 0)
     alertas.push({ id: "sin-cob", nivel: "critica", texto: `${sinCob} clase${sinCob > 1 ? "s" : ""} sin cobertura hoy`, accion: "Resolver", path: "/protected/dashboard/clases" })
-  if (sinSuplente > 0)
-    alertas.push({ id: "sin-sup", nivel: "critica", texto: `${sinSuplente} ausencia${sinSuplente > 1 ? "s" : ""} sin suplente asignado`, accion: "Asignar", path: "/protected/dashboard/incidencias/nueva" })
   if (suspendidas > 2)
     alertas.push({ id: "susp", nivel: "advertencia", texto: `${suspendidas} clases suspendidas hoy`, accion: "Ver", path: "/protected/dashboard/clases" })
   if (incidencias > 4)
@@ -423,6 +419,7 @@ export default function DashboardPage() {
   const {
     data:    comisionesData,
     loading: comisionesLoading,
+    error:   comisionesError,
   } = useCoberturaPorComision(dias)
 
   // ── Exportar PDF ──────────────────────────────────────────────────────────
@@ -820,6 +817,16 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Tendencia + Mapa de calor — grid 2 columnas ────────────────────── */}
+      {comisionesError && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: "var(--space-2)",
+          padding: "8px 12px", borderRadius: "var(--radius-md)",
+          background: "var(--color-error-bg)", border: "1px solid var(--color-error)",
+          fontSize: "var(--text-xs)", color: "var(--color-error)",
+        }} role="alert">
+          No se pudo cargar el filtro de comisiones para los gráficos de cobertura
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", alignItems: "stretch" }}>
         <TimelineCoberturaChart
           data={timeline}

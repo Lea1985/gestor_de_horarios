@@ -9,7 +9,8 @@ export async function getDashboardOverview(
     headers: authHeaders,
   })
   if (!response.ok) {
-    throw new Error("Error al obtener dashboard overview")
+    const body = await response.json().catch(() => ({}))
+    throw new Error(body.error ?? "Error al obtener dashboard overview")
   }
   return response.json()
 }
