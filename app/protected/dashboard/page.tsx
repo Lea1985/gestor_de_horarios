@@ -84,11 +84,13 @@ function BloquePendientes({
   sinCobertura,
   vencenManana,
   loading,
+  error,
   onNavigate,
 }: {
   sinCobertura:            number
   vencenManana: number
   loading:                 boolean
+  error:                   boolean
   onNavigate:              (path: string) => void
 }) {
   const items = [
@@ -124,6 +126,8 @@ function BloquePendientes({
       </div>
       {loading ? (
         <div style={{ fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>Cargando...</div>
+      ) : error ? (
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-error)" }}>No se pudieron cargar los pendientes</div>
       ) : items.length === 0 ? (
         <div style={{ fontSize: "var(--text-xs)", color: "#16a34a" }}>Sin pendientes ✓</div>
       ) : (
@@ -152,6 +156,7 @@ function BandaAlertas({
   reemplazosActivos,
   kpis,
   loading,
+  error,
   onNavigate,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,10 +166,22 @@ function BandaAlertas({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   kpis: any
   loading: boolean
+  error: boolean
   onNavigate: (path: string) => void
 }) {
   if (loading) return null
-
+  if (error) {
+    return (
+      <div style={{
+        background: "var(--color-error-bg)", border: "1px solid var(--color-error)",
+        borderRadius: "var(--radius-xl)", padding: "12px 16px",
+        display: "flex", alignItems: "center", gap: "var(--space-2)",
+        fontSize: "var(--text-xs)", color: "var(--color-error)",
+      }}>
+        No se pudieron cargar las alertas operativas
+      </div>
+    )
+  }
   // Sin clases programadas → no hay alertas que mostrar
   const clasesHoy = toNum(kpis?.clasesHoy) ?? 0
   if (clasesHoy === 0) {
@@ -350,8 +367,10 @@ function KpiHero({
 }
 
 /** Indicador de riesgo operativo */
-function RiesgoOperativo({ nivel }: { nivel: NivelRiesgo }) {
-  const cfg = RIESGO_CONFIG[nivel]
+function RiesgoOperativo({ nivel, sinDatos }: { nivel: NivelRiesgo; sinDatos?: boolean }) {
+  const cfg = sinDatos
+    ? { label: "Sin datos", color: "var(--color-text-hint)", bg: "var(--color-surface-raised)", border: "var(--color-border)", icon: "?" }
+    : RIESGO_CONFIG[nivel]
   return (
     <div style={{
       background: cfg.bg,
@@ -375,7 +394,7 @@ function RiesgoOperativo({ nivel }: { nivel: NivelRiesgo }) {
         {cfg.label}
       </div>
       <div style={{ fontSize: "var(--text-2xs)", color: cfg.color, opacity: 0.6 }}>
-        {nivel === "ok" ? "Operación estable" : nivel === "medio" ? "Requiere seguimiento" : "Acción inmediata"}
+        {sinDatos ? "No se pudo cargar" : nivel === "ok" ? "Operación estable" : nivel === "medio" ? "Requiere seguimiento" : "Acción inmediata"}
       </div>
     </div>
   )
@@ -502,6 +521,7 @@ export default function DashboardPage() {
           reemplazosActivos={reemplazosActivos}
           kpis={kpis ?? null}
           loading={loading}
+          error={!!error}
           onNavigate={router.push}
         />
 
@@ -510,11 +530,12 @@ export default function DashboardPage() {
           sinCobertura={sinCobertura.length}
           vencenManana={pendientes?.vencenManana ?? 0}
           loading={loading}
+          error={!!error}
           onNavigate={router.push}
         />
 
         {/* Bloque Riesgo */}
-        <RiesgoOperativo nivel={nivelRiesgo} />
+        <RiesgoOperativo nivel={nivelRiesgo} sinDatos={!!error} />
       </div>
 
       {/* ── Fila 2: KPIs ───────────────────────────────────────────────────── */}
@@ -534,15 +555,15 @@ export default function DashboardPage() {
         />
         <KpiHero
           label="Reemplazos activos"
-          valor={toNum(kpis?.reemplazosActivos) !== undefined ? String(toNum(kpis?.reemplazosActivos)) : String(reemplazosActivos.length)}
+          valor={error ? VALOR_VACIO : (toNum(kpis?.reemplazosActivos) !== undefined ? String(toNum(kpis?.reemplazosActivos)) : String(reemplazosActivos.length))}
           loading={loading}
           onClick={() => router.push("/protected/dashboard/clases")}
         />
         <KpiHero
           label="Clases sin cobertura"
-          valor={toNum(kpis?.sinCoberturaHoy) !== undefined ? String(toNum(kpis?.sinCoberturaHoy)) : String(sinCobertura.length)}
+          valor={error ? VALOR_VACIO : (toNum(kpis?.sinCoberturaHoy) !== undefined ? String(toNum(kpis?.sinCoberturaHoy)) : String(sinCobertura.length))}
           loading={loading}
-          colorValor={sinCobertura.length > 0 ? "#dc2626" : "#16a34a"}
+          colorValor={error ? undefined : (sinCobertura.length > 0 ? "#dc2626" : "#16a34a")}
           onClick={() => router.push("/protected/dashboard/clases")}
         />
         <KpiHero
@@ -585,6 +606,10 @@ export default function DashboardPage() {
           {loading ? (
             <div style={{ padding: "var(--space-4)", textAlign: "center", fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
               Cargando...
+            </div>
+          ) : error ? (
+            <div style={{ padding: "var(--space-4)", textAlign: "center", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
+              No se pudo cargar
             </div>
           ) : sinCobertura.length === 0 ? (
             <div style={{ padding: "var(--space-4)", textAlign: "center", fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
@@ -642,6 +667,10 @@ export default function DashboardPage() {
           {loading ? (
             <div style={{ padding: "var(--space-4)", textAlign: "center", fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
               Cargando...
+            </div>
+          ) : error ? (
+            <div style={{ padding: "var(--space-4)", textAlign: "center", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
+              No se pudo cargar
             </div>
           ) : reemplazosActivos.length === 0 ? (
             <div style={{ padding: "var(--space-4)", textAlign: "center", fontSize: "var(--text-xs)", color: "var(--color-text-hint)" }}>
