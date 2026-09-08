@@ -428,10 +428,12 @@ export default function DashboardPage() {
   // ── Exportar PDF ──────────────────────────────────────────────────────────
   const { authHeaders } = useAuth()
   const [exportando, setExportando] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const handleExportarPDF = useCallback(async () => {
     if (exportando) return
     setExportando(true)
+    setExportError(null)
     try {
       const res = await fetch("/api/reportes/dashboard", { headers: authHeaders })
       if (!res.ok) throw new Error("Error al generar el PDF")
@@ -444,6 +446,7 @@ export default function DashboardPage() {
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error("Error exportando PDF:", err)
+      setExportError("No se pudo generar el PDF. Intentá de nuevo.")
     } finally {
       setExportando(false)
     }
@@ -506,6 +509,19 @@ export default function DashboardPage() {
           fontSize: "var(--text-xs)", color: "var(--color-error)",
         }} role="alert">
           {error}
+        </div>
+      )}
+
+      {/* ── Error de exportación PDF (UX-DSH-002) ────────────────────────────── */}
+      {exportError && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: "var(--space-2)",
+          padding: "8px 12px", borderRadius: "var(--radius-md)",
+          background: "var(--color-error-bg)", border: "1px solid var(--color-error)",
+          fontSize: "var(--text-xs)", color: "var(--color-error)",
+        }} role="alert">
+          {exportError}
+          <button onClick={() => setExportError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--color-error)", fontSize: "var(--text-base)", lineHeight: 1 }} aria-label="Cerrar">×</button>
         </div>
       )}
 
