@@ -28,9 +28,8 @@ type FilaProfesor = {
   reemplazosActivos: ReemplazoActivo[]
 }
 function formatFecha(f: string | null): string {
-  if (!f) return "?"
-  const [, mes, dia] = f.split("-")
-  return `${dia}/${mes}`
+  if (!f) return "—"
+  return new Date(f).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" })
 }
 
 type VistaProfesores = { datos: FilaProfesor[]; filtro: Filtro }
@@ -104,7 +103,7 @@ export default function ReporteProfesoresPage() {
       </div>
 
       {errorDescarga && (
-        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "#ef4444", fontSize: "var(--text-sm)" }}>
+        <div style={{ background: "var(--color-error-bg)", border: "1px solid var(--color-error)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
           {errorDescarga}
         </div>
       )}

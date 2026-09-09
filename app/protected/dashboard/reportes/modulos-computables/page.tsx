@@ -277,12 +277,12 @@ export default function ReporteModulosComputablesPage() {
       </div>
 
       {errorForm && (
-        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "#ef4444", fontSize: "var(--text-sm)" }}>
+        <div style={{ background: "var(--color-error-bg)", border: "1px solid var(--color-error)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
           {errorForm}
         </div>
       )}
       {errorDescarga && (
-        <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "#ef4444", fontSize: "var(--text-sm)" }}>
+        <div style={{ background: "var(--color-error-bg)", border: "1px solid var(--color-error)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
           {errorDescarga}
         </div>
       )}
