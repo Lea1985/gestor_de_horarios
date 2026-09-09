@@ -18,14 +18,14 @@ const PAGE_TITLES: Record<string, string> = {
   "/protected/dashboard/incidencias":  "Incidencias",
   "/protected/dashboard/calendario":   "Calendario Escolar",
   "/protected/dashboard/periodos-operativos": "Períodos Operativos",
-  "/protected/dashboard/reportes/asignaciones": "Reporte asignaciones",
-  "/protected/dashboard/reportes/ausencias": "Reporte ausencias",
-  "/protected/dashboard/reportes/codigarios": "Reporte codigarios",
-  "/protected/dashboard/reportes/horarios": "Reporte horarios",
-  "/protected/dashboard/reportes/profesor": "Reporte profesor",
-  "/protected/dashboard/reportes/profesores": "Reporte profesores",
-  "/protected/dashboard/reportes/modulos-computables": "Reporte Modulos-computables",
-    "/protected/dashboard/reportes/jornadas": "Reporte Jornadas-computables",
+  "/protected/dashboard/reportes/asignaciones": "Asignaciones y distribuciones",
+  "/protected/dashboard/reportes/ausencias": "Ausencias y reemplazos",
+  "/protected/dashboard/reportes/codigarios": "Codigarios y artículos",
+  "/protected/dashboard/reportes/horarios": "Horarios por comisión",
+  "/protected/dashboard/reportes/profesor": "Ficha de profesor",
+  "/protected/dashboard/reportes/profesores": "Listado de profesores",
+  "/protected/dashboard/reportes/modulos-computables": "Módulos computables",
+  "/protected/dashboard/reportes/jornadas": "Jornadas (cargos jornalizados)",
 
 
 
