@@ -12,6 +12,13 @@ export async function GET(req: Request) {
   const agenteIdRaw    = searchParams.get("agenteId")
   const formato        = searchParams.get("formato") // "json" | null (default: pdf)
 
+  if (comisionIdRaw && (isNaN(Number(comisionIdRaw)) || !Number(comisionIdRaw))) {
+    return Response.json({ error: "comisionId inválido" }, { status: 400 })
+  }
+  if (agenteIdRaw && (isNaN(Number(agenteIdRaw)) || !Number(agenteIdRaw))) {
+    return Response.json({ error: "agenteId inválido" }, { status: 400 })
+  }
+
   const comisionId = comisionIdRaw ? Number(comisionIdRaw) : null
   const agenteId   = agenteIdRaw   ? Number(agenteIdRaw)   : null
 

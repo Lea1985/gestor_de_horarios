@@ -74,8 +74,12 @@ export default function ReporteHorariosPage() {
     if (comisionId) params.set("comisionId", comisionId)
     return `/api/reportes/horarios?${params.toString()}`
   }
+  const clavesFiltros = () => JSON.stringify({ comisionId, aCargoAhora })
+
   const handleDescargar = () => descargar(armarUrl())
-  const handleVer        = () => verEnPantalla(armarUrl())
+  const handleVer        = () => { verEnPantalla(armarUrl()); setFiltrosVistos(clavesFiltros()) }
+
+  const filtrosDesactualizados = filtrosVistos !== null && filtrosVistos !== clavesFiltros()
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
       <div>
@@ -130,7 +134,7 @@ export default function ReporteHorariosPage() {
               Vista en pantalla
             </span>
             <button
-              onClick={cerrarVista}
+              onClick={() => { cerrarVista(); setFiltrosVistos(null) }}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-hint)", fontSize: "var(--text-base)", lineHeight: 1 }}
             >
               ×
@@ -140,6 +144,10 @@ export default function ReporteHorariosPage() {
             {cargando ? (
               <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
                 Cargando...
+              </div>
+            ) : filtrosDesactualizados ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                Los filtros cambiaron desde que se generó esta vista. Volvé a "Ver en pantalla" para actualizarla — si descargás el PDF ahora, va a reflejar los filtros nuevos, no lo que ves acá abajo.
               </div>
             ) : errorVista ? (
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>

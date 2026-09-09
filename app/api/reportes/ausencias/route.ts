@@ -27,6 +27,13 @@ export async function GET(req: Request) {
     return Response.json({ error: "desde no puede ser posterior a hasta" }, { status: 400 })
   }
 
+  if (comisionIdRaw && (isNaN(Number(comisionIdRaw)) || !Number(comisionIdRaw))) {
+    return Response.json({ error: "comisionId inválido" }, { status: 400 })
+  }
+  if (agenteIdRaw && (isNaN(Number(agenteIdRaw)) || !Number(agenteIdRaw))) {
+    return Response.json({ error: "agenteId inválido" }, { status: 400 })
+  }
+
   const comisionId = comisionIdRaw ? Number(comisionIdRaw) : null
   const agenteId   = agenteIdRaw   ? Number(agenteIdRaw)   : null
 
