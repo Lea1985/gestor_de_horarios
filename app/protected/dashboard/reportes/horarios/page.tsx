@@ -47,6 +47,7 @@ export default function ReporteHorariosPage() {
   const [loadingComisiones, setLoadingComisiones] = useState(true)
   const [comisionId, setComisionId] = useState("")
   const [aCargoAhora, setACargoAhora] = useState(false)
+  const [filtrosVistos, setFiltrosVistos] = useState<string | null>(null)
   const fetchedRef = useRef(false)
   useEffect(() => {
     if (fetchedRef.current) return

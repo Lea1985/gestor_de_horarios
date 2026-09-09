@@ -50,6 +50,7 @@ export default function ReporteProfesoresPage() {
   const { descargar, descargando, error: errorDescarga } = useDescargarPDF()
   const { datos, visible, cargando, error: errorVista, verEnPantalla, cerrarVista } = useVistaReporte<VistaProfesores>()
   const [filtro, setFiltro] = useState<Filtro>("todos")
+  const [filtrosVistos, setFiltrosVistos] = useState<string | null>(null)
 
   const opciones: { value: Filtro; label: string }[] = [
     { value: "todos",      label: "Todos los profesores" },
@@ -59,8 +60,12 @@ export default function ReporteProfesoresPage() {
 
   const armarUrl = () => `/api/reportes/profesores?filtro=${filtro}`
 
+  const clavesFiltros = () => JSON.stringify({ filtro })
+
   const handleDescargar = () => descargar(armarUrl())
-  const handleVer        = () => verEnPantalla(armarUrl())
+  const handleVer        = () => { verEnPantalla(armarUrl()); setFiltrosVistos(clavesFiltros()) }
+
+  const filtrosDesactualizados = filtrosVistos !== null && filtrosVistos !== clavesFiltros()
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
@@ -111,7 +116,7 @@ export default function ReporteProfesoresPage() {
               {datos ? opciones.find(o => o.value === datos.filtro)?.label : "Vista en pantalla"}
             </span>
             <button
-              onClick={cerrarVista}
+              onClick={() => { cerrarVista(); setFiltrosVistos(null) }}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-hint)", fontSize: "var(--text-base)", lineHeight: 1 }}
             >
               ×
@@ -122,6 +127,10 @@ export default function ReporteProfesoresPage() {
             {cargando ? (
               <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
                 Cargando...
+              </div>
+            ) : filtrosDesactualizados ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                El filtro cambió desde que se generó esta vista. Volvé a "Ver en pantalla" para actualizarla — si descargás el PDF ahora, va a reflejar el filtro nuevo, no lo que ves acá abajo.
               </div>
             ) : errorVista ? (
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>

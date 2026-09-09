@@ -66,6 +66,7 @@ export default function ReporteAusenciasPage() {
   const [fechaHasta, setFechaHasta] = useState("")
   const [comisionId, setComisionId] = useState("")
   const [agenteId, setAgenteId]     = useState("")
+  const [filtrosVistos, setFiltrosVistos] = useState<string | null>(null)
 
   const fetchedRef = useRef(false)
 
@@ -112,8 +113,12 @@ export default function ReporteAusenciasPage() {
     return true
   }
 
+  const clavesFiltros = () => JSON.stringify({ fechaDesde, fechaHasta, comisionId, agenteId })
+
   const handleDescargar = () => { if (validarFiltros()) descargar(armarUrl()) }
-  const handleVer        = () => { if (validarFiltros()) verEnPantalla(armarUrl()) }
+  const handleVer        = () => { if (validarFiltros()) { verEnPantalla(armarUrl()); setFiltrosVistos(clavesFiltros()) } }
+
+  const filtrosDesactualizados = filtrosVistos !== null && filtrosVistos !== clavesFiltros()
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
@@ -182,7 +187,7 @@ export default function ReporteAusenciasPage() {
               {datos ? `${formatFecha(datos.periodo.desde)} al ${formatFecha(datos.periodo.hasta)}${datos.filtroTexto ? " — " + datos.filtroTexto : ""}` : "Vista en pantalla"}
             </span>
             <button
-              onClick={cerrarVista}
+              onClick={() => { cerrarVista(); setFiltrosVistos(null) }}
               style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-hint)", fontSize: "var(--text-base)", lineHeight: 1 }}
             >
               ×
@@ -193,6 +198,10 @@ export default function ReporteAusenciasPage() {
             {cargando ? (
               <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
                 Cargando...
+              </div>
+            ) : filtrosDesactualizados ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-surface-raised)", border: "1px solid var(--color-border-strong)", fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                Los filtros cambiaron desde que se generó esta vista. Volvé a "Ver en pantalla" para actualizarla — si descargás el PDF ahora, va a reflejar los filtros nuevos, no lo que ves acá abajo.
               </div>
             ) : errorVista ? (
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
