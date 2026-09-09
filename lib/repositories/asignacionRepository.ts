@@ -37,6 +37,33 @@ export const asignacionRepository = {
       orderBy: { createdAt: "desc" },
     })
   },
+    // UX-INC-014: usado solo por el wizard de "Nueva incidencia" (paso 1) para
+  // marcar qué asignaciones no van a poder recibir una incidencia porque no
+  // tienen ninguna ClaseProgramada de hoy en adelante (sin distribución
+  // vigente, distribución vencida, o cualquier otro motivo) — evita que el
+  // usuario complete todo el formulario y recién en el paso 3 se entere de
+  // "No hay clases programadas...". No se usa en el listado general de
+  // Asignaciones a propósito, para no sumarle una consulta extra por fila
+  // a una pantalla que no la necesita.
+  listarParaIncidencia(tenantId: number) {
+    const hoy = new Date()
+    hoy.setUTCHours(0, 0, 0, 0)
+    return prisma.asignacion.findMany({
+      where: {
+        institucionId: tenantId,
+        deletedAt: null,
+      },
+      include: {
+        ...includeBase,
+        ClaseProgramada: {
+          where: { fecha: { gte: hoy } },
+          select: { id: true },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  },
   obtenerPorId(id: number, tenantId: number, incluirEliminados = false) {
     return prisma.asignacion.findFirst({
       where: {

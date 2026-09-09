@@ -162,8 +162,13 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     )
   }
   function toggleTodos() {
-    const idsFiltrados = asignacionesFiltradas.map(a => a.id)
-    const todosSeleccionados = idsFiltrados.every(id => seleccionados.includes(id))
+    // UX-INC-014: "seleccionar todos" no debe marcar las asignaciones sin
+    // clases vigentes -- quedarían tildadas pero el checkbox de su fila
+    // está deshabilitado, así que ni siquiera se podrían destildar a mano.
+    const idsFiltrados = asignacionesFiltradas
+      .filter(a => a.tieneClasesVigentes)
+      .map(a => a.id)
+    const todosSeleccionados = idsFiltrados.length > 0 && idsFiltrados.every(id => seleccionados.includes(id))
     if (todosSeleccionados) {
       setSeleccionados(prev => prev.filter(id => !idsFiltrados.includes(id)))
     } else {

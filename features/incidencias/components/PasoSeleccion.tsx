@@ -1,4 +1,3 @@
-//features/incidencias/components/PasoSeleccion.tsx
 import type { AsignacionParaIncidencia } from "../types"
 import { nombreAgente } from "../hooks/useNuevaIncidencia"
 
@@ -66,9 +65,12 @@ export function PasoSeleccion({
   toggleTodos:           () => void
   onContinuar:           () => void
 }) {
+  // UX-INC-014: solo las asignaciones con clases vigentes cuentan para el
+  // checkbox "seleccionar todos" -- las demás nunca se pueden tildar.
+  const elegibles = asignacionesFiltradas.filter(a => a.tieneClasesVigentes)
   const todosSeleccionados =
-    asignacionesFiltradas.length > 0 &&
-    asignacionesFiltradas.every(a => seleccionados.includes(a.id))
+    elegibles.length > 0 &&
+    elegibles.every(a => seleccionados.includes(a.id))
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
@@ -129,24 +131,31 @@ export function PasoSeleccion({
             ) : asignacionesFiltradas.map(a => {
               const seleccionado = seleccionados.includes(a.id)
               const agente       = a.titularidades[0]?.agente
+              const habilitada   = a.tieneClasesVigentes
+              const tooltip = habilitada
+                ? undefined
+                : "Esta asignación no tiene clases programadas de hoy en adelante — verificá que tenga una distribución vigente. No se puede cargar una incidencia hasta que la tenga."
               return (
                 <tr
                   key={a.id}
-                  onClick={() => toggleSeleccion(a.id)}
+                  onClick={() => { if (habilitada) toggleSeleccion(a.id) }}
+                  title={tooltip}
                   style={{
-                    cursor:     "pointer",
+                    cursor:     habilitada ? "pointer" : "not-allowed",
                     transition: "background 0.1s",
+                    opacity:    habilitada ? 1 : 0.5,
                     background: seleccionado ? "var(--color-accent-bg, #f0f8ff)" : "transparent",
                   }}
-                  onMouseEnter={e => { if (!seleccionado) e.currentTarget.style.background = "var(--color-surface-raised)" }}
+                  onMouseEnter={e => { if (habilitada && !seleccionado) e.currentTarget.style.background = "var(--color-surface-raised)" }}
                   onMouseLeave={e => { e.currentTarget.style.background = seleccionado ? "var(--color-accent-bg, #f0f8ff)" : "transparent" }}
                 >
                   <td style={{ ...td, width: 40 }} onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={seleccionado}
+                      disabled={!habilitada}
                       onChange={() => toggleSeleccion(a.id)}
-                      style={{ cursor: "pointer" }}
+                      style={{ cursor: habilitada ? "pointer" : "not-allowed" }}
                     />
                   </td>
                   <td style={td}>
@@ -157,6 +166,11 @@ export function PasoSeleccion({
                   </td>
                   <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
                     {a.identificadorEstructural}
+                    {!habilitada && (
+                      <span style={{ display: "block", fontSize: "var(--text-2xs)", color: "var(--color-text-hint)", fontFamily: "inherit" }}>
+                        Sin clases vigentes
+                      </span>
+                    )}
                   </td>
                   <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                     {a.unidad.nombre}

@@ -90,7 +90,7 @@ export async function fetchClasesAfectadas(
 export async function fetchAsignaciones(
   headers: Record<string, string>
 ): Promise<AsignacionParaIncidencia[]> {
-  const res = await fetch("/api/asignaciones", { headers })
+  const res = await fetch("/api/asignaciones?paraIncidencia=true", { headers })
   if (!res.ok) throw new Error("Error cargando asignaciones")
   return res.json()
 }

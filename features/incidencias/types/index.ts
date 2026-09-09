@@ -127,6 +127,10 @@ export type AsignacionParaIncidencia = {
   unidad:   { nombre: string }
   comision: { id: number; nombre: string; curso?: { id: number; nombre: string } } | null
   turno:    { id: number; nombre: string } | null
+  // UX-INC-014: false cuando la asignación no tiene ninguna ClaseProgramada
+  // de hoy en adelante -- no se puede cargar una incidencia sin importar
+  // qué rango de fechas se elija después.
+  tieneClasesVigentes: boolean
 }
 export type AgenteParaReemplazo = {
   id:        number

@@ -1,7 +1,8 @@
-// app/api/asignaciones/route.ts
-
 import { withContext } from "@/lib/auth/withContext"
-import { listarAsignaciones } from "@/lib/usecases/asignaciones/listarAsignaciones"
+import {
+  listarAsignaciones,
+  listarAsignacionesParaIncidencia,
+} from "@/lib/usecases/asignaciones/listarAsignaciones"
 import {
   crearAsignacion,
   DatosAsignacionInvalidosError,
@@ -13,7 +14,10 @@ export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     const { searchParams } = new URL(req.url)
     const incluirInactivas = searchParams.get("inactivas") === "true"
-    const data = await listarAsignaciones(tenantId, incluirInactivas)
+    const paraIncidencia = searchParams.get("paraIncidencia") === "true"
+    const data = paraIncidencia
+      ? await listarAsignacionesParaIncidencia(tenantId)
+      : await listarAsignaciones(tenantId, incluirInactivas)
     return Response.json(data)
   })
 }
