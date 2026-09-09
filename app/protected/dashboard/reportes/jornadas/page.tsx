@@ -84,10 +84,6 @@ const td: React.CSSProperties = {
   padding: "10px 12px", fontSize: "var(--text-sm)", color: "var(--color-text-primary)",
   borderBottom: "1px solid var(--color-border)", verticalAlign: "middle",
 }
-const botonSecundario: React.CSSProperties = {
-  padding: "var(--space-2) var(--space-4)", background: "var(--color-surface)", color: "var(--color-text-primary)",
-  border: "1px solid var(--color-border-strong)", borderRadius: "var(--radius-md)", cursor: "pointer",
-}
 
 export default function ReporteJornadasPage() {
   const { authHeaders } = useAuth()
@@ -134,6 +130,9 @@ export default function ReporteJornadasPage() {
     fetchFiltros()
   }, [authHeaders?.Authorization])
 
+  const clavesFiltros = () => JSON.stringify({ agenteId, modoPeriodo, mesAnio, periodoOperativoId, fechaDesde, fechaHasta })
+  const filtrosDesactualizados = filtrosCalculados !== null && filtrosCalculados !== clavesFiltros()
+
   const armarUrl = (): string | null => {
     // agenteId vacío => modo resumen (Todos).
     const params = new URLSearchParams()
@@ -155,9 +154,6 @@ export default function ReporteJornadasPage() {
     return `/api/reportes/jornadas?${params.toString()}`
   }
 
-  const clavesFiltros = () =>
-    JSON.stringify({ agenteId, modoPeriodo, mesAnio, periodoOperativoId, fechaDesde, fechaHasta })
-
   const handleVer = () => {
     const url = armarUrl()
     if (url) {
@@ -165,8 +161,6 @@ export default function ReporteJornadasPage() {
       setFiltrosCalculados(clavesFiltros())
     }
   }
-
-  const filtrosDesactualizados = filtrosCalculados !== null && filtrosCalculados !== clavesFiltros()
 
   const handleDescargarPDF = () => {
     const url = armarUrl()
@@ -176,7 +170,7 @@ export default function ReporteJornadasPage() {
 
   const handleDescargarCSV = () => {
     if (!datos) return
-    const csv = "\uFEFF" + datosACSV(datos)
+    const csv = "﻿" + datosACSV(datos)
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const nombreArchivo = datos.modo === "detalle" ? "jornadas.csv" : "jornadas_todos.csv"
@@ -269,14 +263,14 @@ export default function ReporteJornadasPage() {
         <button
           onClick={handleVer}
           disabled={cargando}
-          style={{ padding: "var(--space-2) var(--space-4)", background: "var(--color-primary)", color: "white", border: "none", borderRadius: "var(--radius-md)", cursor: cargando ? "not-allowed" : "pointer", opacity: cargando ? 0.6 : 1 }}
+          style={{ padding: "var(--space-2) var(--space-4)", background: "transparent", color: "var(--color-primary)", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", cursor: cargando ? "not-allowed" : "pointer", opacity: cargando ? 0.6 : 1 }}
         >
-          {cargando ? "Calculando..." : "Calcular"}
+          {cargando ? "Cargando..." : "Ver en pantalla"}
         </button>
         <button
           onClick={handleDescargarPDF}
           disabled={descargando}
-          style={{ ...botonSecundario, cursor: descargando ? "not-allowed" : "pointer", opacity: descargando ? 0.6 : 1 }}
+          style={{ padding: "var(--space-2) var(--space-4)", background: "var(--color-primary)", color: "white", border: "none", borderRadius: "var(--radius-md)", cursor: descargando ? "not-allowed" : "pointer", opacity: descargando ? 0.6 : 1 }}
         >
           {descargando ? "Generando..." : "Descargar PDF"}
         </button>
@@ -304,8 +298,8 @@ export default function ReporteJornadasPage() {
                 <button
                   onClick={handleDescargarCSV}
                   disabled={filtrosDesactualizados}
-                  title={filtrosDesactualizados ? "Los filtros cambiaron desde el último cálculo — volvé a calcular para descargar el CSV actualizado" : undefined}
-                  style={{ background: "none", border: "none", cursor: filtrosDesactualizados ? "not-allowed" : "pointer", color: filtrosDesactualizados ? "var(--color-text-hint)" : "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)" }}
+                  title={filtrosDesactualizados ? "Los filtros cambiaron desde el último cálculo — recalculá para descargar el CSV actualizado" : undefined}
+                  style={{ background: "none", border: "none", cursor: filtrosDesactualizados ? "not-allowed" : "pointer", color: filtrosDesactualizados ? "var(--color-text-hint)" : "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", opacity: filtrosDesactualizados ? 0.6 : 1 }}
                 >
                   {filtrosDesactualizados ? "CSV desactualizado — recalculá" : "Descargar CSV"}
                 </button>
@@ -321,7 +315,7 @@ export default function ReporteJornadasPage() {
           <div style={{ padding: "var(--space-4)" }}>
             {cargando ? (
               <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--color-text-hint)", fontSize: "var(--text-sm)" }}>
-                Calculando...
+                Cargando...
               </div>
             ) : errorVista ? (
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-error-bg)", border: "1px solid var(--color-error)", fontSize: "var(--text-xs)", color: "var(--color-error)" }}>
