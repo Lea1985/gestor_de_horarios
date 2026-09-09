@@ -63,10 +63,19 @@ type ResultadoParcial = {
 // se buscan las clases del padre que caen en ese rango y se mira qué
 // agenteSuplente cubre esas clases. Si el rango no cae en ningún tramo
 // con reemplazo activo, o cae en más de uno distinto, se bloquea el guardado.
+//
+// #109: además de "ambiguo" (más de un suplente distinto), el rango puede
+// incluir clases que NINGÚN suplente cubre (día/módulo sin cobertura
+// dentro del mismo tramo). crearIncidencia vincula TODAS las clases de la
+// asignación en el rango de fechas (sin filtrar por reemplazo), así que
+// si eso no se bloquea acá, la incidencia hija terminaría atribuyéndole
+// al suplente ausente módulos que nunca tuvo a cargo. "parcial" cubre ese
+// caso.
 type SuplenteResuelto =
   | { estado: "incompleto" }
   | { estado: "sin-cobertura" }
   | { estado: "ambiguo" }
+  | { estado: "parcial" }
   | { estado: "resuelto"; agente: { id: number; nombre: string; apellido: string } }
 
 export function ModalAusenciaSuplente({
@@ -128,15 +137,20 @@ export function ModalAusenciaSuplente({
       return f >= fechaDesde && f <= fechaHasta
     })
     const distintos = new Map<number, { id: number; nombre: string; apellido: string }>()
+    let clasesSinCobertura = 0
     for (const c of enRango) {
+      let cubierta = false
       for (const r of c.reemplazos) {
         if (r.activo && r.agenteSuplente) {
           distintos.set(r.agenteSuplente.id, r.agenteSuplente)
+          cubierta = true
         }
       }
+      if (!cubierta) clasesSinCobertura++
     }
     if (distintos.size === 0) return { estado: "sin-cobertura" }
     if (distintos.size > 1)   return { estado: "ambiguo" }
+    if (clasesSinCobertura > 0) return { estado: "parcial" }
     return { estado: "resuelto", agente: [...distintos.values()][0] }
   }, [fechaDesde, fechaHasta, clases])
 
@@ -159,6 +173,10 @@ export function ModalAusenciaSuplente({
     }
     if (suplenteResuelto.estado === "ambiguo") {
       setError("El rango incluye más de un suplente distinto — ajustá las fechas para que corresponda a uno solo")
+      return
+    }
+    if (suplenteResuelto.estado === "parcial") {
+      setError("El rango incluye clases que este suplente no cubre — ajustá las fechas para que coincida solo con las que tiene a cargo")
       return
     }
     if (suplenteResuelto.estado !== "resuelto") {
@@ -242,7 +260,7 @@ export function ModalAusenciaSuplente({
     }
   }
 
-  const encabezadoColor = suplenteResuelto.estado === "ambiguo" || suplenteResuelto.estado === "sin-cobertura"
+  const encabezadoColor = suplenteResuelto.estado === "ambiguo" || suplenteResuelto.estado === "sin-cobertura" || suplenteResuelto.estado === "parcial"
     ? "var(--color-error)"
     : "var(--color-text-secondary)"
 
@@ -302,6 +320,8 @@ export function ModalAusenciaSuplente({
                   "No hay suplente cubriendo esas fechas"}
                 {suplenteResuelto.estado === "ambiguo" &&
                   "El rango incluye más de un suplente distinto — ajustá las fechas"}
+                {suplenteResuelto.estado === "parcial" &&
+                  "El rango incluye clases que este suplente no cubre — ajustá las fechas"}
               </p>
             </div>
             {error && (
