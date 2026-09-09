@@ -21,14 +21,14 @@ const ACADEMIC_ITEMS = [
 
 const REPORT_ITEMS = [
 
-  { label: "Asiganciones", href: "/protected/dashboard/reportes/asignaciones" },
+  { label: "Asignaciones", href: "/protected/dashboard/reportes/asignaciones" },
   { label: "Ausencias", href: "/protected/dashboard/reportes/ausencias" },
   { label: "Codigarios", href: "/protected/dashboard/reportes/codigarios" },
   { label: "Horarios", href: "/protected/dashboard/reportes/horarios" },
   { label: "Módulos computables", href: "/protected/dashboard/reportes/modulos-computables" },
   { label: "Jornadas computables", href: "/protected/dashboard/reportes/jornadas" },
-  { label: "Profesor", href: "/protected/dashboard/reportes/profesor" },
-  { label: "Profesores", href: "/protected/dashboard/reportes/profesores" },
+  { label: "Ficha de profesor", href: "/protected/dashboard/reportes/profesor" },
+  { label: "Listado de profesores", href: "/protected/dashboard/reportes/profesores" },
 ]
 
 const CONFIG_ITEMS = [
