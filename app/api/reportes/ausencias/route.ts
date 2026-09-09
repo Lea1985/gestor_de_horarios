@@ -23,6 +23,9 @@ export async function GET(req: Request) {
   if (isNaN(desde.getTime()) || isNaN(hasta.getTime())) {
     return Response.json({ error: "Fechas inválidas" }, { status: 400 })
   }
+  if (desde.getTime() > hasta.getTime()) {
+    return Response.json({ error: "desde no puede ser posterior a hasta" }, { status: 400 })
+  }
 
   const comisionId = comisionIdRaw ? Number(comisionIdRaw) : null
   const agenteId   = agenteIdRaw   ? Number(agenteIdRaw)   : null
