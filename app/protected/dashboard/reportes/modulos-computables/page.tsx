@@ -100,6 +100,7 @@ export default function ReporteModulosComputablesPage() {
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
   const [errorForm, setErrorForm] = useState<string | null>(null)
+  const [filtrosCalculados, setFiltrosCalculados] = useState<string | null>(null)
 
   useEffect(() => {
     if (fetchedRef.current) return
@@ -148,10 +149,18 @@ export default function ReporteModulosComputablesPage() {
     return `/api/reportes/modulos-computables?${params.toString()}`
   }
 
+  const clavesFiltros = () =>
+    JSON.stringify({ agenteId, modoPeriodo, mesAnio, periodoOperativoId, fechaDesde, fechaHasta })
+
   const handleVer = () => {
     const url = armarUrl()
-    if (url) verEnPantalla(url)
+    if (url) {
+      verEnPantalla(url)
+      setFiltrosCalculados(clavesFiltros())
+    }
   }
+
+  const filtrosDesactualizados = filtrosCalculados !== null && filtrosCalculados !== clavesFiltros()
 
   const handleDescargarPDF = () => {
     const url = armarUrl()
@@ -288,13 +297,15 @@ export default function ReporteModulosComputablesPage() {
               {datos && (
                 <button
                   onClick={handleDescargarCSV}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)" }}
+                  disabled={filtrosDesactualizados}
+                  title={filtrosDesactualizados ? "Los filtros cambiaron desde el último cálculo — volvé a calcular para descargar el CSV actualizado" : undefined}
+                  style={{ background: "none", border: "none", cursor: filtrosDesactualizados ? "not-allowed" : "pointer", color: filtrosDesactualizados ? "var(--color-text-hint)" : "var(--color-primary)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)" }}
                 >
-                  Descargar CSV
+                  {filtrosDesactualizados ? "CSV desactualizado — recalculá" : "Descargar CSV"}
                 </button>
               )}
               <button
-                onClick={cerrarVista}
+                onClick={() => { cerrarVista(); setFiltrosCalculados(null) }}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-hint)", fontSize: "var(--text-base)", lineHeight: 1 }}
               >
                 ×
