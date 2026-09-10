@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect  } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +12,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+    // UX-ADM-006: si useAuth redirigió acá por un 401 de sesión inválida o
+  // expirada (ver window.fetch parcheado en app/hooks/useAuth.ts), mostrar
+  // un mensaje claro en vez de la pantalla de login pelada.
+  useEffect(() => {
+    if (sessionStorage.getItem("sesionExpirada")) {
+      sessionStorage.removeItem("sesionExpirada");
+      setError("Tu sesión expiró o ya no es válida. Volvé a iniciar sesión.");
+    }
+  }, []);
 
   // Validación local antes de hacer el fetch
   const validate = (): string | null => {
@@ -256,7 +266,7 @@ export default function LoginPage() {
           >
             ¿Olvidaste tu contraseña? Contactá al administrador de tu institución.
           </p>
-        </div>
+        </div>q
       </div>
     </div>
   );
