@@ -248,16 +248,14 @@ export default function LoginPage() {
 
         {/* Link olvidé contraseña */}
         <div className="text-center mt-5">
-          <a
-            href="/auth/forgot-password"
+          <p
             style={{
               fontSize: "var(--text-xs)",
-              color: "var(--color-accent)",
-              textDecoration: "none",
+              color: "var(--color-text-hint)",
             }}
           >
-            ¿Olvidaste tu contraseña?
-          </a>
+            ¿Olvidaste tu contraseña? Contactá al administrador de tu institución.
+          </p>
         </div>
       </div>
     </div>

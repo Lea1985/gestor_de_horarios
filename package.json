@@ -11,6 +11,7 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "seed": "node --loader ts-node/esm prisma/seed.ts",
+    "resetear-password": "node --loader ts-node/esm scripts/resetear-password.ts",
     "test": "cross-env NODE_ENV=test vitest",
     "test:run": "cross-env DATABASE_URL=postgresql://admin:admin123@localhost:5433/gestor_test?schema=public vitest run --reporter=verbose"
   },

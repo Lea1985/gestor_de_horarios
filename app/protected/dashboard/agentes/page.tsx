@@ -331,7 +331,7 @@ export default function AgentesPage() {
     <>
       {confirmarId !== null && (
         <ModalConfirmar
-          mensaje="¿Eliminar este agente? Esta acción no se puede deshacer."
+          mensaje="¿Eliminar este agente? Podrás reactivarlo más adelante desde 'Ver inactivos'."
           onConfirmar={() => eliminar(confirmarId)}
           onCancelar={() => setConfirmarId(null)}
         />
