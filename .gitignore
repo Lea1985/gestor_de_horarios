@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 graphify-out/
+
+# Backups de base de datos (contienen datos reales, nunca se versionan)
+backups/
