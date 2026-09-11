@@ -1,0 +1,20 @@
+{
+  "institucion": {
+    "nombre": "Nombre de la escuela",
+    "dominio": "escuela.edu.ar",
+    "cuit": "30-00000000-0",
+    "domicilio": "Calle 1234, Ciudad",
+    "telefono": "0341-0000000",
+    "email": "contacto@escuela.edu.ar",
+    "configuracion": {
+      "usaMaterias": true,
+      "usaCursos": true,
+      "modulosDuracionMinutos": 40
+    }
+  },
+  "adminInicial": {
+    "nombre": "Secretaría [Nombre de la escuela]",
+    "email": "secretaria@escuela.edu.ar",
+    "passwordTemporal": "cambiar-esta-clave-antes-de-instalar"
+  }
+}

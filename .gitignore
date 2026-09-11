@@ -43,3 +43,6 @@ graphify-out/
 
 # Backups de base de datos (contienen datos reales, nunca se versionan)
 backups/
+
+# Datos reales de instalación (contraseña + datos de la escuela, nunca se versiona)
+config/institucion.json
