@@ -65,16 +65,36 @@ git rm prisma/triggers.sql
 
 ---
 
-## Esqueleto del plan de instalación en máquina nueva (borrador — actualizado con lo resuelto el 29/07)
+## Esqueleto del plan de instalación en máquina nueva (Windows nativo — reescrito 11/09/2026)
 
-1. WSL2 + Ubuntu 26.04, `systemd=true` en `/etc/wsl.conf` desde el arranque.
-2. Node — fijar la versión exacta (sigue pendiente agregar `engines` o `.nvmrc` al repo; hoy no hay nada que lo fuerce, ver "Confirmado → Node").
-3. Postgres 18 vía `apt` (no Docker) — crear cluster en puerto **5433** (ya no hay ambigüedad: `.env` y `test:run` quedaron alineados a este puerto, `docker-compose.yml` se borró).
-4. Rol `admin`/`admin123` (o credenciales reales) + bases `gestor_horarios` (dev) y `gestor_test` (test) en el mismo cluster.
-5. Clonar repo, `npm install` — **ya no hace falta ningún build tool nativo** (`bcrypt` se sacó del proyecto, todo corre sobre `bcryptjs`, puro JS).
-6. Copiar el `.env` directo a la máquina nueva — `DOTENV_KEY` era ruido de tipos de la librería `dotenv`, no se usa `dotenv-vault` en este proyecto.
-7. `npx prisma migrate deploy`. (`prisma/triggers.sql` se borró — no era parte de ninguna migración ni estaba activo en la base real, no hace falta aplicarlo en la máquina nueva.)
+**Pivote de arquitectura (10-11/09/2026):** el destino de instalación pasa de WSL2+Ubuntu a **Windows nativo**. Motivos: las máquinas de las escuelas se apagan al finalizar la jornada (un cron/scheduler dentro de WSL2 no es confiable en ese escenario — Windows Task Scheduler sí, corre como servicio real); y el proyecto ya no depende de ningún build nativo (`bcrypt` → `bcryptjs`), así que no hace falta WSL2 para que `npm install` funcione. Validado en la práctica: Postgres 18 nativo, backup automático (Task Scheduler), backup manual y restauración probados de punta a punta el 10-11/09.
+
+1. **Windows 10/11**, cuenta de usuario estándar de la escuela (administrador solo para los pasos de instalación inicial: Postgres, Node, Task Scheduler).
+2. **Node.js LTS** — instalar vía el instalador oficial (`.msi`) o `winget install OpenJS.NodeJS.LTS`. Sigue pendiente fijar la versión exacta con `engines` en `package.json` o `.nvmrc` (no resuelto todavía, aplica igual en Windows que en WSL2 — ver "Abierto" arriba).
+3. **PostgreSQL 18 nativo** — instalador oficial de EDB (recomendado sobre `winget install PostgreSQL.PostgreSQL.18`, porque el instalador gráfico permite fijar la contraseña del superusuario `postgres` durante la instalación; la instalación silenciosa de winget la omite y obliga a un reseteo manual después — procedimiento validado el 10/09 si hace falta: backup de `pg_hba.conf` → `trust` temporal → `ALTER USER postgres WITH PASSWORD '...'` → restaurar `pg_hba.conf` → reiniciar servicio, todo como Administrador).
+   - Puerto: **5432** (default) para la máquina de la escuela — no hay conflicto con ningún otro Postgres ahí, a diferencia de la máquina de dev (que usa 5433 para convivir con el Postgres de WSL2). Ajustar `DATABASE_URL` del `.env` de instalación en consecuencia.
+4. **Rol y bases** — crear el rol de la app y las bases `gestor_horarios` (o el nombre real de producción) en el cluster nativo.
+5. **Clonar el repo directo en una ruta de Windows** (ej. `C:\ALNEXT\gestor_clean`) — ya no hace falta WSL2 en ningún paso. `npm install` — sin build tools nativos, `bcryptjs` es puro JS.
+6. **Copiar el `.env`** a la máquina nueva — archivo de texto plano, sin `dotenv-vault` ni `DOTENV_KEY` real de por medio (era ruido, ver "Resuelto" arriba).
+7. `npx prisma migrate deploy`.
 8. `npm run seed`.
-9. Cargar datos operativos (agentes, asignaciones, período operativo → activar) para tener algo de data real, siguiendo el flujo completo para que el motor de resolución corra desde el principio.
-10. Antes de correr los tests: levantar el servidor en background y esperar a que responda (`nohup npm run dev:test & disown` + polling con `curl` a `localhost:3000`) — los tests de endpoints dependen de un servidor real levantado, no alcanza con `npm run test:run` solo.
-11. `npm run dev` / `npm run test:run` para confirmar que todo levanta.
+9. **Seed de "Mi institución"** (UX-ADM-004: domicilio, teléfono, CUIT para headers de PDF) — cargar directo en el seed inicial, sin pantalla dedicada (decisión ya registrada en el plan pre-piloto).
+10. Cargar datos operativos (agentes, asignaciones, período operativo → activar) para tener data real antes de arrancar.
+11. **Backup automático** — copiar `scripts/backup-alnext.ps1` y `scripts/restaurar-alnext.ps1` (ya en el repo) y registrar la tarea programada con los comandos validados el 11/09:
+```powershell
+    $accion = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-ExecutionPolicy Bypass -File "C:\ALNEXT\gestor_clean\scripts\backup-alnext.ps1"'
+    $trigger1 = New-ScheduledTaskTrigger -AtLogOn
+    $trigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 4) -RepetitionDuration (New-TimeSpan -Days 3650)
+    $config = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+    Register-ScheduledTask -TaskName "ALNEXT-Backup" -Action $accion -Trigger @($trigger1, $trigger2) -Settings $config -Description "Backup automatico ALNEXT"
+```
+    Nota: sin `-DatabaseUrl`, el script lee `DATABASE_URL` directo del `.env` del proyecto — no hace falta hardcodear la conexión en la tarea programada, a diferencia de las pruebas contra la base de prueba.
+12. Antes de correr tests: levantar el servidor en background. En Windows, equivalente a `nohup ... & disown`:
+```powershell
+    Start-Process powershell -ArgumentList "npm run dev:test" -WindowStyle Hidden
+```
+    y luego hacer polling con `Invoke-WebRequest` a `localhost:3000` hasta que responda, antes de correr los tests de endpoints.
+13. `npm run dev` / `npm run test:run` para confirmar que todo levanta.
+14. **Prueba final** (ya registrada como punto 12 del plan pre-piloto): instalación limpia + restauración de un backup real (`restaurar-alnext.ps1`) + datos realistas + recorrido completo, antes de instalar en la escuela.
+
+**Pendiente sin resolver, no bloqueante:** el seed real de Codigario + Colegio Ceferino (tarea #11) sigue sin ubicarse/confirmarse — insumo del paso 8-9 de este esqueleto. Los dos `.sql` sueltos en la raíz del repo (`backup_antes_migracion.sql`, `gestor_horarios_backup.sql`) siguen sin decisión — candidatos a borrar antes de que el nuevo sistema de backups (con su propia carpeta `backups/`, ya en `.gitignore`) genere confusión con ellos.
