@@ -28,6 +28,12 @@ export function useAuth() {
   // fetch global: cualquier 401 de cualquier pantalla limpia la sesión y
   // redirige al login con un mensaje claro. Se excluye /api/auth/login
   // porque ahí un 401 es "contraseña incorrecta", no "sesión inválida".
+  //
+  // Control de licencia (12/09/2026): mismo criterio para un 403 con
+  // code "LICENCIA_INACTIVA" (ver lib/auth/withContext.ts) -- la
+  // institución está suspendida, no la sesión del usuario. No se limpia
+  // el token (no es un problema de sesión), solo se redirige con el
+  // mensaje correspondiente.
   useEffect(() => {
     if (fetchPatched) return
     fetchPatched = true
@@ -45,6 +51,20 @@ export function useAuth() {
         sessionStorage.removeItem("token")
         sessionStorage.setItem("sesionExpirada", "1")
         router.push("/public/login")
+        return response
+      }
+
+      if (response.status === 403 && !url.includes("/api/auth/login")) {
+        try {
+          const cuerpo = await response.clone().json()
+          if (cuerpo?.code === "LICENCIA_INACTIVA") {
+            sessionStorage.setItem("licenciaInactiva", "1")
+            router.push("/public/login")
+          }
+        } catch {
+          // 403 sin cuerpo JSON parseable -- se maneja como error genérico
+          // en la pantalla que hizo el fetch, no es nuestro caso especial.
+        }
       }
 
       return response

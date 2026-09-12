@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
       if (!tenant.activo || tenant.estado !== Estado.ACTIVO) {
         return Response.json(
-          { error: "Institución inactiva o suspendida" },
+          { error: "El servicio está suspendido para esta institución. Contactá al proveedor para regularizarlo.", code: "LICENCIA_INACTIVA" },
           { status: 403 }
         )
       }

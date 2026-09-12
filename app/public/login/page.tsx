@@ -15,10 +15,18 @@ export default function LoginPage() {
     // UX-ADM-006: si useAuth redirigió acá por un 401 de sesión inválida o
   // expirada (ver window.fetch parcheado en app/hooks/useAuth.ts), mostrar
   // un mensaje claro en vez de la pantalla de login pelada.
+  //
+  // Control de licencia (12/09/2026): mismo criterio para un 403 con
+  // code "LICENCIA_INACTIVA" -- la institución está suspendida, no la
+  // sesión del usuario, pero el mensaje también se muestra acá porque es
+  // la única pantalla pública disponible.
   useEffect(() => {
     if (sessionStorage.getItem("sesionExpirada")) {
       sessionStorage.removeItem("sesionExpirada");
       setError("Tu sesión expiró o ya no es válida. Volvé a iniciar sesión.");
+    } else if (sessionStorage.getItem("licenciaInactiva")) {
+      sessionStorage.removeItem("licenciaInactiva");
+      setError("El servicio está suspendido para tu institución. Contactá al proveedor para regularizarlo.");
     }
   }, []);
 
@@ -266,7 +274,7 @@ export default function LoginPage() {
           >
             ¿Olvidaste tu contraseña? Contactá al administrador de tu institución.
           </p>
-        </div>q
+        </div>
       </div>
     </div>
   );

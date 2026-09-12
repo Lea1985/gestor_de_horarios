@@ -1,7 +1,9 @@
 // lib/auth/withContext.ts
 // Wrapper único que reemplaza withAuth + withTenant.
 // Lee los headers inyectados por el proxy — sin queries a DB.
-// El proxy ya validó el token y el tenant antes de que el request llegue aquí.
+// El proxy ya validó el token, el tenant y el estado de licencia antes de
+// que el request llegue aquí (ver proxy.ts) -- acá no se repite ese check
+// para no duplicar la query ni tener dos lugares que mantener sincronizados.
 //
 // Además, dispara dos tareas de mantenimiento una vez por día por
 // institución -- es el único "reloj" que tiene el sistema: sin
@@ -110,6 +112,7 @@ export async function withContext(
         { status: 401 }
       )
     }
+
     await resolverClasesVencidasSiCorresponde(tenantId)
     return await handler({ usuarioId, tenantId })
   } catch (error) {
