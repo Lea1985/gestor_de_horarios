@@ -144,78 +144,122 @@ $instaladorInvocado = $false
 $listo = $false
 $preflightExit = -1
 $preflightJson = $null
+$preflightJsonInvalido = $false
 
 try {
-    # --- 1. Preflight, como proceso hijo real (NUNCA dot-source/& en este
-    # mismo proceso: Preflight.ps1 termina con "exit", que mataría también
-    # a este proceso si no corriera como un powershell.exe separado).
-
     Write-Host ""
     Write-Host "=== Instalación de PostgreSQL para ALNEXT ==="
-    Write-Host "Ejecutando preflight..."
 
-    $preflightScript = Join-Path $PSScriptRoot "Preflight.ps1"
-    $preflightArgs = @(
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $preflightScript,
-        "-PgVersion", $PgVersion,
-        "-PgPort", $PgPort,
-        "-ServiceName", $ServiceName
-    )
-    if ($AllowExistingInstallation) { $preflightArgs += "-AllowExistingInstallation" }
+    # --- 0. Camino rápido: si nuestra propia instancia (mismo $ServiceName +
+    # mismo $PgPort) ya está corriendo y respondiendo, no hay nada que hacer.
+    # Deliberadamente NO pasa por Preflight ni depende de
+    # -AllowExistingInstallation -- no es una decisión de "reusar una
+    # instalación ajena/ambigua" (eso lo sigue resolviendo Preflight más
+    # abajo), es solo confirmar que el objetivo ya está cumplido. Sin esto,
+    # el caso más común (reejecutar el instalador con todo ya sano) fallaba
+    # siempre: Preflight chequea el puerto libre antes que la instalación
+    # existente, ve el puerto ocupado por nuestro propio servicio y aborta
+    # con exit 2 sin llegar a evaluar que es reusable (validado en VM,
+    # 17/09/2026).
+    $fastPathReuse = Test-PostgresListo -ServiceName $ServiceName -Port $PgPort
 
-    $preflightRaw = & powershell.exe @preflightArgs
-    $preflightExit = $LASTEXITCODE
+    if ($fastPathReuse) {
+        $reused = $true
+        $listo = $true
+        Write-Host "El servicio '$ServiceName' ya está corriendo y respondiendo en el puerto $PgPort -- nada que hacer, no se invoca Preflight ni el instalador."
+    } else {
+        # --- 1. Preflight, como proceso hijo real (NUNCA dot-source/& en este
+        # mismo proceso: Preflight.ps1 termina con "exit", que mataría también
+        # a este proceso si no corriera como un powershell.exe separado).
 
-    if ($preflightRaw) {
-        try { $preflightJson = ($preflightRaw -join "`n") | ConvertFrom-Json } catch { $preflightJson = $null }
-    }
+        Write-Host "Ejecutando preflight..."
 
-    $preflightJsonInvalido = $false
+        $preflightScript = Join-Path $PSScriptRoot "Preflight.ps1"
+        $preflightArgs = @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $preflightScript,
+            "-PgVersion", $PgVersion,
+            "-PgPort", $PgPort,
+            "-ServiceName", $ServiceName
+        )
+        if ($AllowExistingInstallation) { $preflightArgs += "-AllowExistingInstallation" }
 
-    if ($preflightExit -eq 0) {
-        if (-not $preflightJson) {
-            # Preflight salió con 0 (éxito) pero no pudimos interpretar su JSON.
-            # No asumir "no existe nada, instalar limpio" -- tratar como fallo
-            # inesperado, no como vía libre.
-            $preflightJsonInvalido = $true
-            Write-Host "Preflight terminó con éxito (exit 0) pero no se pudo interpretar su salida JSON -- no se puede confirmar de forma segura si ya existe una instalación previa. Abortando sin invocar el instalador."
-        } elseif ($preflightJson.instalacionExistente -or $preflightJson.servicioPropioExistente) {
-            $reused = $true
-            Write-Host "Preflight confirmó una instalación/servicio de Postgres ya existente, reuso autorizado (-AllowExistingInstallation). No se va a reinvocar el instalador -- reinstalar la misma versión mayor puede reutilizar en silencio ignorando los parámetros nuevos, o crashear (validado en VM, 14/09/2026). Se pasa directo a verificar que la instancia existente responda."
-        } else {
-            $installerArgs = @(
-                "--mode", "unattended",
-                "--unattendedmodeui", "none",
-                "--superpassword", "`"$SuperPassword`"",
-                "--servicename", "`"$ServiceName`"",
-                "--servicepassword", "`"$ServicePassword`"",
-                "--serverport", $PgPort,
-                "--prefix", "`"$Prefix`"",
-                "--datadir", "`"$DataDir`""
-            )
-            if ($DebugTraceLog) { $installerArgs += @("--debugtrace", "`"$DebugTraceLog`"") }
+        $preflightRaw = & powershell.exe @preflightArgs
+        $preflightExit = $LASTEXITCODE
 
-            Write-Host "Invocando el instalador de PostgreSQL ($PgInstallerPath)..."
-            $installerProc = Start-Process -FilePath $PgInstallerPath -ArgumentList $installerArgs -PassThru
-            $instaladorInvocado = $true
-            Write-Host "El instalador devolvió el control (PID $($installerProc.Id)); el trabajo real de EDB sigue en segundo plano varios minutos (observado 7-10 min en VM). No se asume éxito ni fallo por esto."
+        # $preflightRaw trae mezclados los Write-Host de Preflight (resumen de
+        # consola) y su línea JSON: al invocarlo como proceso hijo separado, todo
+        # lo que Preflight manda a stdout se captura acá, no solo su salida de
+        # pipeline (verificado en VM, 17/09/2026). Preflight emite el JSON
+        # comprimido (-Compress, una sola línea) como lo último que escribe a
+        # stdout, así que la última línea no vacía es siempre el JSON real, sin
+        # importar cuánto ruido de consola la preceda.
+        if ($preflightRaw) {
+            $preflightJsonLine = @($preflightRaw | Where-Object { $_.Trim() -ne "" }) | Select-Object -Last 1
+            if ($preflightJsonLine) {
+                try { $preflightJson = $preflightJsonLine | ConvertFrom-Json } catch { $preflightJson = $null }
+            }
         }
 
-        if (-not $preflightJsonInvalido) {
-            Write-Host "Esperando verificación real (servicio '$ServiceName' Running + puerto $PgPort respondiendo), timeout $TimeoutMinutes min..."
-            $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-            while ((Get-Date) -lt $deadline) {
-                if (Test-PostgresListo -ServiceName $ServiceName -Port $PgPort) {
-                    $listo = $true
-                    break
+        if ($preflightExit -eq 0) {
+            if (-not $preflightJson) {
+                # Preflight salió con 0 (éxito) pero no pudimos interpretar su JSON.
+                # No asumir "no existe nada, instalar limpio" -- tratar como fallo
+                # inesperado, no como vía libre.
+                $preflightJsonInvalido = $true
+                Write-Host "Preflight terminó con éxito (exit 0) pero no se pudo interpretar su salida JSON -- no se puede confirmar de forma segura si ya existe una instalación previa. Abortando sin invocar el instalador."
+            } elseif ($preflightJson.instalacionExistente -or $preflightJson.servicioPropioExistente) {
+                $reused = $true
+                Write-Host "Preflight confirmó una instalación/servicio de Postgres ya existente, reuso autorizado (-AllowExistingInstallation). No se va a reinvocar el instalador -- reinstalar la misma versión mayor puede reutilizar en silencio ignorando los parámetros nuevos, o crashear (validado en VM, 14/09/2026)."
+
+                # El camino rápido (punto 0) ya cubrió el caso "está corriendo y
+                # responde". Si llegamos acá es porque no respondía -- típicamente
+                # el servicio existe pero está detenido (parado a mano, o la
+                # máquina recién arrancó). Intentar levantarlo explícitamente en
+                # vez de asumir que el loop de verificación de abajo lo va a ver
+                # correr solo (nunca lo arranca, solo lo observa).
+                Write-Host "Intentando iniciar el servicio '$ServiceName' (no respondía en el puerto $PgPort)..."
+                try {
+                    Start-Service -Name $ServiceName -ErrorAction Stop
+                } catch {
+                    Write-Host "No se pudo iniciar el servicio '$ServiceName': $($_.Exception.Message). Se continúa igual al loop de verificación por si arranca por otra vía."
                 }
-                Start-Sleep -Seconds 5
+            } else {
+                $installerArgs = @(
+                    "--mode", "unattended",
+                    "--unattendedmodeui", "none",
+                    "--superpassword", "`"$SuperPassword`"",
+                    "--servicename", "`"$ServiceName`"",
+                    "--servicepassword", "`"$ServicePassword`"",
+                    "--serverport", $PgPort,
+                    "--prefix", "`"$Prefix`"",
+                    "--datadir", "`"$DataDir`""
+                )
+                if ($DebugTraceLog) { $installerArgs += @("--debugtrace", "`"$DebugTraceLog`"") }
+
+                Write-Host "Invocando el instalador de PostgreSQL ($PgInstallerPath)..."
+                $installerProc = Start-Process -FilePath $PgInstallerPath -ArgumentList $installerArgs -PassThru
+                $instaladorInvocado = $true
+                Write-Host "El instalador devolvió el control (PID $($installerProc.Id)); el trabajo real de EDB sigue en segundo plano varios minutos (observado 7-10 min en VM). No se asume éxito ni fallo por esto."
+            }
+
+            if (-not $preflightJsonInvalido) {
+                Write-Host "Esperando verificación real (servicio '$ServiceName' Running + puerto $PgPort respondiendo), timeout $TimeoutMinutes min..."
+                $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+                while ((Get-Date) -lt $deadline) {
+                    if (Test-PostgresListo -ServiceName $ServiceName -Port $PgPort) {
+                        $listo = $true
+                        break
+                    }
+                    Start-Sleep -Seconds 5
+                }
             }
         }
     }
 
     $exitCode = 0
-    if ($preflightExit -eq 2) {
+    if ($fastPathReuse) {
+        # Camino rápido (punto 0): ya se confirmó todo -- nada más que evaluar.
+    } elseif ($preflightExit -eq 2) {
         Write-Error "Preflight detectó el puerto $PgPort ocupado. Abortando sin invocar el instalador de Postgres." -ErrorAction Continue
         $exitCode = 2
     } elseif ($preflightExit -eq 3) {
@@ -237,7 +281,7 @@ try {
 
     Write-Host ""
     Write-Host "=== Resultado ==="
-    Write-Host "Preflight exit code: $preflightExit"
+    Write-Host "Preflight exit code: $(if ($fastPathReuse) { 'N/A (camino rápido, no se invocó)' } else { $preflightExit })"
     Write-Host "Instalación reusada (sin reinvocar instalador): $(if ($reused) { 'SI' } else { 'NO' })"
     Write-Host "Instalador de Postgres invocado: $(if ($instaladorInvocado) { 'SI' } else { 'NO' })"
     Write-Host "Postgres confirmado corriendo: $(if ($listo) { 'SI' } else { 'NO' })"

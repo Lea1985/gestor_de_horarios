@@ -156,7 +156,7 @@ $resultado = [PSCustomObject]@{
     listoParaContinuar         = ($exitCode -eq 0)
 }
 
-$json = $resultado | ConvertTo-Json
+$json = $resultado | ConvertTo-Json -Compress
 $json
 
 if ($ResultFile) {
