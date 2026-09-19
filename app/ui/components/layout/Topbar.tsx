@@ -18,6 +18,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/protected/dashboard/incidencias":  "Incidencias",
   "/protected/dashboard/calendario":   "Calendario Escolar",
   "/protected/dashboard/periodos-operativos": "Períodos Operativos",
+  "/protected/dashboard/mi-institucion": "Mi institución",
   "/protected/dashboard/reportes/asignaciones": "Asignaciones y distribuciones",
   "/protected/dashboard/reportes/ausencias": "Ausencias y reemplazos",
   "/protected/dashboard/reportes/codigarios": "Codigarios y artículos",

@@ -52,6 +52,10 @@ const CONFIG_ITEMS = [
     label: "Períodos Operativos",
     href: "/protected/dashboard/periodos-operativos",
   },
+  {
+    label: "Mi institución",
+    href: "/protected/dashboard/mi-institucion",
+  },
 ]
 
 function NavLink({
