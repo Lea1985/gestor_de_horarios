@@ -15,12 +15,25 @@
 #      node.exe (tipicamente una corrida manual de prueba anterior), lo
 #      detiene; si es por cualquier otro proceso, corta con error sin
 #      tocarlo.
-#   4. Da de baja la tarea programada si ya existia (no hay secreto que
+#   4. Genera un wrapper .bat que invoca next start y redirige su salida
+#      a un log dentro de -AppDir (util para diagnostico -- Task
+#      Scheduler no expone la salida de una tarea SYSTEM de otra forma).
+#   5. Da de baja la tarea programada si ya existia (no hay secreto que
 #      perder ahi, a diferencia del rol de Postgres) y la recrea:
 #      disparador "al iniciar Windows", corre como SYSTEM (sin depender
-#      de sesion de usuario), con reintento automatico si falla.
-#   5. Inicia la tarea y espera (con reintentos) a que la app responda
+#      de sesion de usuario), con reintento automatico si falla, y
+#      -AllowStartIfOnBatteries/-DontStopIfGoingOnBatteries -- SIN esto
+#      la tarea queda encolada para siempre y nunca llega a ejecutar
+#      nada, sin ningun error visible, si Windows detecta una bateria
+#      (confirmado en VM: VirtualBox expone una bateria ACPI virtual
+#      incluso en una maquina pensada como servidor).
+#   6. Inicia la tarea y espera (con reintentos) a que la app responda
 #      antes de reportar exito.
+#
+# Requiere consola elevada (Administrador): registrar una tarea que
+# corre como SYSTEM no funciona desde una consola sin elevar (confirmado
+# en VM: "Acceso denegado"). Auto-elevacion pendiente (ver backlog,
+# mismo patron que ya usa Install-Postgres.ps1).
 #
 # No usa npm start ni npm run build -- invoca next directo via node.exe,
 # mismo criterio ya usado en Install-Database.ps1 para el seed (evita la
@@ -46,7 +59,8 @@
 #           node.exe -- no se toca, hay que liberarlo a mano.
 #       4 = "next build" termino con error.
 #       5 = fallo el registro o el inicio de la tarea programada.
-#       6 = la tarea arranco pero la app no respondio a tiempo.
+#       6 = la tarea arranco pero la app no respondio a tiempo -- revisar
+#           el log en -AppDir\app-service.log.
 #       8 = fallo inesperado no controlado.
 
 param(
@@ -79,6 +93,7 @@ $resultado = [ordered]@{
     tareaRegistrada   = $false
     tareaIniciada     = $false
     appRespondiendo   = $false
+    logPath           = $null
     exitCode          = -1
 }
 
@@ -136,7 +151,17 @@ try {
         }
     }
 
-    # --- 5. Registrar tarea programada (idempotente: reemplaza si existia) ---
+    # --- 5. Generar wrapper .bat (captura salida a un log, Task Scheduler no
+    #        expone stdout/stderr de una tarea SYSTEM de otra forma) --------
+
+    $logPath = Join-Path $AppDir "app-service.log"
+    $batPath = Join-Path $AppDir "run-app-service.bat"
+    $resultado.logPath = $logPath
+
+    $batContent = "@echo off`r`ncd /d `"$AppDir`"`r`n`"$nodeExe`" `"$nextBin`" start `"$AppDir`" -H 127.0.0.1 -p $Port >> `"$logPath`" 2>&1`r`n"
+    [System.IO.File]::WriteAllText($batPath, $batContent, [System.Text.Encoding]::ASCII)
+
+    # --- 6. Registrar tarea programada (idempotente: reemplaza si existia) ---
 
     $existente = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($existente) {
@@ -145,11 +170,15 @@ try {
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
     }
 
-    $argumento = "`"$nextBin`" start `"$AppDir`" -H 127.0.0.1 -p $Port"
-    $accion = New-ScheduledTaskAction -Execute $nodeExe -Argument $argumento -WorkingDirectory $AppDir
+    $accion = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\cmd.exe" -Argument "/c `"$batPath`"" -WorkingDirectory $AppDir
     $disparador = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $configuracion = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -StartWhenAvailable
+    # -AllowStartIfOnBatteries / -DontStopIfGoingOnBatteries: sin esto la
+    # tarea queda "Queued" para siempre y nunca ejecuta nada -- confirmado
+    # en VM, VirtualBox expone una bateria ACPI virtual incluso en una
+    # maquina pensada como servidor, y el default de Task Scheduler es no
+    # arrancar si "esta con bateria".
+    $configuracion = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
     try {
         Register-ScheduledTask -TaskName $TaskName -Action $accion -Trigger $disparador -Principal $principal -Settings $configuracion -Force | Out-Null
@@ -159,7 +188,7 @@ try {
         Salir -Code 5 -MensajeError "Fallo el registro de la tarea programada -- $($_.Exception.Message)"
     }
 
-    # --- 6. Iniciar la tarea ahora (no esperar al proximo reinicio) ---------
+    # --- 7. Iniciar la tarea ahora (no esperar al proximo reinicio) ---------
 
     try {
         Start-ScheduledTask -TaskName $TaskName
@@ -169,7 +198,7 @@ try {
         Salir -Code 5 -MensajeError "Fallo el inicio de la tarea programada -- $($_.Exception.Message)"
     }
 
-    # --- 7. Esperar a que la app responda ---------------------------------------
+    # --- 8. Esperar a que la app responda ---------------------------------------
 
     Write-Host "Esperando a que la app responda en http://127.0.0.1:$Port ..."
     $ok = $false
@@ -187,7 +216,7 @@ try {
     }
 
     if (-not $ok) {
-        Salir -Code 6 -MensajeError "La tarea arranco pero la app no respondio en http://127.0.0.1:$Port dentro de 15 segundos. Revisar el estado de la tarea con Get-ScheduledTaskInfo."
+        Salir -Code 6 -MensajeError "La tarea arranco pero la app no respondio en http://127.0.0.1:$Port dentro de 15 segundos. Revisar el log: $logPath"
     }
     $resultado.appRespondiendo = $true
     Write-Host "App respondiendo OK."
@@ -196,6 +225,7 @@ try {
     Write-Host "=== Resultado ==="
     Write-Host "Tarea: $TaskName (al iniciar Windows, SYSTEM, reintento automatico)"
     Write-Host "App disponible en: http://127.0.0.1:$Port"
+    Write-Host "Log: $logPath"
     Write-Host ""
 
     Salir -Code 0
