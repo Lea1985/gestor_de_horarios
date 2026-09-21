@@ -1,0 +1,204 @@
+# Install-AppService.ps1
+#
+# Paso 6 del instalador unico de ALNEXT: deja la app corriendo de forma
+# persistente (sobrevive un reinicio de Windows, se reinicia sola si se cae),
+# escuchando solo en loopback (127.0.0.1) -- coherente con el alcance ya
+# definido del piloto: una sola maquina, sin exposicion de red.
+#
+# Que hace:
+#   1. Resuelve node.exe (PATH primero, fallback a la ruta default de la
+#      instalacion oficial de Node.js).
+#   2. Corre "next build" (invocado directo via node, sin pasar por
+#      npm.cmd) -- el script es autosuficiente, no asume que ya corriste
+#      el build a mano.
+#   3. Si el puerto de destino ya esta ocupado: si es por un proceso
+#      node.exe (tipicamente una corrida manual de prueba anterior), lo
+#      detiene; si es por cualquier otro proceso, corta con error sin
+#      tocarlo.
+#   4. Da de baja la tarea programada si ya existia (no hay secreto que
+#      perder ahi, a diferencia del rol de Postgres) y la recrea:
+#      disparador "al iniciar Windows", corre como SYSTEM (sin depender
+#      de sesion de usuario), con reintento automatico si falla.
+#   5. Inicia la tarea y espera (con reintentos) a que la app responda
+#      antes de reportar exito.
+#
+# No usa npm start ni npm run build -- invoca next directo via node.exe,
+# mismo criterio ya usado en Install-Database.ps1 para el seed (evita la
+# capa de npm.cmd/PATH bajo contextos no interactivos).
+#
+# Supuesto (documentado, no resuelto aca): el codigo de la app y sus
+# dependencias (node_modules) ya estan en -AppDir -- mismo supuesto que
+# Install-Database.ps1.
+#
+# Uso:
+#   powershell -ExecutionPolicy Bypass -File installer\Install-AppService.ps1
+#
+# Salida:
+#   - Resumen legible por consola (Write-Host).
+#   - Un objeto JSON por el pipeline (ultima linea de salida "real"),
+#     mismo patron que los pasos anteriores del instalador.
+#   - Exit code:
+#       0 = build, registro de tarea e inicio de la app OK, respondiendo.
+#       1 = parametros invalidos (-AppDir inexistente, o no se encontro
+#           next dentro de node_modules -- dependencias no instaladas).
+#       2 = no se encontro node.exe.
+#       3 = el puerto de destino esta ocupado por un proceso que no es
+#           node.exe -- no se toca, hay que liberarlo a mano.
+#       4 = "next build" termino con error.
+#       5 = fallo el registro o el inicio de la tarea programada.
+#       6 = la tarea arranco pero la app no respondio a tiempo.
+#       8 = fallo inesperado no controlado.
+
+param(
+    [string]$AppDir = "C:\ALNEXT\app",
+    [int]$Port = 3000,
+    [string]$TaskName = "ALNEXT-App"
+)
+
+$ErrorActionPreference = "Stop"
+
+function Salir {
+    param([int]$Code, [string]$MensajeError = "")
+
+    if ($MensajeError) {
+        Write-Error $MensajeError -ErrorAction Continue
+    }
+
+    $resultado.exitCode = $Code
+    $json = $resultado | ConvertTo-Json -Compress
+    $json
+    exit $Code
+}
+
+$resultado = [ordered]@{
+    appDir            = $AppDir
+    port              = $Port
+    taskName          = $TaskName
+    nodeExe           = $null
+    buildOk           = $false
+    tareaRegistrada   = $false
+    tareaIniciada     = $false
+    appRespondiendo   = $false
+    exitCode          = -1
+}
+
+try {
+    Write-Host ""
+    Write-Host "=== Arranque persistente de la app ALNEXT (Paso 6) ==="
+
+    # --- 1. Validaciones de entrada -----------------------------------------
+
+    if (-not (Test-Path $AppDir)) {
+        Salir -Code 1 -MensajeError "No existe -AppDir: $AppDir"
+    }
+    $nextBin = Join-Path $AppDir "node_modules\next\dist\bin\next"
+    if (-not (Test-Path $nextBin)) {
+        Salir -Code 1 -MensajeError "No se encontro $nextBin -- dependencias no instaladas? Corriste npm install en -AppDir?"
+    }
+
+    # --- 2. Resolver node.exe (PATH primero, fallback a la ruta default) ---
+
+    $cmd = Get-Command node -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $nodeExe = $cmd.Source
+    } else {
+        $nodeExe = "C:\Program Files\nodejs\node.exe"
+    }
+    if (-not (Test-Path $nodeExe)) {
+        Salir -Code 2 -MensajeError "No se encontro node.exe en: $nodeExe"
+    }
+    $resultado.nodeExe = $nodeExe
+    Write-Host "node.exe: $nodeExe"
+
+    # --- 3. Build de produccion ------------------------------------------------
+
+    Write-Host "Corriendo next build..."
+    & $nodeExe $nextBin build $AppDir
+    if ($LASTEXITCODE -ne 0) {
+        Salir -Code 4 -MensajeError "next build termino con exit code $LASTEXITCODE."
+    }
+    $resultado.buildOk = $true
+    Write-Host "Build OK."
+
+    # --- 4. Puerto ocupado? -----------------------------------------------------
+
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($conn) {
+        $ownerPid = $conn[0].OwningProcess
+        $proc = Get-Process -Id $ownerPid -ErrorAction SilentlyContinue
+        if ($proc -and $proc.ProcessName -eq "node") {
+            Write-Host "Puerto $Port ocupado por un proceso node.exe (PID $ownerPid) -- probablemente una corrida manual anterior. Deteniendolo."
+            Stop-Process -Id $ownerPid -Force
+            Start-Sleep -Seconds 1
+        } else {
+            $nombreProceso = if ($proc) { $proc.ProcessName } else { "desconocido" }
+            Salir -Code 3 -MensajeError "El puerto $Port ya esta en uso por un proceso distinto de node.exe (PID $ownerPid, proceso: $nombreProceso). Liberalo antes de continuar."
+        }
+    }
+
+    # --- 5. Registrar tarea programada (idempotente: reemplaza si existia) ---
+
+    $existente = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($existente) {
+        Write-Host "La tarea '$TaskName' ya existia -- deteniendola y reemplazandola."
+        Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+    }
+
+    $argumento = "`"$nextBin`" start `"$AppDir`" -H 127.0.0.1 -p $Port"
+    $accion = New-ScheduledTaskAction -Execute $nodeExe -Argument $argumento -WorkingDirectory $AppDir
+    $disparador = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $configuracion = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -StartWhenAvailable
+
+    try {
+        Register-ScheduledTask -TaskName $TaskName -Action $accion -Trigger $disparador -Principal $principal -Settings $configuracion -Force | Out-Null
+        $resultado.tareaRegistrada = $true
+        Write-Host "Tarea '$TaskName' registrada (disparador: al iniciar Windows, corre como SYSTEM)."
+    } catch {
+        Salir -Code 5 -MensajeError "Fallo el registro de la tarea programada -- $($_.Exception.Message)"
+    }
+
+    # --- 6. Iniciar la tarea ahora (no esperar al proximo reinicio) ---------
+
+    try {
+        Start-ScheduledTask -TaskName $TaskName
+        $resultado.tareaIniciada = $true
+        Write-Host "Tarea iniciada."
+    } catch {
+        Salir -Code 5 -MensajeError "Fallo el inicio de la tarea programada -- $($_.Exception.Message)"
+    }
+
+    # --- 7. Esperar a que la app responda ---------------------------------------
+
+    Write-Host "Esperando a que la app responda en http://127.0.0.1:$Port ..."
+    $ok = $false
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Seconds 1
+        try {
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port" -UseBasicParsing -TimeoutSec 3
+            if ($resp.StatusCode -eq 200) {
+                $ok = $true
+                break
+            }
+        } catch {
+            # todavia no esta arriba, seguir esperando
+        }
+    }
+
+    if (-not $ok) {
+        Salir -Code 6 -MensajeError "La tarea arranco pero la app no respondio en http://127.0.0.1:$Port dentro de 15 segundos. Revisar el estado de la tarea con Get-ScheduledTaskInfo."
+    }
+    $resultado.appRespondiendo = $true
+    Write-Host "App respondiendo OK."
+
+    Write-Host ""
+    Write-Host "=== Resultado ==="
+    Write-Host "Tarea: $TaskName (al iniciar Windows, SYSTEM, reintento automatico)"
+    Write-Host "App disponible en: http://127.0.0.1:$Port"
+    Write-Host ""
+
+    Salir -Code 0
+} catch {
+    Salir -Code 8 -MensajeError "Fallo inesperado no controlado en Install-AppService.ps1: $($_.Exception.Message)"
+}
