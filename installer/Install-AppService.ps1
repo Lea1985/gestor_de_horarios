@@ -30,10 +30,14 @@
 #   6. Inicia la tarea y espera (con reintentos) a que la app responda
 #      antes de reportar exito.
 #
-# Requiere consola elevada (Administrador): registrar una tarea que
-# corre como SYSTEM no funciona desde una consola sin elevar (confirmado
-# en VM: "Acceso denegado"). Auto-elevacion pendiente (ver backlog,
-# mismo patron que ya usa Install-Postgres.ps1).
+# Se auto-eleva UNA sola vez al principio (mismo patron Test-Elevado/
+# Invoke-Elevado de Common.ps1 que ya usan Preflight.ps1/Install-Postgres.ps1/
+# Install-ALNEXT.ps1): registrar una tarea que corre como SYSTEM no funciona
+# desde una consola sin elevar (confirmado en VM: "Acceso denegado"). Antes
+# este script dependia de que el operador abriera la consola ya como
+# Administrador; ahora pide su propio UAC si hace falta, tanto si se invoca
+# suelto como si ya viene elevado (via el orquestador, en cuyo caso
+# Test-Elevado ya da true y el bloque de abajo se saltea sin pedir nada).
 #
 # No usa npm start ni npm run build -- invoca next directo via node.exe,
 # mismo criterio ya usado en Install-Database.ps1 para el seed (evita la
@@ -61,15 +65,23 @@
 #       5 = fallo el registro o el inicio de la tarea programada.
 #       6 = la tarea arranco pero la app no respondio a tiempo -- revisar
 #           el log en -AppDir\app-service.log.
+#       7 = no se pudo obtener elevacion de administrador (UAC cancelado
+#           o fallido). Codigo separado del 1 a proposito, para no hacer
+#           que un mismo numero signifique dos errores sin relacion
+#           dentro de este script.
 #       8 = fallo inesperado no controlado.
 
 param(
     [string]$AppDir = "C:\ALNEXT\app",
     [int]$Port = 3000,
-    [string]$TaskName = "ALNEXT-App"
+    [string]$TaskName = "ALNEXT-App",
+    [switch]$Elevated,
+    [string]$ResultFile = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "Common.ps1")
 
 function Salir {
     param([int]$Code, [string]$MensajeError = "")
@@ -81,6 +93,11 @@ function Salir {
     $resultado.exitCode = $Code
     $json = $resultado | ConvertTo-Json -Compress
     $json
+
+    if ($ResultFile) {
+        $json | Out-File -FilePath $ResultFile -Encoding utf8
+    }
+
     exit $Code
 }
 
@@ -96,6 +113,39 @@ $resultado = [ordered]@{
     logPath           = $null
     exitCode          = -1
 }
+
+# --- 0. Elevacion (Test-Elevado / Invoke-Elevado en Common.ps1) ------------
+# Registrar una tarea programada que corre como SYSTEM requiere consola
+# elevada. Si este script ya corre como hijo de un proceso elevado (caso
+# orquestador: Install-ALNEXT.ps1 ya pidio UAC una vez), Test-Elevado da
+# true y este bloque entero se saltea sin pedir nada de nuevo.
+
+if (-not (Test-Elevado)) {
+    if ($Elevated) {
+        Salir -Code 7 -MensajeError "No se pudo obtener elevacion de administrador tras el reintento."
+    }
+
+    Write-Host "Registrar la tarea programada de ALNEXT requiere permisos de administrador. Pidiendo elevacion (UAC)..."
+
+    $resultFileRelay = Join-Path $env:TEMP "alnext-appservice-$([guid]::NewGuid().ToString('N')).json"
+
+    $extraArgs = @(
+        "-AppDir", "`"$AppDir`"",
+        "-Port", $Port,
+        "-TaskName", "`"$TaskName`"",
+        "-Elevated",
+        "-ResultFile", "`"$resultFileRelay`""
+    )
+
+    $relayResult = Invoke-Elevado -ScriptPath $PSCommandPath -ExtraArgs $extraArgs -ResultFile $resultFileRelay
+    if ($relayResult.Cancelado) {
+        Salir -Code 7 -MensajeError "El usuario cancelo la elevacion (UAC) o esta fallo: $($relayResult.Mensaje)"
+    }
+    if ($relayResult.Output) { $relayResult.Output }
+    exit $relayResult.ExitCode
+}
+
+# A partir de aca el proceso corre elevado.
 
 try {
     Write-Host ""
