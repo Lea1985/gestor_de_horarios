@@ -1,4 +1,4 @@
-﻿# Preflight.ps1
+# Preflight.ps1
 #
 # Paso 1 del instalador único de ALNEXT (Windows nativo, sin Docker/WSL2).
 # Antes de invocar el instalador oficial de PostgreSQL (EDB) hay que resolver
@@ -129,7 +129,8 @@ Write-Host "Servicio propio '$ServiceName' ya existe: $(if ($servicioPropioExist
 Write-Host ""
 
 $exitCode = 0
-if (-not $portLibre) {
+$reusoEsperado = ($instalacionExistente -or $servicioPropioExistente) -and $AllowExistingInstallation
+if ((-not $portLibre) -and -not $reusoEsperado) {
     Write-Error "El puerto $PgPort está ocupado. Elegí otro puerto para la instancia de Postgres de ALNEXT." -ErrorAction Continue
     $exitCode = 2
 } elseif (($instalacionExistente -or $servicioPropioExistente) -and -not $AllowExistingInstallation) {
@@ -140,6 +141,8 @@ if (-not $portLibre) {
         Write-Error "Ya existe un servicio de Windows llamado '$ServiceName' (posible resabio de un intento de instalación anterior). Resolvé esto explícitamente (eliminar el servicio, elegir otro nombre de servicio, o pasar -AllowExistingInstallation si ya decidiste reusarlo) antes de continuar." -ErrorAction Continue
     }
     $exitCode = 3
+} elseif (-not $portLibre) {
+    Write-Host "Puerto $PgPort ocupado, pero corresponde a la instalacion existente que se esta reusando (-AllowExistingInstallation). Continuando."
 }
 
 $resultado = [PSCustomObject]@{

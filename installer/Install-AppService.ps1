@@ -200,9 +200,18 @@ try {
 
     # --- 8. Esperar a que la app responda ---------------------------------------
 
+    # Nota: 60 intentos de 1s (60s totales), no 15 -- confirmado en VM que
+    # un arranque via Task Scheduler/SYSTEM justo despues de un "next
+    # build" propio de este mismo script puede tardar mas de 15s en
+    # responder (el build deja la VM con menos margen), aunque la app
+    # termine arrancando bien (confirmado con Invoke-WebRequest manual
+    # mientras el script ya habia reportado "exitCode:6" -- la tarea
+    # seguia corriendo y respondiendo 200 igual, solo que mas tarde de lo
+    # que este script esperaba).
     Write-Host "Esperando a que la app responda en http://127.0.0.1:$Port ..."
     $ok = $false
-    for ($i = 0; $i -lt 15; $i++) {
+    $maxIntentos = 60
+    for ($i = 0; $i -lt $maxIntentos; $i++) {
         Start-Sleep -Seconds 1
         try {
             $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port" -UseBasicParsing -TimeoutSec 3
@@ -213,10 +222,13 @@ try {
         } catch {
             # todavia no esta arriba, seguir esperando
         }
+        if (($i + 1) % 10 -eq 0) {
+            Write-Host "  ... $($i + 1)s esperando, todavia sin respuesta."
+        }
     }
 
     if (-not $ok) {
-        Salir -Code 6 -MensajeError "La tarea arranco pero la app no respondio en http://127.0.0.1:$Port dentro de 15 segundos. Revisar el log: $logPath"
+        Salir -Code 6 -MensajeError "La tarea arranco pero la app no respondio en http://127.0.0.1:$Port dentro de $maxIntentos segundos. Revisar el log: $logPath"
     }
     $resultado.appRespondiendo = $true
     Write-Host "App respondiendo OK."

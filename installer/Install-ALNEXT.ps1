@@ -16,6 +16,19 @@
 # invocaran en el mismo proceso. Se captura $LASTEXITCODE y la ultima linea
 # de stdout (el JSON que cada script ya emite) de cada sub-paso.
 #
+# IMPORTANTE sobre quoting: los argumentos que van a Invocar-Paso (que usa
+# "&" + splat @Argumentos contra powershell.exe como comando nativo) NO
+# deben llevar comillas manuales embebidas -- PowerShell ya cita cada
+# elemento del array automaticamente al invocar un comando nativo asi.
+# Agregar comillas propias (necesario en cambio para Start-Process
+# -ArgumentList, que SI las requiere) rompe el parseo de argumentos de
+# Windows y puede hacer que se pierdan tokens siguientes -- confirmado en
+# VM: el flag -AllowExistingInstallation se perdia en el proceso hijo por
+# esto mismo. Tampoco se deben agregar flags opcionales con valor vacio --
+# un elemento string vacio en el array se pierde al splatear contra un
+# comando nativo, dejando al flag anterior sin valor siguiente -- tambien
+# confirmado en VM con -ServicePassword.
+#
 # Si cualquier paso falla, el orquestador corta ahi mismo -- no sigue con
 # el siguiente paso sobre una base rota.
 #
@@ -28,7 +41,7 @@
 #   powershell -ExecutionPolicy Bypass -File installer\Install-ALNEXT.ps1 `
 #       -PgInstallerPath "C:\ruta\al\instalador-postgres.exe" `
 #       -SuperPassword "unaPasswordFuerte" `
-#       -InstitucionNombre "Escuela Primaria N°12" -InstitucionCuit "30-12345678-9" `
+#       -InstitucionNombre "Escuela Primaria N 12" -InstitucionCuit "30-12345678-9" `
 #       -InstitucionEmail "info@escuela12.edu.ar" `
 #       -AdminNombre "Secretaria" -AdminEmail "secretaria@escuela12.edu.ar" -AdminPassword "cambiar-esta-clave"
 #
@@ -118,6 +131,9 @@ function Salir {
 }
 
 # --- 1. Elevacion (Test-Elevado / Invoke-Elevado en Common.ps1) ------------
+# Nota: $extraArgs SI necesita las comillas manuales -- Invoke-Elevado usa
+# Start-Process -ArgumentList, que construye una linea de comando literal y
+# requiere que el llamador cite los valores con espacios explicitamente.
 
 if (-not (Test-Elevado)) {
     if ($Elevated) {
@@ -176,12 +192,12 @@ function Invocar-Paso {
     param(
         [string]$Nombre,
         [string]$ScriptPath,
-        [string[]]$Args
+        [object[]]$Argumentos
     )
 
     Write-Host ""
     Write-Host ">>> $Nombre <<<"
-    $salida = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Args
+    $salida = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Argumentos
     $codigo = $LASTEXITCODE
     $salida | ForEach-Object { Write-Host $_ }
 
@@ -196,15 +212,17 @@ try {
     $installerDir = $PSScriptRoot
 
     # --- Paso 1/4: Preflight ------------------------------------------------
+    # Args SIN comillas manuales -- "&" + splat contra un comando nativo ya
+    # cita cada elemento correctamente.
 
     $preflightArgs = @(
         "-PgVersion", $PgVersion,
         "-PgPort", $PgPort,
-        "-ServiceName", "`"$ServiceName`""
+        "-ServiceName", $ServiceName
     )
     if ($AllowExistingInstallation) { $preflightArgs += "-AllowExistingInstallation" }
 
-    $r1 = Invocar-Paso -Nombre "Paso 1/4: Preflight" -ScriptPath (Join-Path $installerDir "Preflight.ps1") -Args $preflightArgs
+    $r1 = Invocar-Paso -Nombre "Paso 1/4: Preflight" -ScriptPath (Join-Path $installerDir "Preflight.ps1") -Argumentos $preflightArgs
     if ($r1.ExitCode -ne 0) {
         Salir -Code 10 -MensajeError "Preflight fallo (exit $($r1.ExitCode)). Ver detalle arriba."
     }
@@ -213,26 +231,30 @@ try {
     # --- Paso 2/4: Instalacion de Postgres -----------------------------------
 
     $pgArgs = @(
-        "-PgInstallerPath", "`"$PgInstallerPath`"",
-        "-SuperPassword", "`"$SuperPassword`"",
-        "-ServicePassword", "`"$ServicePassword`"",
+        "-PgInstallerPath", $PgInstallerPath,
+        "-SuperPassword", $SuperPassword,
         "-PgVersion", $PgVersion,
         "-PgPort", $PgPort,
-        "-ServiceName", "`"$ServiceName`"",
-        "-Prefix", "`"$Prefix`"",
-        "-DataDir", "`"$DataDir`"",
+        "-ServiceName", $ServiceName,
+        "-Prefix", $Prefix,
+        "-DataDir", $DataDir,
         "-TimeoutMinutes", $TimeoutMinutes
     )
+    # Nota: los parametros opcionales con default "" NO se agregan si estan
+    # vacios -- un elemento string vacio en el array se pierde al splatear
+    # contra un comando nativo (& cmd @Args), y el flag queda sin valor
+    # siguiente. Confirmado en VM con -ServicePassword.
+    if ($ServicePassword) { $pgArgs += @("-ServicePassword", $ServicePassword) }
     if ($AllowExistingInstallation) { $pgArgs += "-AllowExistingInstallation" }
 
-    $r2 = Invocar-Paso -Nombre "Paso 2/4: Instalacion de Postgres" -ScriptPath (Join-Path $installerDir "Install-Postgres.ps1") -Args $pgArgs
+    $r2 = Invocar-Paso -Nombre "Paso 2/4: Instalacion de Postgres" -ScriptPath (Join-Path $installerDir "Install-Postgres.ps1") -Argumentos $pgArgs
     if ($r2.ExitCode -ne 0) {
         Salir -Code 11 -MensajeError "Install-Postgres fallo (exit $($r2.ExitCode)). Ver detalle arriba."
     }
     $resultado.postgresOk = $true
 
     # --- Paso 3/4: Base de datos y seed --------------------------------------
-    # psql.exe: se resuelve acá a partir de -Prefix en vez de depender del
+    # psql.exe: se resuelve aca a partir de -Prefix en vez de depender del
     # fallback hardcodeado (y hoy incorrecto, ver backlog #249) que trae
     # Install-Database.ps1 por su cuenta.
 
@@ -240,25 +262,27 @@ try {
 
     $dbArgs = @(
         "-PgPort", $PgPort,
-        "-SuperPassword", "`"$SuperPassword`"",
-        "-AppRole", "`"$AppRole`"",
-        "-AppDbName", "`"$AppDbName`"",
-        "-AppDir", "`"$AppDir`"",
-        "-PsqlPath", "`"$psqlPath`"",
-        "-InstitucionNombre", "`"$InstitucionNombre`"",
-        "-InstitucionCuit", "`"$InstitucionCuit`"",
-        "-InstitucionEmail", "`"$InstitucionEmail`"",
-        "-InstitucionDominio", "`"$InstitucionDominio`"",
-        "-InstitucionDomicilio", "`"$InstitucionDomicilio`"",
-        "-InstitucionTelefono", "`"$InstitucionTelefono`"",
+        "-SuperPassword", $SuperPassword,
+        "-AppRole", $AppRole,
+        "-AppDbName", $AppDbName,
+        "-AppDir", $AppDir,
+        "-PsqlPath", $psqlPath,
+        "-InstitucionNombre", $InstitucionNombre,
+        "-InstitucionCuit", $InstitucionCuit,
+        "-InstitucionEmail", $InstitucionEmail,
         "-ModulosDuracionMinutos", $ModulosDuracionMinutos,
-        "-AdminNombre", "`"$AdminNombre`"",
-        "-AdminEmail", "`"$AdminEmail`"",
-        "-AdminPassword", "`"$AdminPassword`""
+        "-AdminNombre", $AdminNombre,
+        "-AdminEmail", $AdminEmail,
+        "-AdminPassword", $AdminPassword
     )
-    if ($AppRolePassword) { $dbArgs += @("-AppRolePassword", "`"$AppRolePassword`"") }
+    # Mismo criterio que -ServicePassword arriba: no agregar flags opcionales
+    # si su valor esta vacio.
+    if ($InstitucionDominio) { $dbArgs += @("-InstitucionDominio", $InstitucionDominio) }
+    if ($InstitucionDomicilio) { $dbArgs += @("-InstitucionDomicilio", $InstitucionDomicilio) }
+    if ($InstitucionTelefono) { $dbArgs += @("-InstitucionTelefono", $InstitucionTelefono) }
+    if ($AppRolePassword) { $dbArgs += @("-AppRolePassword", $AppRolePassword) }
 
-    $r3 = Invocar-Paso -Nombre "Paso 3/4: Base de datos y seed" -ScriptPath (Join-Path $installerDir "Install-Database.ps1") -Args $dbArgs
+    $r3 = Invocar-Paso -Nombre "Paso 3/4: Base de datos y seed" -ScriptPath (Join-Path $installerDir "Install-Database.ps1") -Argumentos $dbArgs
     if ($r3.ExitCode -ne 0) {
         Salir -Code 12 -MensajeError "Install-Database fallo (exit $($r3.ExitCode)). Ver detalle arriba."
     }
@@ -272,12 +296,12 @@ try {
     # --- Paso 4/4: Arranque persistente de la app ----------------------------
 
     $appArgs = @(
-        "-AppDir", "`"$AppDir`"",
+        "-AppDir", $AppDir,
         "-Port", $AppPort,
-        "-TaskName", "`"$AppTaskName`""
+        "-TaskName", $AppTaskName
     )
 
-    $r4 = Invocar-Paso -Nombre "Paso 4/4: Arranque persistente de la app" -ScriptPath (Join-Path $installerDir "Install-AppService.ps1") -Args $appArgs
+    $r4 = Invocar-Paso -Nombre "Paso 4/4: Arranque persistente de la app" -ScriptPath (Join-Path $installerDir "Install-AppService.ps1") -Argumentos $appArgs
     if ($r4.ExitCode -ne 0) {
         Salir -Code 13 -MensajeError "Install-AppService fallo (exit $($r4.ExitCode)). Ver detalle arriba."
     }
