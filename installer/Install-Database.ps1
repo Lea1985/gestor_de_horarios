@@ -52,7 +52,8 @@
 #       1 = parámetros de entrada inválidos (identificador de rol/base no
 #           seguro, -AppDir inexistente, prisma/schema.prisma no encontrado
 #           dentro de -AppDir, o -AdminPassword de menos de 8 caracteres).
-#       2 = no se encontró psql.exe (ni en PATH ni en el fallback de la v18).
+#       2 = no se encontró psql.exe (ni en PATH, ni en el registro de Windows,
+#           ni en la convención de instalación de ALNEXT).
 #       3 = Postgres no responde en el puerto indicado, o falló la
 #           creación/verificación del rol o la base de datos (incluye el
 #           caso "el rol ya existe y no se pasó -AppRolePassword").
@@ -75,6 +76,7 @@ param(
 
     [string]$AppDir = "C:\ALNEXT\app",
     [string]$PsqlPath = "",
+    [string]$PgVersion = "18",
 
     [Parameter(Mandatory = $true)][string]$InstitucionNombre,
     [Parameter(Mandatory = $true)][string]$InstitucionCuit,
@@ -223,18 +225,36 @@ try {
         Salir -Code 1 -MensajeError "No se encontró $schemaPath -- ¿-AppDir apunta al código de ALNEXT?"
     }
 
-    # --- 2. Resolver psql.exe (PATH primero, fallback a la ruta default de la v18) ---
+    # --- 2. Resolver psql.exe (explicito > PATH > registro de Windows >
+    #        convencion ALNEXT) ----------------------------------------------
+    # El fallback anterior asumia la ruta default del instalador oficial de
+    # EDB (C:\Program Files\PostgreSQL\<version>\bin\psql.exe) -- pero
+    # Install-Postgres.ps1 instala con -Prefix propio (default
+    # C:\ALNEXT\pgsql), asi que ese fallback apuntaba a una ruta que nunca
+    # existe en una instalacion real de ALNEXT. Cuando el orquestador
+    # (Install-ALNEXT.ps1) invoca este script, ya pasa -PsqlPath resuelto a
+    # partir de su propio -Prefix -- esto solo importa para invocaciones
+    # sueltas de Install-Database.ps1 sin -PsqlPath.
 
     if (-not $PsqlPath) {
         $cmd = Get-Command psql -ErrorAction SilentlyContinue
         if ($cmd) {
             $PsqlPath = $cmd.Source
         } else {
-            $PsqlPath = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
+            $registryPath = "HKLM:\SOFTWARE\PostgreSQL\Installations\postgresql-x64-$PgVersion"
+            $baseDirRegistro = $null
+            if (Test-Path $registryPath) {
+                $baseDirRegistro = (Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue).'Base Directory'
+            }
+            if ($baseDirRegistro) {
+                $PsqlPath = Join-Path $baseDirRegistro "bin\psql.exe"
+            } else {
+                $PsqlPath = "C:\ALNEXT\pgsql\bin\psql.exe"
+            }
         }
     }
     if (-not (Test-Path $PsqlPath)) {
-        Salir -Code 2 -MensajeError "No se encontró psql en: $PsqlPath"
+        Salir -Code 2 -MensajeError "No se encontró psql en: $PsqlPath (ni en PATH, ni en el registro de Windows para Postgres $PgVersion, ni en la convención de instalación de ALNEXT). Pasá -PsqlPath explícitamente."
     }
     Write-Host "psql: $PsqlPath"
 
