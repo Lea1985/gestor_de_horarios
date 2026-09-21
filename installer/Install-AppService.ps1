@@ -147,6 +147,14 @@ if (-not (Test-Elevado)) {
 
 # A partir de aca el proceso corre elevado.
 
+# Si hay una copia portable de Node.js en C:\ALNEXT\node (paquete offline,
+# ver backlog #248), la antepone al PATH de este proceso -- despues del
+# bloque de elevacion (no antes, se perderia en el relanzamiento UAC).
+# Este script ya resuelve $nodeExe explicitamente mas abajo (PATH o
+# fallback a C:\Program Files\nodejs), asi que esto amplia esa cadena de
+# resolucion sin tocarla.
+Add-NodePortableAlPath
+
 try {
     Write-Host ""
     Write-Host "=== Arranque persistente de la app ALNEXT (Paso 6) ==="

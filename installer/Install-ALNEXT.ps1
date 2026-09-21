@@ -188,6 +188,12 @@ if (-not (Test-Elevado)) {
 # A partir de aca el proceso corre elevado. Los sub-pasos, al ser procesos
 # hijo de este, heredan la elevacion -- no vuelven a pedir UAC.
 
+# Si hay una copia portable de Node.js en C:\ALNEXT\node (paquete offline,
+# ver backlog #248), la antepone al PATH de este proceso -- se hereda a
+# los 4 sub-pasos, que la encuentran via "node"/"npx" invocados por
+# nombre sin necesidad de tocar cada uno individualmente.
+Add-NodePortableAlPath
+
 function Invocar-Paso {
     param(
         [string]$Nombre,

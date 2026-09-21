@@ -66,3 +66,38 @@ function Invoke-Elevado {
         }
     }
 }
+
+function Add-NodePortableAlPath {
+    # Si existe una copia portable de Node.js en C:\ALNEXT\node (el .zip
+    # oficial de nodejs.org descomprimido, sin instalar formalmente --
+    # parte del paquete offline de ALNEXT, ver backlog #248), la antepone
+    # a $env:PATH del proceso actual para que "node"/"npm"/"npx" invocados
+    # por nombre (sin ruta completa) la encuentren -- Install-Database.ps1
+    # en particular los invoca asi. Si ya hay una instalacion de Node en
+    # el PATH del sistema (caso VM de pruebas / desarrollo), no la toca ni
+    # la duplica.
+    #
+    # IMPORTANTE para quien llame a esto desde un script que se auto-eleva
+    # (Install-ALNEXT.ps1, Install-AppService.ps1): tiene que llamarse
+    # DESPUES del bloque de elevacion (Test-Elevado/Invoke-Elevado), nunca
+    # antes -- un $env:PATH modificado en el proceso original se pierde al
+    # relanzarse elevado via -Verb RunAs, porque ese es un proceso nuevo
+    # que arranca leyendo el PATH del sistema/usuario desde cero, no
+    # hereda el $env:PATH en memoria del proceso que lo lanzo.
+    #
+    # El cambio de $env:PATH que hace esta funcion solo dura mientras vive
+    # este proceso de PowerShell y se hereda a los procesos hijo que
+    # lance (los pasos del orquestador, prisma, next, etc.) -- no
+    # persiste en el sistema ni afecta a otras consolas.
+    param([string]$NodePortableDir = "C:\ALNEXT\node")
+
+    $nodeExe = Join-Path $NodePortableDir "node.exe"
+    if (-not (Test-Path $nodeExe)) {
+        return
+    }
+    if ($env:PATH -split ";" -contains $NodePortableDir) {
+        return
+    }
+    $env:PATH = "$NodePortableDir;$env:PATH"
+    Write-Host "Node.js portable detectado en $NodePortableDir -- agregado al PATH de este proceso."
+}

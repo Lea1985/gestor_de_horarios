@@ -95,6 +95,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "Common.ps1")
+
+# Si hay una copia portable de Node.js en C:\ALNEXT\node (paquete offline,
+# ver backlog #248), la antepone al PATH de este proceso -- este script
+# invoca "npx"/"node" por nombre (prisma migrate deploy/status, el seed),
+# sin ruta completa. Este script no se auto-eleva, asi que no hay
+# problema de orden como en Install-ALNEXT.ps1/Install-AppService.ps1.
+Add-NodePortableAlPath
+
 # --- Helpers ---------------------------------------------------------------
 
 function Test-IdentificadorSeguro([string]$Nombre) {
