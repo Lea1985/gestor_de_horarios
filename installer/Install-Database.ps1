@@ -340,7 +340,18 @@ try {
         $prevEap = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         try {
-            $statusOutput = (& npx prisma migrate status 2>&1 | Out-String).ToLower()
+            # Se corre a traves de "cmd /c ... 2>&1" (no del operador 2>&1 de
+            # PowerShell) para que el merge de stderr a stdout lo haga
+            # cmd.exe ANTES de que PowerShell vea la salida. Con el operador
+            # nativo de PowerShell, cada linea de stderr se envuelve en un
+            # ErrorRecord (NativeCommandError) y Windows PowerShell 5.1 lo
+            # muestra en rojo por consola aunque EAP este en "Continue" y el
+            # resultado se capture en una variable -- puramente cosmetico
+            # (el string en $statusOutput ya era correcto incluso antes de
+            # este cambio, ver fix #252), pero confunde a quien mira la
+            # consola pensando que algo fallo quedando en rojo. Asi, cmd.exe
+            # entrega texto plano y PowerShell nunca lo envuelve como error.
+            $statusOutput = ((cmd /c "npx prisma migrate status 2>&1") | Out-String).ToLower()
         } finally {
             $ErrorActionPreference = $prevEap
         }
