@@ -2,7 +2,10 @@
 #
 # Punto de entrada unico del instalador de ALNEXT. Orquesta los 4 pasos que
 # hasta ahora se corrian a mano por separado: Preflight.ps1,
-# Install-Postgres.ps1, Install-Database.ps1 e Install-AppService.ps1.
+# Install-Postgres.ps1, Install-Database.ps1 e Install-AppService.ps1. Suma
+# ademas un quinto paso opcional, Install-Tailscale.ps1 (se salta si no se
+# pasa -TailscaleInstallerPath), para dejar el acceso remoto listo desde el
+# dia 1 -- ver #204/#248.
 #
 # Se auto-eleva UNA sola vez al principio (mismo patron de Common.ps1 que ya
 # usan Preflight.ps1/Install-Postgres.ps1: Test-Elevado/Invoke-Elevado, con
@@ -58,6 +61,7 @@
 #       11 = Install-Postgres fallo.
 #       12 = Install-Database fallo.
 #       13 = Install-AppService fallo.
+#       14 = Install-Tailscale fallo (solo si se paso -TailscaleInstallerPath).
 #       8  = fallo inesperado no controlado.
 
 param(
@@ -93,6 +97,12 @@ param(
     [int]$AppPort = 3000,
     [string]$AppTaskName = "ALNEXT-App",
 
+    # Install-Tailscale (opcional -- si no se pasa -TailscaleInstallerPath,
+    # este paso se omite por completo)
+    [string]$TailscaleInstallerPath = "",
+    [string]$TailscaleAuthKey = "",
+    [string]$TailscaleHostname = "",
+
     # Elevacion (mismo contrato que Preflight.ps1/Install-Postgres.ps1)
     [switch]$Elevated,
     [string]$ResultFile = ""
@@ -109,6 +119,7 @@ $resultado = [ordered]@{
     postgresOk   = $false
     databaseOk   = $false
     appServiceOk = $false
+    tailscaleOk  = $false
     exitCode     = -1
 }
 
@@ -171,6 +182,9 @@ if (-not (Test-Elevado)) {
         "-AdminPassword", "`"$AdminPassword`"",
         "-AppPort", $AppPort,
         "-AppTaskName", "`"$AppTaskName`"",
+        "-TailscaleInstallerPath", "`"$TailscaleInstallerPath`"",
+        "-TailscaleAuthKey", "`"$TailscaleAuthKey`"",
+        "-TailscaleHostname", "`"$TailscaleHostname`"",
         "-Elevated",
         "-ResultFile", "`"$resultFile`""
     )
@@ -313,11 +327,37 @@ try {
     }
     $resultado.appServiceOk = $true
 
+    # --- Paso 5 (opcional): Tailscale -----------------------------------------
+    # Solo corre si se paso -TailscaleInstallerPath. Deja el acceso remoto
+    # (para operar el flag institucion.activo sin depender del cliente, ver
+    # #204/#248) listo desde la misma corrida del instalador.
+
+    if ($TailscaleInstallerPath) {
+        $tsArgs = @(
+            "-TailscaleInstallerPath", $TailscaleInstallerPath,
+            "-AuthKey", $TailscaleAuthKey
+        )
+        if ($TailscaleHostname) {
+            $tsArgs += @("-Hostname", $TailscaleHostname)
+        }
+
+        $r5 = Invocar-Paso -Nombre "Paso 5 (opcional): Tailscale" -ScriptPath (Join-Path $installerDir "Install-Tailscale.ps1") -Argumentos $tsArgs
+        if ($r5.ExitCode -ne 0) {
+            Salir -Code 14 -MensajeError "Install-Tailscale fallo (exit $($r5.ExitCode)). Ver detalle arriba."
+        }
+        $resultado.tailscaleOk = $true
+    } else {
+        Write-Host "Paso 5 (opcional): Tailscale omitido (no se paso -TailscaleInstallerPath)."
+    }
+
     Write-Host ""
     Write-Host "=== ALNEXT instalado correctamente ==="
     Write-Host "Institucion: $InstitucionNombre"
     Write-Host "Admin: $AdminEmail"
     Write-Host "App disponible en: http://127.0.0.1:$AppPort"
+    if ($resultado.tailscaleOk) {
+        Write-Host "Acceso remoto (Tailscale): conectado."
+    }
     Write-Host ""
 
     Salir -Code 0
