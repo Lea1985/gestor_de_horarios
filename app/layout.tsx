@@ -1,15 +1,10 @@
 import type { Metadata } from "next"
-import { Geist } from "next/font/google"
 import "./globals.css"
 
 // ── Tipografía ───────────────────────────────────────────────
-// Solo una fuente en el body para evitar hydration mismatch.
-// Geist Mono se usa via var(--font-mono) en globals.css cuando
-// se necesita en componentes específicos (tablas, inputs de código).
-const geistSans = Geist({
-  subsets:  ["latin"],
-  variable: "--font-geist-sans",
-})
+// Fuente del sistema operativo (ver --font-sans en globals.css) en vez
+// de next/font/google: evita que "next build" dependa de una descarga
+// de Google Fonts, necesario para instalaciones sin internet.
 
 export const metadata: Metadata = {
   title:       "ALNEXT",
@@ -23,7 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={geistSans.variable} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         {children}
       </body>
     </html>
