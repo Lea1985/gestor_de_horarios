@@ -1,6 +1,6 @@
 //app/protected/dashboard/incidencias/page.tsx
 "use client"
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useIncidencias, IncidenciasTable, IncidenciaFilters, ModalConfirmar } from "@/features/incidencias"
 import type { VenceFiltro } from "@/features/incidencias/hooks/useIncidencias"
@@ -13,7 +13,7 @@ function formatoFecha(iso: string) {
   return iso.slice(0, 10).split("-").reverse().join("/")
 }
 
-export default function IncidenciasPage() {
+function IncidenciasContenido() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const {
@@ -196,5 +196,12 @@ export default function IncidenciasPage() {
         />
       </div>
     </>
+  )
+}
+export default function IncidenciasPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--space-4)" }}>Cargando...</div>}>
+      <IncidenciasContenido />
+    </Suspense>
   )
 }

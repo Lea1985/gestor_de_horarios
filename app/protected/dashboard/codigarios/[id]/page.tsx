@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
@@ -127,7 +127,7 @@ function ModalConfirmar({
     </div>
   )
 }
-export default function CodigarioDetallePage() {
+function CodigarioDetalleContenido() {
   const params = useParams()
   const codigarioId = params.id as string
   const searchParams = useSearchParams()
@@ -524,5 +524,12 @@ useEffect(() => {
         </div>
       </div>
     </>
+  )
+}
+export default function CodigarioDetallePage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--space-4)" }}>Cargando...</div>}>
+      <CodigarioDetalleContenido />
+    </Suspense>
   )
 }

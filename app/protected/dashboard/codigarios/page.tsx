@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
@@ -54,7 +54,7 @@ function ModalConfirmar({ mensaje, cargando = false, onConfirmar, onCancelar }: 
     </div>
   )
 }
-export default function CodigariosPage() {
+function CodigariosContenido() {
   const { authHeaders } = useAuth()
   const router      = useRouter()
   const pathname    = usePathname()
@@ -411,5 +411,12 @@ export default function CodigariosPage() {
         </div>
       </div>
     </>
+  )
+}
+export default function CodigariosPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--space-4)" }}>Cargando...</div>}>
+      <CodigariosContenido />
+    </Suspense>
   )
 }

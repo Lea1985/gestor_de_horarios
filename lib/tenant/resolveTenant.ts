@@ -33,6 +33,16 @@ export async function resolveTenant(req: Request): Promise<TenantResolved> {
     resolveFromHost(req)
 
   if (!rawTenant) {
+    // Instalación local de una sola institución (piloto): no hay subdominio
+    // real ni DEV_TENANT_DOMAIN configurada. Si la base tiene exactamente
+    // una institución, no hay ambigüedad posible -- se usa esa.
+    const instituciones = await prisma.institucion.findMany({
+      select: { id: true, estado: true, activo: true },
+      take: 2,
+    })
+    if (instituciones.length === 1) {
+      return instituciones[0]
+    }
     throw new TenantResolveError("Tenant no definido", 400)
   }
 

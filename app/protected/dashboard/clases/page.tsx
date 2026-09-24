@@ -1,7 +1,7 @@
 //protected/dashboard/clases/page.tsx
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
@@ -97,7 +97,7 @@ const inputStyle = {
   color:        "var(--color-text-primary)",
 }
 
-export default function ClasesPage() {
+function ClasesContenido() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const filtroParam = searchParams.get("filtro")
@@ -310,5 +310,12 @@ export default function ClasesPage() {
         </div>
       </div>
     </div>
+  )
+}
+export default function ClasesPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--space-4)" }}>Cargando...</div>}>
+      <ClasesContenido />
+    </Suspense>
   )
 }
