@@ -73,8 +73,8 @@ una VM genuinamente en blanco, sin internet.
   **compiló y generó las 67 páginas sin errores.**
 - Commits pusheados a `feature/instalador-alnext`:
   - `65b199d`: cherry-pick de "Mi institución".
-  - (commit del cherry-pick de Suspense, sin hash registrado en este
-    resumen — verificar con `git log`).
+  - `679c067`: cherry-pick de Suspense boundary en incidencias/codigarios +
+    resolveTenant (de `4ff10c5`).
   - `0039751`: "fix: reemplazar next/font/google (Geist) por fuente de
     sistema".
 
@@ -95,11 +95,30 @@ for b in $(git branch --all --format='%(refname:short)' | grep -v HEAD); do
 done
 ```
 
+## Auditoría de ramas y limpieza (post-cierre, mismo día)
+
+Se corrió la auditoría sugerida arriba contra todas las ramas locales y
+remotas. Resultado: la única rama con commits fuera de
+`feature/instalador-alnext` era `fix/prerender-y-tenant-localhost`
+(el mismo commit `4ff10c5` ya traído por cherry-pick). Se verificó con
+`git diff` (vacío) que el contenido final en disco es idéntico entre
+ambas ramas antes de borrar, y se eliminó la rama local y remota:
+
+```bash
+git branch -D fix/prerender-y-tenant-localhost
+git push origin --delete fix/prerender-y-tenant-localhost
+```
+
+**Conclusión: no queda ningún trabajo huérfano sin mergear.** El repo
+está limpio para rearmar el paquete offline con confianza en la próxima
+sesión.
+
 ## Pendiente para la próxima sesión
 
 1. Re-armar `app/` en el paquete offline con el código actualizado
    (`git pull` en `ALNEXT-test` para traer los 2 fixes de hoy, `npm ci`,
-   `robocopy` corregido).
+   `robocopy` corregido). La auditoría de ramas ya se hizo hoy (ver
+   sección de arriba) — no hace falta repetirla antes de reempaquetar.
 2. Regenerar el zip y volver a transferir a una VM en blanco.
 3. Correr `Install-ALNEXT.ps1` de punta a punta sin interrupciones y
    confirmar que los 4 pasos pasan — sería la primera validación 100%
