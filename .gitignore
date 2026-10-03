@@ -46,3 +46,4 @@ backups/
 
 # Datos reales de instalación (contraseña + datos de la escuela, nunca se versiona)
 config/institucion.json
+config/institucion-demo.json
