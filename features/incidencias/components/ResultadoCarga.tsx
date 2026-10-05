@@ -34,7 +34,7 @@ function CeldasAsignacion({ a }: { a?: AsignacionParaIncidencia }) {
     <>
       <td style={sec}>{a?.materia?.nombre ?? "—"}</td>
       <td style={sec}>{curso || "—"}</td>
-      <td style={sec}>{a ? <DistribucionResumen distribuciones={a.distribuciones} /> : "—"}</td>
+      <td style={sec}>{a ? <DistribucionResumen distribuciones={a.distribuciones} jornal={!a.materia} /> : "—"}</td>
     </>
   )
 }

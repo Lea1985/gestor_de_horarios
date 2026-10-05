@@ -54,7 +54,7 @@ const DIA_CORTO: Record<string, string> = {
   VIERNES: "Vie", SABADO: "Sáb", DOMINGO: "Dom",
 }
 export function formatearModulo(clase: ClaseParaReemplazo): string {
-  if (!clase.modulo) return "Sin módulo"
+  if (!clase.modulo) return "Jornada completa"
   return `${DIA_CORTO[clase.modulo.dia_semana] ?? clase.modulo.dia_semana} ${minutosAHora(clase.modulo.hora_desde)}–${minutosAHora(clase.modulo.hora_hasta)}`
 }
 export function formatearFecha(iso: string): string {

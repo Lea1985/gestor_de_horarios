@@ -20,12 +20,27 @@ type Tramo = { dia: string; desde: number; hasta: number }
 // tramo) + resumen de cantidad de módulos por día, como en /distribuciones.
 export function DistribucionResumen({
   distribuciones,
+  jornal = false,
 }: {
   distribuciones: AsignacionParaIncidencia["distribuciones"]
+  // UX-INC-019: cargo no-frente-a-curso (sin materia) se paga por jornal;
+  // sus módulos solo sirven para registrar incidencias, no son clases reales.
+  jornal?: boolean
 }) {
   const modulos = (distribuciones[0]?.distribucionModulos ?? []).map(dm => dm.moduloHorario)
   if (modulos.length === 0) {
     return <span style={{ color: "var(--color-text-hint)" }}>—</span>
+  }
+  if (jornal) {
+    const diasJornal = ORDEN.filter(d => modulos.some(m => m.dia_semana === d))
+      .map(d => LABEL[d])
+      .join(", ")
+    return (
+      <div>
+        <div>Cargo por jornal</div>
+        <div style={{ fontSize: "var(--text-2xs)", color: "var(--color-text-hint)" }}>{diasJornal}</div>
+      </div>
+    )
   }
   const ordenados = [...modulos].sort(
     (a, b) =>

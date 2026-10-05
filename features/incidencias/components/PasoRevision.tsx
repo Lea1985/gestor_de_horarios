@@ -71,7 +71,7 @@ export function PasoRevision({ asignacionesLote, onVolver, onContinuar, onQuitar
                   {[a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
                 </td>
                   <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
-                    <DistribucionResumen distribuciones={a.distribuciones} />
+                    <DistribucionResumen distribuciones={a.distribuciones} jornal={!a.materia} />
                   </td>
                 <td style={td}>
                   <button

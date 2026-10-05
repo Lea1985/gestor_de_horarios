@@ -123,7 +123,7 @@ function GrupoAsignacion({
                 [asignacion.comision?.curso?.nombre, asignacion.comision?.nombre].filter(Boolean).join(" · "),
               ].filter(Boolean).join(" · ")}
               <div style={{ marginTop: 2 }}>
-                <DistribucionResumen distribuciones={asignacion.distribuciones} />
+                <DistribucionResumen distribuciones={asignacion.distribuciones} jornal={!asignacion.materia} />
               </div>
             </div>
           )}
