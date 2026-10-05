@@ -49,9 +49,13 @@ function minutosAHora(min: number): string {
   const m = (min % 60).toString().padStart(2, "0")
   return `${h}:${m}`
 }
+const DIA_CORTO: Record<string, string> = {
+  LUNES: "Lun", MARTES: "Mar", MIERCOLES: "Mié", JUEVES: "Jue",
+  VIERNES: "Vie", SABADO: "Sáb", DOMINGO: "Dom",
+}
 export function formatearModulo(clase: ClaseParaReemplazo): string {
   if (!clase.modulo) return "Sin módulo"
-  return `${clase.modulo.dia_semana} ${minutosAHora(clase.modulo.hora_desde)}–${minutosAHora(clase.modulo.hora_hasta)}`
+  return `${DIA_CORTO[clase.modulo.dia_semana] ?? clase.modulo.dia_semana} ${minutosAHora(clase.modulo.hora_desde)}–${minutosAHora(clase.modulo.hora_hasta)}`
 }
 export function formatearFecha(iso: string): string {
   const d = new Date(iso)

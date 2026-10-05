@@ -34,6 +34,13 @@ function blurStyle(hasError: boolean) {
   }
 }
 
+// UX-INC-015: materia y curso · comisión, para distinguir asignaciones
+// del mismo agente dentro del lote.
+function detalleAsignacion(a: AsignacionParaIncidencia): string {
+  const curso = [a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ")
+  return [a.materia?.nombre, curso].filter(Boolean).join(" · ")
+}
+
 export function PasoFormulario({
   asignacionesLote,
   codigarios,
@@ -88,6 +95,11 @@ export function PasoFormulario({
               color:        "var(--color-text-primary)",
             }}>
               {nombreAgente(a)}
+              {detalleAsignacion(a) && (
+                <span style={{ color: "var(--color-text-secondary)" }}>
+                  {" · "}{detalleAsignacion(a)}
+                </span>
+              )}
             </span>
           ))}
         </div>
