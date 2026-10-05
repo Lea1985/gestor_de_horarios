@@ -1,6 +1,7 @@
 //features/incidencias/components/ResultadoCarga.tsx
 import { useRouter } from "next/navigation"
-import type { ResultadoCarga as TResultado, ResultadoReemplazo as TResultadoReemplazo } from "../types"
+import type { ResultadoCarga as TResultado, ResultadoReemplazo as TResultadoReemplazo, AsignacionParaIncidencia } from "../types"
+import { DistribucionResumen } from "./DistribucionResumen"
 
 const th = {
   textAlign:     "left" as const,
@@ -22,12 +23,30 @@ const td = {
   verticalAlign: "middle" as const,
 }
 
-export function ResultadoCarga({ resultado, resultadoReemplazos, onReintentar }: {
+// UX-INC-015/016: materia, curso/comisión y distribución de la asignación,
+// para poder identificar sobre qué asignación quedó cargada cada incidencia.
+function CeldasAsignacion({ a }: { a?: AsignacionParaIncidencia }) {
+  const sec = { ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }
+  const curso = a
+    ? [a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ")
+    : ""
+  return (
+    <>
+      <td style={sec}>{a?.materia?.nombre ?? "—"}</td>
+      <td style={sec}>{curso || "—"}</td>
+      <td style={sec}>{a ? <DistribucionResumen distribuciones={a.distribuciones} /> : "—"}</td>
+    </>
+  )
+}
+
+export function ResultadoCarga({ resultado, resultadoReemplazos, asignaciones, onReintentar }: {
   resultado:            TResultado[]
   resultadoReemplazos?: TResultadoReemplazo[] | null
+  asignaciones?:        AsignacionParaIncidencia[]
   onReintentar:         () => void
 }) {
   const router   = useRouter()
+  const porId = new Map((asignaciones ?? []).map(a => [a.id, a] as const))
   const exitosos = resultado.filter(r => r.ok).length
   const fallidos = resultado.filter(r => !r.ok).length
 
@@ -35,7 +54,7 @@ export function ResultadoCarga({ resultado, resultadoReemplazos, onReintentar }:
   const fallidosReemplazos = (resultadoReemplazos ?? []).filter(r => !r.ok).length
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 700 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 1000 }}>
       <div>
         <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)" }}>
           Resultado de la carga
@@ -50,7 +69,7 @@ export function ResultadoCarga({ resultado, resultadoReemplazos, onReintentar }:
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Agente", "Identificador", "Estado"].map(col => (
+              {["Agente", "Identificador", "Materia", "Curso / Comisión", "Distribución", "Estado"].map(col => (
                 <th key={col} style={th}>{col}</th>
               ))}
             </tr>
@@ -62,6 +81,7 @@ export function ResultadoCarga({ resultado, resultadoReemplazos, onReintentar }:
                 <td style={{ ...td, fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
                   {r.identificador}
                 </td>
+                <CeldasAsignacion a={porId.get(r.asignacionId)} />
                 <td style={td}>
                   {r.ok
                     ? <span style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-medium)", color: "var(--color-success-text)", background: "var(--color-success-bg)", padding: "2px 8px", borderRadius: "var(--radius-sm)" }}>OK</span>

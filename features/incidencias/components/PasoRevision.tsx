@@ -1,4 +1,5 @@
 import type { AsignacionParaIncidencia } from "../types"
+import { DistribucionResumen } from "./DistribucionResumen"
 import { nombreAgente } from "../hooks/useNuevaIncidencia"
 
 const th = {
@@ -38,7 +39,7 @@ export function PasoRevision({ asignacionesLote, onVolver, onContinuar, onQuitar
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Agente", "Identificador", "Unidad", "Curso / Comisión", ""].map(col => (
+              {["Agente", "Identificador", "Unidad", "Materia", "Curso / Comisión", "Distribución", ""].map(col => (
                 <th key={col} style={th}>{col}</th>
               ))}
             </tr>
@@ -63,9 +64,15 @@ export function PasoRevision({ asignacionesLote, onVolver, onContinuar, onQuitar
                 <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                   {a.unidad.nombre}
                 </td>
+                    <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                      {a.materia?.nombre ?? "—"}
+                    </td>
                 <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                   {[a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
                 </td>
+                  <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                    <DistribucionResumen distribuciones={a.distribuciones} />
+                  </td>
                 <td style={td}>
                   <button
                     onClick={() => onQuitar(a.id)}

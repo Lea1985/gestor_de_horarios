@@ -1,7 +1,8 @@
 // features/incidencias/components/PasoReemplazos.tsx
 import type { ClaseParaReemplazo, ReemplazoConfig } from "../hooks/useNuevaIncidencia"
 import { formatearFecha, formatearModulo } from "../hooks/useNuevaIncidencia"
-import type { ResultadoCarga } from "../types"
+import type { ResultadoCarga, AsignacionParaIncidencia } from "../types"
+import { DistribucionResumen } from "./DistribucionResumen"
 // ── Tipos ─────────────────────────────────────────────────────
 type Agente = { id: number; nombre: string; apellido: string }
 // ── Estilos base ──────────────────────────────────────────────
@@ -37,6 +38,7 @@ const selectStyle = {
 function GrupoAsignacion({
   agente,
   identificador,
+  asignacion,
   clases,
   clasesSeleccionadas,
   reemplazos,
@@ -46,6 +48,7 @@ function GrupoAsignacion({
 }: {
   agente:             string
   identificador:      string
+  asignacion?: AsignacionParaIncidencia
   clases:             ClaseParaReemplazo[]
   clasesSeleccionadas: Set<number>
   reemplazos:         Map<number, ReemplazoConfig>
@@ -109,6 +112,21 @@ function GrupoAsignacion({
           }}>
             {identificador}
           </span>
+          {asignacion && (
+            <div style={{
+              fontSize:  "var(--text-xs)",
+              color:     "var(--color-text-secondary)",
+              marginTop: 2,
+            }}>
+              {[
+                asignacion.materia?.nombre,
+                [asignacion.comision?.curso?.nombre, asignacion.comision?.nombre].filter(Boolean).join(" · "),
+              ].filter(Boolean).join(" · ")}
+              <div style={{ marginTop: 2 }}>
+                <DistribucionResumen distribuciones={asignacion.distribuciones} />
+              </div>
+            </div>
+          )}
         </div>
         <span style={{
           marginLeft:   "auto",
@@ -265,6 +283,7 @@ export function PasoReemplazos({
     asignacionId:  number
     agente:        string
     identificador: string
+    asignacion?: AsignacionParaIncidencia
     clases:        ClaseParaReemplazo[]
   }[]
   resultado:                   ResultadoCarga[] | null
@@ -437,6 +456,7 @@ export function PasoReemplazos({
           key={grupo.asignacionId}
           agente={grupo.agente}
           identificador={grupo.identificador}
+          asignacion={grupo.asignacion}
           clases={grupo.clases}
           clasesSeleccionadas={clasesSeleccionadas}
           reemplazos={reemplazos}

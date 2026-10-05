@@ -1,4 +1,5 @@
 import type { AsignacionParaIncidencia } from "../types"
+import { DistribucionResumen } from "./DistribucionResumen"
 import { nombreAgente } from "../hooks/useNuevaIncidencia"
 
 const th = {
@@ -80,7 +81,7 @@ export function PasoSeleccion({
         <input
           value={filtroTexto}
           onChange={e => setFiltroTexto(e.target.value)}
-          placeholder="Buscar por agente, identificador o documento..."
+          placeholder="Buscar por agente, identificador, materia o documento..."
           style={{ ...inputStyle, flex: "1 1 260px", minWidth: 200 }}
           onFocus={focusStyle}
           onBlur={blurStyle}
@@ -116,7 +117,7 @@ export function PasoSeleccion({
                   style={{ cursor: "pointer" }}
                 />
               </th>
-              {["Agente", "Identificador", "Unidad", "Curso / Comisión"].map(col => (
+              {["Agente", "Identificador", "Unidad", "Materia", "Curso / Comisión", "Distribución"].map(col => (
                 <th key={col} style={th}>{col}</th>
               ))}
             </tr>
@@ -124,7 +125,7 @@ export function PasoSeleccion({
           <tbody>
             {asignacionesFiltradas.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
+                <td colSpan={7} style={{ textAlign: "center", padding: "var(--space-12)", fontSize: "var(--text-sm)", color: "var(--color-text-hint)" }}>
                   Sin resultados
                 </td>
               </tr>
@@ -175,9 +176,15 @@ export function PasoSeleccion({
                   <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                     {a.unidad.nombre}
                   </td>
+                    <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                      {a.materia?.nombre ?? "—"}
+                    </td>
                   <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
                     {[a.comision?.curso?.nombre, a.comision?.nombre].filter(Boolean).join(" · ") || "—"}
                   </td>
+                    <td style={{ ...td, fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                      <DistribucionResumen distribuciones={a.distribuciones} />
+                    </td>
                 </tr>
               )
             })}

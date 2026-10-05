@@ -60,6 +60,20 @@ export const asignacionRepository = {
           select: { id: true },
           take: 1,
         },
+        distribuciones: {
+          where: { estado: "ACTIVO", deletedAt: null },
+          orderBy: { version: "desc" },
+          take: 1,
+          select: {
+            distribucionModulos: {
+              select: {
+                moduloHorario: {
+                  select: { dia_semana: true, hora_desde: true, hora_hasta: true },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     })

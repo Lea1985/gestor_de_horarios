@@ -125,6 +125,13 @@ export type AsignacionParaIncidencia = {
     agente: { nombre: string; apellido: string; documento: string }
   }[]
   unidad:   { nombre: string }
+  materia:  { nombre: string } | null
+  // UX-INC-016: distribución ACTIVA (a lo sumo una) con sus módulos
+  distribuciones: {
+    distribucionModulos: {
+      moduloHorario: { dia_semana: string; hora_desde: number; hora_hasta: number }
+    }[]
+  }[]
   comision: { id: number; nombre: string; curso?: { id: number; nombre: string } } | null
   turno:    { id: number; nombre: string } | null
   // UX-INC-014: false cuando la asignación no tiene ninguna ClaseProgramada

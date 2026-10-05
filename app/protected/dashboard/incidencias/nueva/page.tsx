@@ -33,6 +33,7 @@ export default function NuevaIncidenciaPage() {
     cursosUnicos,
     asignacionesFiltradas,
     asignacionesLote,
+    asignaciones,
     seleccionados,
     toggleSeleccion, toggleTodos, quitarDelLote,
     // paso 3
@@ -110,6 +111,7 @@ export default function NuevaIncidenciaPage() {
         </button>
         <ResultadoCarga
           resultado={resultado}
+          asignaciones={asignaciones}
           resultadoReemplazos={resultadoReemplazos}
           onReintentar={reintentarFallidas}
         />

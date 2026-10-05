@@ -143,6 +143,7 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       const agente = a.titularidades[0]?.agente
       const matchTexto = !q || (
         a.identificadorEstructural.toLowerCase().includes(q)       ||
+        (a.materia?.nombre.toLowerCase().includes(q) ?? false)     ||
         (agente?.apellido.toLowerCase().includes(q)  ?? false)     ||
         (agente?.nombre.toLowerCase().includes(q)    ?? false)     ||
         (agente?.documento.toLowerCase().includes(q) ?? false)
@@ -454,12 +455,13 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
   }
   // Clases agrupadas por asignación para el UI
   const clasesAgrupadasPorAsignacion = useMemo(() => {
-    const grupos = new Map<number, { agente: string; identificador: string; clases: ClaseParaReemplazo[] }>()
+    const grupos = new Map<number, { agente: string; identificador: string; asignacion?: (typeof asignaciones)[number]; clases: ClaseParaReemplazo[] }>()
     for (const clase of clasesReemplazo) {
       if (!grupos.has(clase.asignacionId)) {
         grupos.set(clase.asignacionId, {
           agente:        clase.agente,
           identificador: clase.identificador,
+          asignacion:     asignaciones.find(a => a.id === clase.asignacionId),
           clases:        [],
         })
       }
@@ -469,7 +471,7 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
       asignacionId,
       ...datos,
     }))
-  }, [clasesReemplazo])
+  }, [clasesReemplazo, asignaciones])
   const clasesConSuplenteIncompleto = useMemo(() => {
     return Array.from(clasesSeleccionadas).filter(id => {
       const config = reemplazos.get(id)
@@ -486,6 +488,7 @@ const [incidenciasCreadas, setIncidenciasCreadas] = useState<{ asignacionId: num
     cursosUnicos,
     asignacionesFiltradas,
     asignacionesLote,
+    asignaciones,
     seleccionados,
     toggleSeleccion, toggleTodos, quitarDelLote,
     // formulario incidencia
