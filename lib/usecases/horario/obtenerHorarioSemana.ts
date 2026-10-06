@@ -29,7 +29,7 @@ export async function obtenerHorarioSemana(tenantId: number, params: {
   })
 
   const grilla = DIAS.reduce((acc, dia) => {
-    acc[dia] = clases.filter(c => DIA_INDEX[new Date(c.fecha).getDay()] === dia)
+    acc[dia] = clases.filter(c => DIA_INDEX[new Date(c.fecha).getUTCDay()] === dia)
     return acc
   }, {} as Record<string, typeof clases>)
 

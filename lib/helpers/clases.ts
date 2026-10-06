@@ -63,7 +63,7 @@ export function generarClases(params: {
       : [1, 2, 3, 4, 5] // lunes a viernes por defecto
 
     while (cursor <= fin) {
-      const diaSemana = cursor.getDay()
+      const diaSemana = cursor.getUTCDay()
       if (diasUnicos.includes(diaSemana)) {
         const fechaStr = cursor.toISOString().slice(0, 10)
         const suspendida = fechasSuspendidas.has(fechaStr)
@@ -86,7 +86,7 @@ export function generarClases(params: {
 
   // modo escolar (con comision): una clase por módulo por fecha correspondiente
   while (cursor <= fin) {
-    const diaSemana = cursor.getDay()
+    const diaSemana = cursor.getUTCDay()
     for (const modulo of modulos) {
       if (DIA_JS[modulo.dia_semana] === diaSemana) {
         const fechaStr = cursor.toISOString().slice(0, 10)
