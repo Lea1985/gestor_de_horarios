@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class DistribucionNoEncontradaError extends Error {
   constructor() { super("Distribución no encontrada") }
 }
@@ -65,8 +66,7 @@ export async function nuevaVersionDistribucion(
   let clasesSuspendidas = 0
   let avisoReemplazoNoAplica = false
   if (periodo) {
-    const hoy = new Date()
-    hoy.setUTCHours(0, 0, 0, 0)
+    const hoy = hoyLocal()
     const hasta = periodo.fecha_hasta
     if (hoy <= hasta) {
       const tramos = await claseProgramadaService.resolverCoberturaDelTramo({
@@ -87,8 +87,7 @@ export async function nuevaVersionDistribucion(
       avisoReemplazoNoAplica = body?.mantenerReemplazo === true && tramos.length > 0
     }
   }
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const ayerFin = new Date(hoy)
   ayerFin.setUTCDate(ayerFin.getUTCDate() - 1)
   ayerFin.setUTCHours(23, 59, 59, 999)

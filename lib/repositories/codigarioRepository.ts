@@ -1,6 +1,7 @@
 // lib/repositories/codigarioRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class ItemDuplicadoError extends Error {
   constructor() {
     super("Ya existe un item con ese código en este codigario")
@@ -17,7 +18,7 @@ export class ReactivacionRequeridaError extends Error {
 }
 export const codigarioRepository = {
     listar(tenantId: number, incluirInactivos = false) {
-    const ahora = new Date()
+    const hoy = hoyLocal()
     return prisma.codigario.findMany({
       where: {
         institucionId: tenantId,
@@ -30,7 +31,7 @@ export const codigarioRepository = {
         // cerrada (fecha_hasta pasada) — usado por el frontend para decidir si
         // se puede ofrecer "Eliminar", en vez del conteo de items activos.
         items: {
-          where: { incidencias: { some: { deletedAt: null, fecha_hasta: { lt: ahora } } } },
+          where: { incidencias: { some: { deletedAt: null, fecha_hasta: { lt: hoy } } } },
           select: { id: true },
         },
       },
@@ -77,7 +78,7 @@ export const codigarioRepository = {
       where: {
         codigarioId,
         codigario: { institucionId: tenantId },
-        incidencias: { some: { deletedAt: null, fecha_hasta: { lt: new Date() } } },
+        incidencias: { some: { deletedAt: null, fecha_hasta: { lt: hoyLocal() } } },
       },
     })
     return cantidad > 0
@@ -87,7 +88,7 @@ export const codigarioRepository = {
       where: {
         codigarioItemId: itemId,
         deletedAt: null,
-        fecha_hasta: { lt: new Date() },
+        fecha_hasta: { lt: hoyLocal() },
         codigarioItem: { codigario: { institucionId: tenantId } },
       },
     })
@@ -100,7 +101,7 @@ export const codigarioRepository = {
       where: {
         codigarioItemId: itemId,
         deletedAt: null,
-        fecha_hasta: { lt: new Date() },
+        fecha_hasta: { lt: hoyLocal() },
         codigarioItem: { codigario: { institucionId: tenantId } },
       },
     })

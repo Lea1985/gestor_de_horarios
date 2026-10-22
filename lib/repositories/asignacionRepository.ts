@@ -1,6 +1,7 @@
 // lib/repositories/asignacionRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 const includeBase = {
   unidad: true,
   materia: {
@@ -46,8 +47,7 @@ export const asignacionRepository = {
   // Asignaciones a propósito, para no sumarle una consulta extra por fila
   // a una pantalla que no la necesita.
   listarParaIncidencia(tenantId: number) {
-    const hoy = new Date()
-    hoy.setUTCHours(0, 0, 0, 0)
+    const hoy = hoyLocal()
     return prisma.asignacion.findMany({
       where: {
         institucionId: tenantId,

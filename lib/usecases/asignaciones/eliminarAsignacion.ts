@@ -2,6 +2,7 @@
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import prisma from "@/lib/prisma"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export class TieneIncidenciasActivasError extends Error {
   constructor() { super("No se puede eliminar una asignación con incidencias activas") }
@@ -44,8 +45,7 @@ export async function eliminarAsignacion(id: number, tenantId: number) {
   // Suspender las clases futuras -- ya no hay asignación que las respalde.
   // Sin incidencias/reemplazos activos posibles acá (bloqueado arriba),
   // así que es un bulk-update directo, sin pasar por el motor clase por clase.
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const { suspendidas } = await claseProgramadaService.suspenderPorFinAsignacion({
     institucionId: tenantId,
     asignacionId:  id,

@@ -38,10 +38,10 @@ import { RequestContext } from "@/lib/types/context"
 import { resolverClasesVencidas } from "@/lib/usecases/clases/resolverClasesVencidas"
 import { cerrarPeriodo } from "@/lib/usecases/periodosOperativos/cerrarPeriodo"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 async function cerrarPeriodoSiVencido(tenantId: number): Promise<boolean> {
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const activo = await periodoOperativoRepository.obtenerVigente(tenantId)
   if (!activo || activo.fecha_hasta >= hoy) return true // no hay activo, o todavía no venció -- no es un fallo
   try {
@@ -54,8 +54,7 @@ async function cerrarPeriodoSiVencido(tenantId: number): Promise<boolean> {
 }
 
 async function resolverClasesVencidasSiCorresponde(tenantId: number) {
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const { count } = await prisma.institucion.updateMany({
     where: {
       id: tenantId,

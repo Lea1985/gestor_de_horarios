@@ -1,6 +1,7 @@
 // lib/usecases/asignaciones/cambiarTitularAsignacion.ts
 import prisma from "@/lib/prisma"
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export class TitularAsignacionError extends Error {}
 
@@ -21,7 +22,7 @@ export async function cambiarTitularAsignacion(
   if (!agente) {
     throw new TitularAsignacionError("Agente no encontrado")
   }
-  const desde = fechaDesde ? new Date(fechaDesde) : new Date()
+  const desde = fechaDesde ? new Date(fechaDesde) : hoyLocal()
   desde.setUTCHours(0, 0, 0, 0)
   if (isNaN(desde.getTime())) {
     throw new TitularAsignacionError("Fecha inválida")

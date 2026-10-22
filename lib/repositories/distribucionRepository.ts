@@ -1,6 +1,7 @@
 //lib/repositories/distribucionRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 function parseDate(value: unknown): Date | null {
   if (!value) return null
   const d = new Date(value as string)
@@ -118,8 +119,7 @@ listar(tenantId: number) {
   // "por tráfico, sin cron" (mismo patrón que resolverClasesVencidas,
   // #15) -- se llama al principio de listar/obtener, nunca en background.
   async cerrarVencidas(tenantId: number) {
-    const hoy = new Date()
-    hoy.setUTCHours(0, 0, 0, 0)
+    const hoy = hoyLocal()
     return prisma.distribucionHoraria.updateMany({
       where: {
         institucionId: tenantId,

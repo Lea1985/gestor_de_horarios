@@ -13,6 +13,7 @@
 import { EstadoClase, Causa } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
+import { claseTermino } from "@/lib/helpers/fechaInstitucion"
 import type { CondicionesVigentes, ResultadoResolucion } from "@/lib/types/claseProgramada"
 
 /**
@@ -64,7 +65,10 @@ export function resolverEstadoYCausa(condiciones: CondicionesVigentes): Resultad
  * de ClaseProgramada -- ver historial de este archivo, confirmado con datos
  * reales el 03/08/2026.
  *
- * fechaYaPaso: fecha de la clase <= hoy. Es lo único que decide DICTADA
+ * fechaYaPaso: la clase ya terminó en la hora local de la institución
+ * (claseTermino): fecha anterior a hoy, o de hoy con la hora de fin del
+ * módulo ya pasada. Sin módulo (cargos por jornal) se usa el fin del turno
+ * de la asignación; si tampoco hay, el fin del día. Es lo único que decide DICTADA
  * cuando ninguna otra causa aplica -- reemplaza la lógica ad-hoc que antes
  * vivía en cerrarPeriodo.ts (que marcaba DICTADA sin mirar si la fecha
  * era futura, bug real confirmado el 03/08/2026).
@@ -79,12 +83,14 @@ export async function obtenerCondicionesVigentes(
       fecha: true,
       incidenciaId: true,
       reemplazos: { where: { activo: true }, take: 1, select: { id: true } },
+      modulo:     { select: { hora_hasta: true } },
+      asignacion: { select: { turno: { select: { horaFin: true } } } },
     },
   })
   if (!clase) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
 
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const ahora = new Date()
+  const horaHasta = clase.modulo?.hora_hasta ?? clase.asignacion?.turno?.horaFin ?? null
 
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
   const periodoOperativoVigente = periodo
@@ -111,7 +117,7 @@ export async function obtenerCondicionesVigentes(
     tieneEventoCalendario:   eventoCalendario !== null,
     eventoCalendarioId:      eventoCalendario?.id ?? null,
     periodoOperativoVigente,
-    fechaYaPaso:             clase.fecha <= hoy,
+    fechaYaPaso:             claseTermino({ fecha: clase.fecha, horaHasta, ahora }),
   }
 }
 

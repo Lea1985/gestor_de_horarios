@@ -10,6 +10,7 @@
 //   cualquier otro estado         → cubierta (reemplazada, dictada o programada)
 
 import prisma from "@/lib/prisma"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export type TendenciaComision = "sube" | "baja" | "estable"
 
@@ -57,14 +58,13 @@ export async function obtenerCoberturaPorComision(
   limite:      number = 3,
   comisionId?: number,
 ): Promise<CoberturaPorComision[]> {
-  const hasta = new Date()
+  const hasta = hoyLocal()
   const desde = new Date(hasta)
   // UTC explícito: ClaseProgramada.fecha se guarda como medianoche UTC.
   // setDate/setHours locales corrían el rango en cualquier servidor con
   // TZ != UTC, y además desalineaban este timeline por comisión respecto
   // del timeline institucional (generarTimelineCobertura), que ya usa UTC.
   desde.setUTCDate(hasta.getUTCDate() - (diasRango - 1))
-  desde.setUTCHours(0, 0, 0, 0)
 
   // 1. Traer clases con causa/estado y comisión para calcular cobertura real
   const clases = await prisma.claseProgramada.findMany({

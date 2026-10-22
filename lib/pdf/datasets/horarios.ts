@@ -1,5 +1,6 @@
 // lib/pdf/datasets/horarios.ts
 import prisma from "@/lib/prisma"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export type HorarioComisionRow = {
   moduloId:    number
   dia:         string
@@ -53,8 +54,7 @@ export async function obtenerDatosHorarios(
   // UTC explícito, medianoche de hoy -- comparar contra new Date() en vez
   // de la medianoche de hoy hacía que una distribución vigente "hasta hoy"
   // dejara de aparecer a mitad del día (fix del 18/08/2026).
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const manana = new Date(hoy)
   manana.setUTCDate(manana.getUTCDate() + 1)
   const ORDEN_DIAS: Record<string, number> = {

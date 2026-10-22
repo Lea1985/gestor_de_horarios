@@ -1,16 +1,15 @@
 //app/api/clases/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { listarClases, FiltrosInsuficientesError, EstadoInvalidoError } from "@/lib/usecases/clases/listarClases"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     const { searchParams } = new URL(req.url)
     try {
       const hoy = searchParams.get("hoy")
-      const ahora = new Date()
-      const inicioHoy = new Date(ahora)
-      inicioHoy.setUTCHours(0, 0, 0, 0)
-      const finHoy = new Date(ahora)
+      const inicioHoy = hoyLocal()
+      const finHoy = new Date(inicioHoy)
       finHoy.setUTCHours(23, 59, 59, 999)
       const clases = await listarClases(tenantId, {
         asignacionId: searchParams.get("asignacionId"),

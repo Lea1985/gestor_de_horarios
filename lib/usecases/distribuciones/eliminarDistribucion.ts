@@ -3,6 +3,7 @@ import { distribucionRepository, solapa } from "@/lib/repositories/distribucionR
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import prisma from "@/lib/prisma"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class DistribucionNoActivaError extends Error {
   constructor() { super("No se puede eliminar una distribución que ya no está activa.") }
 }
@@ -57,8 +58,7 @@ export async function eliminarDistribucion(id: number, tenantId: number) {
     await distribucionRepository.eliminar(id, tenantId)
     return { ok: true, deleted: true, clasesSuspendidas: 0 }
   }
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const desde = hoy > periodo.fecha_desde ? hoy : periodo.fecha_desde
   const hasta = periodo.fecha_hasta
   const { suspendidas } = await claseProgramadaService.suspenderNoVigentes({

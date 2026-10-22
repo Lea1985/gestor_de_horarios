@@ -4,6 +4,7 @@ import { obtenerClasesOperativas, obtenerClasesOperativasHoy, mapearCoberturaHoy
 import { generarTimelineCobertura } from "@/lib/reporting/transformers/generarTimelineCobertura"
 import { obtenerKPIsDashboard } from "@/lib/reporting/kpis/obtenerKPIsDashboard"
 import prisma from "@/lib/prisma"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 const RANGOS_VALIDOS = [7, 14, 30] as const
 type RangoDias = (typeof RANGOS_VALIDOS)[number]
@@ -17,9 +18,8 @@ function esRangoValido(n: number): n is RangoDias {
  *  criterio que el resto de las métricas de cobertura -- ver
  *  filtrarFrenteACurso() en obtenerClasesOperativas.ts. */
 async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
-  const ayer = new Date()
+  const ayer = hoyLocal()
   ayer.setUTCDate(ayer.getUTCDate() - 1)
-  ayer.setUTCHours(0, 0, 0, 0)
   const ayerFin = new Date(ayer)
   ayerFin.setUTCHours(23, 59, 59, 999)
   const clases = await prisma.claseProgramada.findMany({
@@ -53,8 +53,7 @@ async function obtenerCoberturaAyer(tenantId: number): Promise<number | null> {
 /** Próximos vencimientos: incidencias que vencen en los próximos N días.
  *  UTC explícito, mismo motivo que las funciones anteriores. */
 async function obtenerProximosVencimientos(tenantId: number) {
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const manana = new Date(hoy)
   manana.setUTCDate(hoy.getUTCDate() + 1)
   const mananaFin = new Date(manana)
@@ -118,16 +117,16 @@ export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
     try {
       const { searchParams } = new URL(req.url)
-      const hoy = new Date()
+      const hoy = hoyLocal()
       const diasRaw = Number(searchParams.get("dias"))
       const dias: RangoDias = esRangoValido(diasRaw) ? diasRaw : 14
-      const hasta = hoy.toISOString().split("T")[0]
+      const hasta = hoy.toISOString().slice(0, 10)
       const desde = (() => {
-        const d = new Date()
+        const d = new Date(hoy)
         // UTC explícito: getDate/setDate locales corrían el rango si el
         // servidor no está en TZ=UTC (mismo bug que las funciones de arriba).
         d.setUTCDate(hoy.getUTCDate() - (dias - 1))
-        return d.toISOString().split("T")[0]
+        return d.toISOString().slice(0, 10)
       })()
       const desdeDate = new Date(desde)
       const hastaDate = new Date(hasta)

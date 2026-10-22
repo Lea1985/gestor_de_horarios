@@ -1,6 +1,7 @@
 // lib/reporting/datasets/obtenerClasesOperativas.ts
 import prisma from "@/lib/prisma"
 import { CoberturaEstado } from "../transformers/calcularCobertura"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export type ClaseOperativa = {
   id: number
   fecha: Date
@@ -170,8 +171,7 @@ export async function obtenerClasesOperativas(
 export async function obtenerClasesOperativasHoy(
   tenantId: number
 ): Promise<ClaseOperativa[]> {
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   const manana = new Date(hoy)
   manana.setUTCDate(manana.getUTCDate() + 1)
   manana.setUTCMilliseconds(manana.getUTCMilliseconds() - 1)

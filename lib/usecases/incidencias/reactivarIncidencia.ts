@@ -1,6 +1,7 @@
 // lib/usecases/incidencias/reactivarIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export class IncidenciaNoEncontradaError extends Error {
   constructor() { super("Incidencia no encontrada") }
@@ -17,8 +18,7 @@ export async function reactivarIncidencia(id: number, tenantId: number) {
   if (!existente) throw new IncidenciaNoEncontradaError()
 
   // Regla 3: no reactivar si el rango ya pasó
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
   if (existente.fecha_hasta < hoy) throw new FechaPasadaError()
 
   // Regla 4: no reactivar si hay superposición con otra incidencia activa

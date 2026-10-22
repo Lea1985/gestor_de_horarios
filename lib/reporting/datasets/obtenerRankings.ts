@@ -1,6 +1,7 @@
 // lib/reporting/datasets/obtenerRankings.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export type RangoRankings = "todo" | "anio" | "semestre" | "mes"
 
@@ -25,7 +26,7 @@ export interface RankingsResult {
 // nota si la query corre justo en el límite de un mes/semestre/año.
 function calcularPeriodo(rango: RangoRankings): { desde: Date | null; hasta: Date | null } {
   if (rango === "todo") return { desde: null, hasta: null }
-  const hasta = new Date()
+  const hasta = hoyLocal()
   const desde = new Date(hasta)
   if (rango === "anio")     desde.setUTCFullYear(hasta.getUTCFullYear() - 1)
   if (rango === "semestre") desde.setUTCMonth(hasta.getUTCMonth() - 6)

@@ -1,8 +1,10 @@
 // lib/usecases/clases/resolverClasesVencidas.ts
 //
 // Recorre las ClaseProgramada en PROGRAMADA cuya fecha ya llegó (fecha <=
-// hoy) y las hace pasar por el motor de resolución, para que las que
-// correspondan queden DICTADA. Es el mecanismo que hoy falta: sin esto,
+// hoy, en la fecha de calendario de la institución -- hoyLocal) y las hace
+// pasar por el motor de resolución, para que las que correspondan queden
+// DICTADA. Las de hoy solo pasan si su módulo ya terminó: esa decisión la
+// toma el motor (claseTermino), no este filtro. Es el mecanismo que hoy falta: sin esto,
 // el solo paso del tiempo nunca dispara resolverClase (que solo se llama
 // por eventos: crear/eliminar incidencia, activar/cerrar período, etc.).
 //
@@ -12,10 +14,10 @@
 import prisma from "@/lib/prisma"
 import { EstadoClase } from "@prisma/client"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
 export async function resolverClasesVencidas(tenantId: number) {
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
+  const hoy = hoyLocal()
 
   const idsARevisar = (
     await prisma.claseProgramada.findMany({
