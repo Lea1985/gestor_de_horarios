@@ -4,6 +4,7 @@ import { obtenerDatosDashboardPDF } from "@/lib/pdf/datasets/dashboard"
 import { construirDocDashboard } from "@/lib/pdf/documents/dashboard"
 import { respuestaPDF } from "@/lib/pdf/generator"
 import { miInstitucionRepository } from "@/lib/repositories/miInstitucionRepository"
+import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
 
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
       }
 
       const doc = construirDocDashboard(institucion, datos)
-      const fecha = new Date().toISOString().split("T")[0]
+      const fecha = hoyLocalISO()
       return respuestaPDF(doc, `estado_operativo_${fecha}.pdf`)
     } catch (error) {
       console.error("Error generando reporte de dashboard:", error)

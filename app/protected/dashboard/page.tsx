@@ -12,6 +12,7 @@ import { useCoberturaPorComision } from "@/features/dashboard/hooks/useCobertura
 import { MapaCalorSemanal } from "@/features/dashboard/components/MapaCalorSemanal"
 import { ProximosVencimientos } from "@/features/dashboard/components/ProximosVencimientos"
 import { AvisoPeriodoOperativo } from "@/features/periodosOperativos"
+import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
 
 const MAX_COMISIONES = 3
 
@@ -438,7 +439,7 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `estado_operativo_${new Date().toISOString().split("T")[0]}.pdf`
+      a.download = `estado_operativo_${hoyLocalISO()}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {

@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
+import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
 
 type CoberturaEstado = "NORMAL" | "REEMPLAZADA" | "SIN_COBERTURA" | "SUSPENDIDA"
 
@@ -31,12 +32,6 @@ function formatHora(minutos?: number | null) {
   const horas = Math.floor(minutos / 60)
   const mins = minutos % 60
   return `${String(horas).padStart(2, "0")}:${String(mins).padStart(2, "0")}`
-}
-
-function hoyISO() {
-  const hoy = new Date()
-  hoy.setUTCHours(0, 0, 0, 0)
-  return hoy.toISOString().slice(0, 10)
 }
 
 // UX-CLS-002/UX-CLS-004: la Causa (por qué está suspendida) no se mostraba
@@ -109,9 +104,9 @@ function ClasesContenido() {
 
   // UX-CLS-001: rango de fechas, default "hoy" en ambos extremos -- el
   // comportamiento de siempre sigue siendo el default al entrar.
-  const [desde, setDesde] = useState(hoyISO())
-  const [hasta, setHasta] = useState(hoyISO())
-  const esHoy = desde === hoyISO() && hasta === hoyISO()
+  const [desde, setDesde] = useState(hoyLocalISO())
+  const [hasta, setHasta] = useState(hoyLocalISO())
+  const esHoy = desde === hoyLocalISO() && hasta === hoyLocalISO()
 
   async function cargarClases() {
     try {
@@ -181,7 +176,7 @@ function ClasesContenido() {
           <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inputStyle} />
           {!esHoy && (
             <button
-              onClick={() => { setDesde(hoyISO()); setHasta(hoyISO()) }}
+              onClick={() => { setDesde(hoyLocalISO()); setHasta(hoyLocalISO()) }}
               style={{ padding: "6px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", cursor: "pointer" }}
             >
               Hoy

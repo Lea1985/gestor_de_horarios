@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { AvisoPeriodoOperativo } from "@/features/periodosOperativos"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 // ── Tipos ────────────────────────────────────────────────────
 type EstadoPeriodo = "BORRADOR" | "ACTIVO" | "CERRADO"
 type Periodo = {
@@ -168,7 +169,7 @@ export default function PeriodosOperativosPage() {
   )
   const cierreAnticipado = useMemo(() => {
     if (!periodoACerrar) return false
-    const hoy = new Date(); hoy.setUTCHours(0, 0, 0, 0)
+    const hoy = hoyLocal()
     const hasta = new Date(periodoACerrar.fecha_hasta); hasta.setUTCHours(0, 0, 0, 0)
     return hasta > hoy
   }, [periodoACerrar])

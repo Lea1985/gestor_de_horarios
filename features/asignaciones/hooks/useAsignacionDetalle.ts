@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
 import type { Agente, TitularHistorial } from "../types"
+import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
 
 type TitularVigente = {
   id: number
@@ -44,12 +45,6 @@ export type AsignacionDetalle = {
     activo:      boolean
     codigarioItem?: { codigo: string; nombre: string }
   }[]
-}
-
-function hoyISO() {
-  const d  = new Date()
-  const tz = d.getTimezoneOffset() * 60000
-  return new Date(d.getTime() - tz).toISOString().split("T")[0]
 }
 
 function formatFechaDDMMYYYY(iso: string) {
@@ -172,7 +167,7 @@ export function useAsignacionDetalle(id: string) {
     }
     const titularActual = asignacion?.titularidades[0]?.agente
     setAgenteId(titularActual ? String(titularActual.id) : "")
-    setFechaDesde(hoyISO())
+    setFechaDesde(hoyLocalISO())
     setMostrarCambioTitular(true)
   }
 

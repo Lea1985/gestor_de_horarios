@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/app/hooks/useAuth"
 import { fetchIncidencias, deleteIncidencia, reactivarIncidencia, fetchPeriodos } from "../services/incidenciasService"
 import type { Incidencia, PeriodoOperativo } from "../types"
+import { hoyLocal, hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
 
 export type VenceFiltro = "hoy" | "manana" | "resto-semana" | "7dias" | null
 
@@ -68,7 +69,7 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
     }
 
     if (soloHoy) {
-      const hoyStr = new Date().toISOString().split("T")[0]
+      const hoyStr = hoyLocalISO()
       resultado = resultado.filter(i =>
         i.fecha_desde.split("T")[0] <= hoyStr && hoyStr <= i.fecha_hasta.split("T")[0]
       )
@@ -77,15 +78,14 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
       // Mismos rangos que obtenerProximosVencimientos() en
       // app/api/dashboard/overview/route.ts -- UTC explícito, comparado
       // como string ISO (YYYY-MM-DD) para no depender de timezone local.
-      const hoy = new Date()
-      hoy.setUTCHours(0, 0, 0, 0)
+      const hoy = hoyLocal()
       const manana = new Date(hoy)
       manana.setUTCDate(manana.getUTCDate() + 1)
       const semanaFin = new Date(hoy)
       semanaFin.setUTCDate(semanaFin.getUTCDate() + 7)
-      const hoyStr       = hoy.toISOString().split("T")[0]
-      const mananaStr    = manana.toISOString().split("T")[0]
-      const semanaFinStr = semanaFin.toISOString().split("T")[0]
+      const hoyStr       = hoy.toISOString().slice(0, 10)
+      const mananaStr    = manana.toISOString().slice(0, 10)
+      const semanaFinStr = semanaFin.toISOString().slice(0, 10)
       resultado = resultado.filter(i => {
         const h = i.fecha_hasta.split("T")[0]
         switch (venceFiltro) {

@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 type Periodo = {
   id:          number
   nombre:      string
@@ -66,7 +67,7 @@ export function AvisoPeriodoOperativo({ linkDestino = "/protected/dashboard/peri
   )
   const diasParaVencer = useMemo(() => {
     if (!periodoActivo) return null
-    const hoy = new Date(); hoy.setUTCHours(0, 0, 0, 0)
+    const hoy = hoyLocal()
     const hasta = new Date(periodoActivo.fecha_hasta); hasta.setUTCHours(0, 0, 0, 0)
     return Math.round((hasta.getTime() - hoy.getTime()) / 86_400_000)
   }, [periodoActivo])
