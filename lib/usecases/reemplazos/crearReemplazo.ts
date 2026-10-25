@@ -1,7 +1,12 @@
 // lib/usecases/reemplazos/crearReemplazo.ts
 import { reemplazoRepository } from "@/lib/repositories/reemplazoRepository"
 import { validarSuperposicionSuplente, obtenerAgenteQueSeReemplaza } from "./validarSuperposicion"
-import { resolverClase } from "@/lib/services/resolucionClaseService"
+import { Causa } from "@prisma/client"
+import {
+  resolverClase,
+  resolverEstadoYCausa,
+  obtenerCondicionesVigentes,
+} from "@/lib/services/resolucionClaseService"
 export class DatosReemplazoInvalidosError extends Error {
   constructor() { super("claseId y asignacionTitularId son obligatorios") }
 }
@@ -10,6 +15,11 @@ export class SuplenteRequeridoError extends Error {
 }
 export class ClaseNoEncontradaError extends Error {
   constructor() { super("Clase no encontrada o su incidencia está eliminada") }
+}
+export class ClaseNoVigenteError extends Error {
+  constructor() {
+    super("La clase ya no existe en el horario (asignación dada de baja o módulo quitado de la distribución): no admite reemplazo")
+  }
 }
 export class AsignacionTitularNoEncontradaError extends Error {
   constructor() { super("Asignación titular no encontrada") }
@@ -39,8 +49,13 @@ export async function crearReemplazo(
   const { claseId, asignacionTitularId, agenteSuplenteId, incidenciaId, observacion } = body
   if (!claseId || !asignacionTitularId) throw new DatosReemplazoInvalidosError()
   if (!agenteSuplenteId) throw new SuplenteRequeridoError()
-  if (!await reemplazoRepository.verificarClase(claseId, tenantId)) {
-    throw new ClaseNoEncontradaError()
+  const clase = await reemplazoRepository.verificarClase(claseId, tenantId)
+  if (!clase) throw new ClaseNoEncontradaError()
+  // Clase muerta: se pregunta al motor (en vivo, no la causa guardada) si
+  // la resolución da FIN_ASIGNACION o CAMBIO_DISTRIBUCION.
+  const { causa } = resolverEstadoYCausa(await obtenerCondicionesVigentes(claseId, tenantId))
+  if (causa === Causa.FIN_ASIGNACION || causa === Causa.CAMBIO_DISTRIBUCION) {
+    throw new ClaseNoVigenteError()
   }
   if (!await reemplazoRepository.verificarAsignacion(asignacionTitularId, tenantId)) {
     throw new AsignacionTitularNoEncontradaError()
@@ -67,7 +82,9 @@ export async function crearReemplazo(
     claseId,
     asignacionTitularId,
     agenteSuplenteId,
-    incidenciaId,
+    // Sin incidenciaId en el cuerpo se toma el de la clase (bug 13). Si
+    // llega uno, se usa tal cual (no se valida contra el de la clase).
+    incidenciaId: incidenciaId ?? clase.incidenciaId,
     observacion,
   })
   await resolverClase(claseId, tenantId)

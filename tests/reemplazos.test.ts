@@ -19,6 +19,7 @@ let asigSuplenteId:  number
 let agenteSuplenteId: number
 let claseId:         number
 let reemplazoId:     number
+let claseMuertaId:   number
 
 async function destroyTestTenant(institucionId: number) {
   await prisma.reemplazo.deleteMany({ where: { clase: { institucionId } } })
@@ -134,6 +135,24 @@ beforeAll(async () => {
     },
   })
   claseId = clase.id
+
+  // Clase de un módulo que no está en la distribución: el motor la resuelve
+  // como CAMBIO_DISTRIBUCION, no admite reemplazo.
+  const moduloQuitado = await prisma.moduloHorario.create({
+    data: { institucionId, dia_semana: "LUNES", hora_desde: 480, hora_hasta: 520 },
+  })
+  const claseMuerta = await prisma.claseProgramada.create({
+    data: {
+      institucionId,
+      asignacionId,
+      moduloId: moduloQuitado.id,
+      unidadId: unidad.id,
+      fecha:    new Date("2027-03-01T12:00:00.000Z"),
+      estado:   "SUSPENDIDA",
+      causa:    "CAMBIO_DISTRIBUCION",
+    },
+  })
+  claseMuertaId = claseMuerta.id
 })
 
 afterAll(async () => {
@@ -220,6 +239,22 @@ describe("POST /api/reemplazos", () => {
       }),
     })
     expect(res.status).toBe(400)
+  })
+
+  it("rechaza clase dada de baja por cambio de distribución (409)", async () => {
+    const res = await fetch(`${BASE_URL}/reemplazos`, {
+      method:  "POST",
+      headers,
+      body:    JSON.stringify({
+        claseId:             claseMuertaId,
+        asignacionTitularId: asignacionId,
+        agenteSuplenteId,
+      }),
+    })
+    expect(res.status).toBe(409)
+    const data = await res.json()
+    expect(data.error).toMatch(/no admite reemplazo/)
+    expect(await prisma.reemplazo.count({ where: { claseId: claseMuertaId } })).toBe(0)
   })
 
   it("rechaza clase inexistente (404)", async () => {

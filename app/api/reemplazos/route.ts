@@ -11,7 +11,7 @@ import {
   ReemplazoActivoExistenteError,
   SuperposicionSuplenteError,
   AutoReemplazoError,
-  
+  ClaseNoVigenteError,
 } from "@/lib/usecases/reemplazos/crearReemplazo"
 export async function GET(req: Request) {
   return withContext(req, async ({ tenantId }) => {
@@ -60,7 +60,8 @@ export async function POST(req: Request) {
       if (
         error instanceof ReemplazoActivoExistenteError ||
         error instanceof SuperposicionSuplenteError ||
-        error instanceof AutoReemplazoError
+        error instanceof AutoReemplazoError ||
+        error instanceof ClaseNoVigenteError
       ) {
         return Response.json({ error: (error as Error).message }, { status: 409 })
       }

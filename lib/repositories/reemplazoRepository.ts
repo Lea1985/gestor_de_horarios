@@ -229,7 +229,7 @@ export const reemplazoRepository = {
           { incidencia: { activo: true, deletedAt: null } },
         ],
       },
-      select: { id: true },
+      select: { id: true, incidenciaId: true },
     })
   },
 
