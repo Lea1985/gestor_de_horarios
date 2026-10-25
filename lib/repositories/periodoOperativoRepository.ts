@@ -1,6 +1,7 @@
 // lib/repositories/periodoOperativoRepository.ts
 import prisma from "@/lib/prisma"
 import { Prisma, EstadoPeriodo } from "@prisma/client"
+import type { Db } from "@/lib/types/db"
 
 export const periodoOperativoSelect = {
   id: true,
@@ -96,8 +97,8 @@ export const periodoOperativoRepository = {
   },
 
   // "Vigente" ahora es sinónimo de estado ACTIVO.
-  obtenerVigente(tenantId: number) {
-    return prisma.periodoOperativo.findFirst({
+  obtenerVigente(tenantId: number, db: Db = prisma) {
+    return db.periodoOperativo.findFirst({
       where: { institucionId: tenantId, estado: "ACTIVO", deletedAt: null },
       select: periodoOperativoSelect,
     })

@@ -1,6 +1,7 @@
 // lib/repositories/claseProgramadaRepository.ts
 import prisma from "@/lib/prisma"
 import { EstadoClase, Prisma } from "@prisma/client"
+import type { Db } from "@/lib/types/db"
 
 const claseIncludeFull = {
   modulo:   true,
@@ -189,8 +190,8 @@ export const claseProgramadaRepository = {
     })
   },
 
-  listarFeriados(tenantId: number, periodoOperativoId: number, desde: Date, hasta: Date) {
-    return prisma.calendarioEscolar.findMany({
+  listarFeriados(tenantId: number, periodoOperativoId: number, desde: Date, hasta: Date, db: Db = prisma) {
+    return db.calendarioEscolar.findMany({
       where: {
         institucionId:     tenantId,
         periodoOperativoId,

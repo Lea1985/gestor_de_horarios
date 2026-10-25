@@ -16,6 +16,7 @@ import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseTermino, hoyLocal } from "@/lib/helpers/fechaInstitucion"
 import type { CondicionesVigentes, ResultadoResolucion } from "@/lib/types/claseProgramada"
+import type { Db } from "@/lib/types/db"
 
 /**
  * Función pura: aplica la tabla de precedencia definida en el documento de
@@ -126,9 +127,10 @@ function rigeAntesDeLaBaja(dia: Date, deletedAt: Date | null): boolean {
  */
 export async function obtenerCondicionesVigentes(
   claseId: number,
-  tenantId: number
+  tenantId: number,
+  db: Db = prisma
 ): Promise<CondicionesVigentes> {
-  const clase = await prisma.claseProgramada.findFirst({
+  const clase = await db.claseProgramada.findFirst({
     where: { id: claseId, institucionId: tenantId },
     select: {
       fecha: true,
@@ -151,13 +153,13 @@ export async function obtenerCondicionesVigentes(
   const ahora = new Date()
   const horaHasta = clase.modulo?.hora_hasta ?? clase.asignacion?.turno?.horaFin ?? null
 
-  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
+  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId, db)
   const periodoOperativoVigente = periodo
     ? clase.fecha >= periodo.fecha_desde && clase.fecha <= periodo.fecha_hasta
     : false
 
   const eventoCalendario = periodo
-    ? await prisma.calendarioEscolar.findFirst({
+    ? await db.calendarioEscolar.findFirst({
         where: {
           institucionId:      tenantId,
           periodoOperativoId: periodo.id,
@@ -180,7 +182,7 @@ export async function obtenerCondicionesVigentes(
 
   let moduloVigente = true
   if (clase.moduloId !== null) {
-    const versiones = await prisma.distribucionHoraria.findMany({
+    const versiones = await db.distribucionHoraria.findMany({
       where: {
         asignacionId:         clase.asignacionId,
         fecha_vigencia_desde: { lte: finDelDia(dia) },
@@ -197,7 +199,7 @@ export async function obtenerCondicionesVigentes(
 
   let articuloPaga: boolean | null = null
   if (eventoCalendario && tieneIncidenciaActiva) {
-    const item = await prisma.codigarioItem.findUnique({
+    const item = await db.codigarioItem.findUnique({
       where:  { id: clase.incidencia!.codigarioItemId },
       select: { porcentajeComputable: true },
     })
@@ -220,6 +222,7 @@ export async function obtenerCondicionesVigentes(
 
 /**
  * Orquestador: resuelve una clase puntual y persiste el resultado si cambió
+ * (con db: dentro de una transacción, si se le pasa el cliente transaccional)
  * respecto al estado/causa actual. Incrementa versionResolucion siempre que
  * escribe, para auditoría y como base de lock optimista a futuro.
  *
@@ -238,15 +241,16 @@ export async function obtenerCondicionesVigentes(
  */
 export async function resolverClase(
   claseId: number,
-  tenantId: number
+  tenantId: number,
+  db: Db = prisma
 ): Promise<ResultadoResolucion & { actualizada: boolean }> {
-  const claseActual = await prisma.claseProgramada.findFirst({
+  const claseActual = await db.claseProgramada.findFirst({
     where: { id: claseId, institucionId: tenantId },
     select: { estado: true, causa: true, calendarioEscolarId: true },
   })
   if (!claseActual) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
 
-  const condiciones = await obtenerCondicionesVigentes(claseId, tenantId)
+  const condiciones = await obtenerCondicionesVigentes(claseId, tenantId, db)
   const resultado = resolverEstadoYCausa(condiciones)
 
   const calendarioEscolarIdNuevo = resultado.causa === Causa.CALENDARIO_ESCOLAR
@@ -260,7 +264,7 @@ export async function resolverClase(
 
   if (sinCambios) return { ...resultado, actualizada: false }
 
-  await prisma.claseProgramada.update({
+  await db.claseProgramada.update({
     where: { id: claseId },
     data: {
       estado:               resultado.estado,
