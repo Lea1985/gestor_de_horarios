@@ -15,6 +15,7 @@ import { EstadoClase, Causa, Dias } from "@prisma/client"
 import { generarClases } from "@/lib/helpers/clases"
 import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
 import type { RangoGeneracion } from "@/lib/types/claseProgramada"
+import type { Db } from "@/lib/types/db"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class RangoInvalidoError extends Error {
@@ -43,26 +44,33 @@ export const claseProgramadaService = {
    * Genera las clases faltantes para una asignación en un rango, a partir
    * de los módulos de una distribución y el calendario del período dado.
    * Idempotente: si ya existen, no las duplica (skipDuplicates + unique en DB).
+   *
+   * Cada clase nueva se vincula a la licencia activa de la asignación que
+   * cubre su fecha (si hay varias, la de id más alto: mismo criterio que
+   * desvincularIncidencia) y pasa por el motor, que decide su estado/causa
+   * final -- antes nacían sin licencia y PROGRAMADA (bug 3 del piloto).
+   * Con db, todo corre dentro de la transacción del llamador.
    */
   async generarParaRango(params: RangoGeneracion & {
     distribucionId: number
     periodoId:      number
-  }) {
+  }, db: Db = prisma) {
     const { institucionId, asignacionId, unidadId, comisionId, distribucionId, periodoId } = params
     const { desde, hasta } = normalizarRango(params.desde, params.hasta)
+    const vacio = { creadas: 0, saltadasPorExistentes: 0, ids: [] as number[] }
 
-    const distribucion = await prisma.distribucionHoraria.findFirst({
+    const distribucion = await db.distribucionHoraria.findFirst({
       where: { id: distribucionId, institucionId, deletedAt: null },
       include: { distribucionModulos: { include: { moduloHorario: true } } },
     })
-    if (!distribucion) return { creadas: 0, saltadasPorExistentes: 0 }
+    if (!distribucion) return vacio
 
     const modulos = distribucion.distribucionModulos.map(dm => dm.moduloHorario)
 
-    if (modulos.length === 0) return { creadas: 0, saltadasPorExistentes: 0 }
+    if (modulos.length === 0) return vacio
 
     const feriados = await claseProgramadaRepository.listarFeriados(
-      institucionId, periodoId, desde, hasta
+      institucionId, periodoId, desde, hasta, db
     )
 
     const clases = generarClases({
@@ -77,16 +85,44 @@ export const claseProgramadaService = {
       diasSuspendidos: feriados,
     })
 
-    if (clases.length === 0) return { creadas: 0, saltadasPorExistentes: 0 }
+    if (clases.length === 0) return vacio
 
-    const result = await prisma.claseProgramada.createMany({
+    const creadas = await db.claseProgramada.createManyAndReturn({
       data: clases,
       skipDuplicates: true, // se apoya en el @@unique real de la tabla
+      select: { id: true, fecha: true },
     })
 
+    if (creadas.length > 0) {
+      const licencias = await db.incidencia.findMany({
+        where: {
+          asignacionId,
+          activo:      true,
+          deletedAt:   null,
+          fecha_desde: { lte: hasta },
+          fecha_hasta: { gte: desde },
+        },
+        orderBy: { id: "desc" },
+        select:  { id: true, fecha_desde: true, fecha_hasta: true },
+      })
+      const porLicencia = new Map<number, number[]>()
+      for (const clase of creadas) {
+        const licencia = licencias.find(l => l.fecha_desde <= clase.fecha && clase.fecha <= l.fecha_hasta)
+        if (!licencia) continue
+        porLicencia.set(licencia.id, [...(porLicencia.get(licencia.id) ?? []), clase.id])
+      }
+      for (const [incidenciaId, ids] of porLicencia) {
+        await db.claseProgramada.updateMany({ where: { id: { in: ids } }, data: { incidenciaId } })
+      }
+      for (const clase of creadas) {
+        await resolverClase(clase.id, institucionId, db)
+      }
+    }
+
     return {
-      creadas: result.count,
-      saltadasPorExistentes: clases.length - result.count,
+      creadas: creadas.length,
+      saltadasPorExistentes: clases.length - creadas.length,
+      ids: creadas.map(c => c.id),
     }
   },
 
@@ -392,9 +428,9 @@ export const claseProgramadaService = {
       incidenciaId: number
       desde: Date
       hasta: Date
-    }): Promise<{ ids: number[] }> {
+    }, db: Db = prisma): Promise<{ ids: number[] }> {
       const { desde, hasta } = normalizarRango(params.desde, params.hasta)
-      const clases = await prisma.claseProgramada.findMany({
+      const clases = await db.claseProgramada.findMany({
         where: {
           asignacionId: params.asignacionId,
           fecha: { gte: desde, lte: hasta },
@@ -410,7 +446,7 @@ export const claseProgramadaService = {
         select: { id: true },
       })
       if (clases.length === 0) return { ids: [] }
-      await prisma.claseProgramada.updateMany({
+      await db.claseProgramada.updateMany({
         where: { id: { in: clases.map(c => c.id) } },
         data:  { incidenciaId: params.incidenciaId },
       })
