@@ -16,8 +16,17 @@ export async function POST(
   if (!id) return Response.json({ error: "ID inválido" }, { status: 400 })
 
   return withContext(req, async ({ tenantId }) => {
+    // Body opcional: { reescribirPasado? } para reconciliar desde el día de
+    // la baja aunque eso cambie clases pasadas.
+    let body: { reescribirPasado?: boolean } = {}
     try {
-      const result = await reactivarAsignacion(id, tenantId)
+      const text = await req.text()
+      if (text) body = JSON.parse(text)
+    } catch {
+      return Response.json({ error: "JSON inválido" }, { status: 400 })
+    }
+    try {
+      const result = await reactivarAsignacion(id, tenantId, body)
       return Response.json(result)
     } catch (error) {
       if (error instanceof AsignacionNoEncontradaError) {

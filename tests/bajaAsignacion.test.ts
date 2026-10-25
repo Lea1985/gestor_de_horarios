@@ -17,6 +17,7 @@ import { createTestInstitucion } from "./helpers/factories"
 import { asegurarBaseDeTest } from "./helpers/guardiaBaseTest"
 import { asignarModulos } from "../lib/usecases/distribuciones/asignarModulos"
 import { eliminarAsignacion } from "../lib/usecases/asignaciones/eliminarAsignacion"
+import { reactivarAsignacion } from "../lib/usecases/asignaciones/reactivarAsignacion"
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const iso = (f: Date) => f.toISOString().slice(0, 10)
@@ -97,4 +98,44 @@ describe("baja y reactivación de asignación con reconciliación", () => {
     expect(j["2026-10-15"]).toBe("DICTADA/NINGUNA")
     expect(j[JUEVES_HOY]).toBe("SUSPENDIDA/FIN_ASIGNACION")
   })
+
+  it("reactivar el mismo día: revive todo desde la baja, incluida la clase de hoy", async () => {
+    vi.setSystemTime(AHORA)
+    const asignacionId = await asignacionConClases()
+    await eliminarAsignacion(asignacionId, institucionId)
+    const r = await reactivarAsignacion(asignacionId, institucionId)
+    expect(r).toMatchObject({ ok: true, desde: "2026-10-22" })
+    const l = await estadosPorFecha(asignacionId, lunes)
+    const j = await estadosPorFecha(asignacionId, jueves)
+    expect(LUNES_PASADOS.map(f => l[f])).toEqual(todos(3, "DICTADA/NINGUNA"))
+    expect(LUNES_FUTUROS.map(f => l[f])).toEqual(todos(6, "PROGRAMADA/NINGUNA"))
+    expect(j[JUEVES_HOY]).toBe("PROGRAMADA/NINGUNA")
+  })
+
+  it("reactivar días después: por defecto desde hoy; con reescribirPasado, desde la baja", async () => {
+    vi.setSystemTime(AHORA)
+    const a = await asignacionConClases()
+    const b = await asignacionConClases()
+    await eliminarAsignacion(a, institucionId)
+    await eliminarAsignacion(b, institucionId)
+    vi.setSystemTime(new Date("2026-10-29T13:00:00.000Z")) // jueves siguiente, 10:00 AR
+
+    const ra = await reactivarAsignacion(a, institucionId)
+    expect(ra).toMatchObject({ ok: true, desde: "2026-10-29" })
+    const la = await estadosPorFecha(a, lunes)
+    const ja = await estadosPorFecha(a, jueves)
+    expect(la["2026-10-26"]).toBe("SUSPENDIDA/FIN_ASIGNACION") // la baja rigió ese día
+    expect(ja[JUEVES_HOY]).toBe("SUSPENDIDA/FIN_ASIGNACION")
+    expect(LUNES_FUTUROS.slice(1).map(f => la[f])).toEqual(todos(5, "PROGRAMADA/NINGUNA"))
+
+    const rb = await reactivarAsignacion(b, institucionId, { reescribirPasado: true })
+    expect(rb).toMatchObject({ ok: true, desde: "2026-10-22" })
+    const lb = await estadosPorFecha(b, lunes)
+    const jb = await estadosPorFecha(b, jueves)
+    expect(lb["2026-10-26"]).toBe("DICTADA/NINGUNA")
+    expect(jb[JUEVES_HOY]).toBe("DICTADA/NINGUNA")
+    expect(LUNES_FUTUROS.slice(1).map(f => lb[f])).toEqual(todos(5, "PROGRAMADA/NINGUNA"))
+    vi.setSystemTime(AHORA)
+  })
+
 })

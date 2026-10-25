@@ -257,7 +257,7 @@ export const asignacionRepository = {
         institucionId: tenantId,
         activo: false,
       },
-      select: { id: true },
+      select: { id: true, deletedAt: true },
     })
   },
   // Con db transaccional corre en la transacción del llamador.
