@@ -21,7 +21,7 @@
 - Rama de trabajo: `fix/motor-clases-fase-1` (creada desde `feature/instalador-alnext`, base `0e85d77`). **Hacer `git push -u origin fix/motor-clases-fase-1`** si no se hizo. No fusionar todavía.
 - Fase 2 arrancará en `fix/motor-clases-fase-2`, desde la rama de la Fase 1.
 - Pruebas: Claude Code levanta un servidor propio `NODE_ENV=test` en el puerto 3100 contra `gestor_test`. El puerto 3000 se reserva para la app de desarrollo (puede apuntar a `alnext_ceferino`; nunca correr tests HTTP contra ese servidor).
-- Comando de la app contra la copia de Ceferino: `DATABASE_URL="postgresql://admin:admin123@localhost:5433/alnext_ceferino?schema=public" DEV_TENANT_DOMAIN="" npm run dev`.
+- Comando de la app contra la copia de Ceferino: `DATABASE_URL="postgresql://<usuario>:<clave>@localhost:5433/alnext_ceferino?schema=public" DEV_TENANT_DOMAIN="" npm run dev`.
 - Restaurar la copia limpia: `DROP DATABASE alnext_ceferino WITH (FORCE)`, `CREATE DATABASE`, `pg_restore --no-owner --no-acl ~/datos_ceferino/base_copia_limpia.dump`.
 
 ## 3. Hallazgos de la sesión
