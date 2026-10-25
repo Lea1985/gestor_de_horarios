@@ -258,6 +258,46 @@ describe("reconciliarAsignacion", () => {
     expect(estados(m, MARTES_FUTUROS)).toEqual(todos(5, "PROGRAMADA/NINGUNA"))
   })
 
+  it("pasado no DICTADA: una REEMPLAZADA pasada que cambiaría exige confirmación y el aviso dice de qué reemplazo", async () => {
+    const { asignacionId, distribucionId } = await escenario([lunes], { desde: "2026-10-12", hasta: "2026-11-30" })
+    let l = await clases(asignacionId, lunes)
+    const r12 = await reemplazar(asignacionId, l["2026-10-12"].id, suplente1)
+    const r19 = await reemplazar(asignacionId, l["2026-10-19"].id, suplente2)
+    const antes = await foto(asignacionId)
+    await asignarModulos(distribucionId, [martes])
+
+    const error = await reconciliar(asignacionId, { desde: d("2026-10-05") }).catch(e => e)
+    expect(error).toBeInstanceOf(RequiereConfirmacionError)
+    const aviso = (error as RequiereConfirmacionError).aviso
+    expect(aviso.dictadasAReescribir.map(x => x.fecha)).toEqual(["2026-10-05"])
+    expect(aviso.reemplazadasPasadas).toBe(2)
+    expect(aviso.pasadasAReescribir.map(x => [x.fecha, x.estadoAnterior, x.estado, x.causa, x.reemplazo?.reemplazoId, x.reemplazo?.agenteSuplenteId])).toEqual([
+      ["2026-10-12", REEMPLAZADA, SUSPENDIDA, Causa.CAMBIO_DISTRIBUCION, r12!.id, suplente1],
+      ["2026-10-19", REEMPLAZADA, SUSPENDIDA, Causa.CAMBIO_DISTRIBUCION, r19!.id, suplente2],
+    ])
+    expect(aviso.pasadasAReescribir.every(x => x.reemplazo?.suplente.startsWith("Uno") || x.reemplazo?.suplente.startsWith("Dos"))).toBe(true)
+    expect(aviso.reemplazosAAnular).toEqual([]) // los reemplazos pasados se conservan
+    expect(await foto(asignacionId)).toEqual(antes)
+
+    const r = await reconciliar(asignacionId, { desde: d("2026-10-05"), reescribirDictadas: true })
+    expect(r.dictadasReescritas).toBe(3)
+    l = await clases(asignacionId, lunes)
+    expect(estados(l, LUNES_PASADOS)).toEqual(todos(3, "SUSPENDIDA/CAMBIO_DISTRIBUCION"))
+    const conservados = await prisma.reemplazo.findMany({ where: { id: { in: [r12!.id, r19!.id] } } })
+    expect(conservados.every(x => x.activo)).toBe(true)
+  })
+
+  it("pasado: PROGRAMADA -> DICTADA no exige confirmación (es el paso del tiempo)", async () => {
+    const { asignacionId } = await escenario([lunes])
+    const l = await clases(asignacionId, lunes)
+    // Una clase pasada que el control diario todavía no resolvió.
+    await prisma.claseProgramada.update({ where: { id: l["2026-10-19"].id }, data: { estado: EstadoClase.PROGRAMADA } })
+    const r = await reconciliar(asignacionId, { desde: d("2026-10-05") })
+    expect(r.clasesActualizadas).toBe(1)
+    expect(r.dictadasReescritas).toBe(0)
+    expect((await prisma.claseProgramada.findUniqueOrThrow({ where: { id: l["2026-10-19"].id } })).estado).toBe(EstadoClase.DICTADA)
+  })
+
   it("con un cliente transaccional corre dentro de la transacción del llamador (no anida) y se revierte con ella", async () => {
     const { asignacionId, distribucionId } = await escenario([lunes])
     const antes = await foto(asignacionId)

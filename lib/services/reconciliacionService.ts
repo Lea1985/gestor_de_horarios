@@ -10,8 +10,10 @@
 // Pasos:
 //  1. Genera las clases que faltan de cada versión de distribución vigente en
 //     el rango (generarParaRango vincula la licencia y resuelve cada una).
-//  2. Re-resuelve cada clase existente no DICTADA del rango. Las DICTADA solo
-//     se reescriben con confirmación explícita (reescribirDictadas).
+//  2. Re-resuelve cada clase existente del rango. Todo cambio de estado/causa
+//     en una clase anterior a hoy (salvo PROGRAMADA -> DICTADA, que es el
+//     paso natural del tiempo) reescribe el pasado y exige confirmación
+//     explícita (reescribirDictadas), igual que las clases pasadas nuevas.
 //  3. Anula los reemplazos activos de clases de hoy en adelante que dejaron de
 //     existir (FIN_ASIGNACION, CAMBIO_DISTRIBUCION), con confirmación
 //     (confirmarAnulacion). Los de fechas pasadas se conservan.
@@ -41,6 +43,7 @@ const diaDe = (fecha: Date) =>
   new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()))
 const finDelDia = (dia: Date) => new Date(dia.getTime() + DIA_MS - 1)
 const iso = (fecha: Date) => fecha.toISOString().slice(0, 10)
+const nombreDe = (a: { apellido: string; nombre: string }) => `${a.apellido}, ${a.nombre}`
 const maximo = (...fechas: Date[]) => new Date(Math.max(...fechas.map(f => f.getTime())))
 const minimo = (...fechas: Date[]) => new Date(Math.min(...fechas.map(f => f.getTime())))
 
@@ -48,12 +51,23 @@ export type ClaseAfectada = { claseId: number; fecha: string; moduloId: number |
 export type ReemplazoAAnular = ClaseAfectada & {
   reemplazoId:      number
   agenteSuplenteId: number
+  suplente:         string
   incidenciaId:     number | null
 }
 export type DictadaAReescribir = ClaseAfectada & { estado: EstadoClase; causa: Causa }
+// Clase pasada no DICTADA cuyo estado/causa cambiaría. Si era REEMPLAZADA,
+// indica de qué reemplazo (que se conserva: solo cambia la clase).
+export type PasadaAReescribir = DictadaAReescribir & {
+  estadoAnterior: EstadoClase
+  causaAnterior:  Causa
+  reemplazo:      { reemplazoId: number; agenteSuplenteId: number; suplente: string } | null
+}
 export type AvisoReconciliacion = {
   reemplazosAAnular:   ReemplazoAAnular[]
   dictadasAReescribir: DictadaAReescribir[]
+  pasadasAReescribir:  PasadaAReescribir[]
+  // Cuántas de pasadasAReescribir eran REEMPLAZADA.
+  reemplazadasPasadas: number
   clasesPasadasNuevas: ClaseAfectada[]
 }
 
@@ -72,6 +86,8 @@ export type ParametrosReconciliacion = {
   desde:               Date
   hasta?:              Date | null // por defecto, el fin del período vigente
   confirmarAnulacion?: boolean
+  // Confirma reescribir el pasado: DICTADA, cualquier otra clase anterior a
+  // hoy que cambie (salvo PROGRAMADA -> DICTADA) y clases pasadas nuevas.
   reescribirDictadas?: boolean
   mantenerReemplazo?:  boolean
 }
@@ -79,6 +95,7 @@ export type ParametrosReconciliacion = {
 export type ResultadoReconciliacion = {
   clasesCreadas:        number
   clasesActualizadas:   number
+  // Clases pasadas reescritas con confirmación: DICTADA y otras.
   dictadasReescritas:   number
   reemplazosAnulados:   ReemplazoAAnular[]
   reemplazosMantenidos: number
@@ -165,23 +182,41 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
     orderBy: { fecha: "asc" },
   })).map(c => ({ claseId: c.id, fecha: iso(c.fecha), moduloId: c.moduloId }))
 
-  // 2. Re-resolver las existentes. Las DICTADA se evalúan sin su protección
-  //    y, si cambian, quedan en el aviso (se aplican solo con confirmación).
+  // 2. Re-resolver las existentes. Las DICTADA se evalúan sin su protección;
+  //    los cambios en el pasado quedan en el aviso (se aplican solo con
+  //    confirmación).
   const existentes = await tx.claseProgramada.findMany({
     where:   { asignacionId, fecha: rangoFechas, id: { notIn: idsNuevas } },
-    select:  { id: true, fecha: true, moduloId: true, estado: true, causa: true },
+    select: {
+      id: true, fecha: true, moduloId: true, estado: true, causa: true,
+      reemplazos: {
+        where: { activo: true }, take: 1,
+        select: { id: true, agenteSuplenteId: true, agenteSuplente: { select: { nombre: true, apellido: true } } },
+      },
+    },
     orderBy: { fecha: "asc" },
   })
   let clasesActualizadas = 0
   const dictadasAReescribir: DictadaAReescribir[] = []
+  const pasadasAReescribir: PasadaAReescribir[] = []
   const idsRevividas: number[] = []
   for (const c of existentes) {
     const dictada = c.estado === EstadoClase.DICTADA
     const r = await resolverClase(c.id, tenantId, tx, { reescribirDictada: dictada })
     if (!r.actualizada) continue
     clasesActualizadas++
+    const afectada = { claseId: c.id, fecha: iso(c.fecha), moduloId: c.moduloId, estado: r.estado, causa: r.causa }
     if (dictada) {
-      dictadasAReescribir.push({ claseId: c.id, fecha: iso(c.fecha), moduloId: c.moduloId, estado: r.estado, causa: r.causa })
+      dictadasAReescribir.push(afectada)
+    } else if (c.fecha < hoy && !(c.estado === EstadoClase.PROGRAMADA && r.estado === EstadoClase.DICTADA)) {
+      const reemplazo = c.estado === EstadoClase.REEMPLAZADA && c.reemplazos[0]
+        ? {
+            reemplazoId:      c.reemplazos[0].id,
+            agenteSuplenteId: c.reemplazos[0].agenteSuplenteId,
+            suplente:         nombreDe(c.reemplazos[0].agenteSuplente),
+          }
+        : null
+      pasadasAReescribir.push({ ...afectada, estadoAnterior: c.estado, causaAnterior: c.causa, reemplazo })
     }
     if (CAUSAS_MUERTAS.includes(c.causa) && !CAUSAS_MUERTAS.includes(r.causa)) idsRevividas.push(c.id)
   }
@@ -198,7 +233,10 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
       id: true, fecha: true, moduloId: true, incidenciaId: true,
       reemplazos: {
         where:  { activo: true },
-        select: { id: true, agenteSuplenteId: true, asignacionTitularId: true, incidenciaId: true },
+        select: {
+          id: true, agenteSuplenteId: true, asignacionTitularId: true, incidenciaId: true,
+          agenteSuplente: { select: { nombre: true, apellido: true } },
+        },
       },
     },
     orderBy: { fecha: "asc" },
@@ -206,6 +244,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
   const anulados = muertasConReemplazo.flatMap(c => c.reemplazos.map(r => ({
     claseId: c.id, fecha: iso(c.fecha), moduloId: c.moduloId,
     reemplazoId: r.id, agenteSuplenteId: r.agenteSuplenteId,
+    suplente: nombreDe(r.agenteSuplente),
     incidenciaId: r.incidenciaId ?? c.incidenciaId,
     asignacionTitularId: r.asignacionTitularId,
   })))
@@ -213,9 +252,16 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
 
   const faltaConfirmarAnulacion = reemplazosAAnular.length > 0 && !params.confirmarAnulacion
   const faltaConfirmarPasado =
-    (dictadasAReescribir.length > 0 || clasesPasadasNuevas.length > 0) && !params.reescribirDictadas
+    (dictadasAReescribir.length > 0 || pasadasAReescribir.length > 0 || clasesPasadasNuevas.length > 0) &&
+    !params.reescribirDictadas
   if (faltaConfirmarAnulacion || faltaConfirmarPasado) {
-    throw new RequiereConfirmacionError({ reemplazosAAnular, dictadasAReescribir, clasesPasadasNuevas })
+    throw new RequiereConfirmacionError({
+      reemplazosAAnular,
+      dictadasAReescribir,
+      pasadasAReescribir,
+      reemplazadasPasadas: pasadasAReescribir.filter(p => p.estadoAnterior === EstadoClase.REEMPLAZADA).length,
+      clasesPasadasNuevas,
+    })
   }
 
   if (anulados.length > 0) {
@@ -282,7 +328,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
   return {
     clasesCreadas:      idsNuevas.length,
     clasesActualizadas,
-    dictadasReescritas: dictadasAReescribir.length,
+    dictadasReescritas: dictadasAReescribir.length + pasadasAReescribir.length,
     reemplazosAnulados: reemplazosAAnular,
     reemplazosMantenidos,
     sinCobertura,
