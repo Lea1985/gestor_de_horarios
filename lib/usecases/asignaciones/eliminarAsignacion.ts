@@ -1,6 +1,6 @@
 // lib/usecases/asignaciones/eliminarAsignacion.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
-import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { reconciliarAsignacion, OPCIONES_TRANSACCION } from "@/lib/services/reconciliacionService"
 import prisma from "@/lib/prisma"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
@@ -39,18 +39,15 @@ export async function eliminarAsignacion(id: number, tenantId: number) {
   })
   if (tieneReemplazos > 0) throw new TieneReemplazosActivosError()
 
-  // softDelete cierra el titular vigente en la misma transacción
-  await asignacionRepository.softDelete(id, tenantId)
+  // La baja (softDelete cierra también el titular vigente) y la
+  // reconciliación van en una única transacción. La baja rige desde el día
+  // local de su deletedAt (hoy), inclusive: las clases de hoy en adelante
+  // pasan a FIN_ASIGNACION y las anteriores no se tocan. Sin incidencias ni
+  // reemplazos activos posibles acá (bloqueado arriba).
+  const r = await prisma.$transaction(async (tx) => {
+    await asignacionRepository.softDelete(id, tenantId, tx)
+    return reconciliarAsignacion({ tenantId, asignacionId: id, desde: hoyLocal() }, tx)
+  }, OPCIONES_TRANSACCION)
 
-  // Suspender las clases futuras -- ya no hay asignación que las respalde.
-  // Sin incidencias/reemplazos activos posibles acá (bloqueado arriba),
-  // así que es un bulk-update directo, sin pasar por el motor clase por clase.
-  const hoy = hoyLocal()
-  const { suspendidas } = await claseProgramadaService.suspenderPorFinAsignacion({
-    institucionId: tenantId,
-    asignacionId:  id,
-    desde:         hoy,
-  })
-
-  return { ok: true, deleted: true, clasesSuspendidas: suspendidas }
+  return { ok: true, deleted: true, clasesSuspendidas: r.clasesActualizadas }
 }
