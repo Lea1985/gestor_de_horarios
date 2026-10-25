@@ -101,7 +101,7 @@ listar(tenantId: number) {
         institucionId: tenantId,
         deletedAt: { not: null },
       },
-      select: { id: true, asignacionId: true, estado: true },
+      select: { id: true, asignacionId: true, estado: true, deletedAt: true },
     })
   },
   // UX-DIS-008: a propósito NO toca `estado` -- eliminar() tampoco lo

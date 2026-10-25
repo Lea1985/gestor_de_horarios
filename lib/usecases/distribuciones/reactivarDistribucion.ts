@@ -1,8 +1,12 @@
 // lib/usecases/distribuciones/reactivarDistribucion.ts
 import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
 import prisma from "@/lib/prisma"
-import { Causa, EstadoClase } from "@prisma/client"
-import { resolverClase } from "@/lib/services/resolucionClaseService"
+import {
+  reconciliarAsignacion,
+  RequiereConfirmacionError,
+  OPCIONES_TRANSACCION,
+} from "@/lib/services/reconciliacionService"
+import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class DistribucionNoEncontradaError extends Error {
   constructor() { super("Distribución no encontrada") }
 }
@@ -18,7 +22,20 @@ export class YaExisteActivaError extends Error {
     super("Ya existe una distribución activa para esta asignación. No se puede reactivar esta versión sin resolver antes ese conflicto.")
   }
 }
-export async function reactivarDistribucion(id: number, tenantId: number) {
+/**
+ * Reactiva una distribución eliminada y reconcilia la asignación en la misma
+ * transacción. La baja regía desde el día local de su deletedAt; se
+ * reconcilia desde ese día, pero sin reescribir el pasado salvo pedido
+ * explícito: por defecto desde el más tardío entre ese día y hoy, y con
+ * reescribirPasado desde el día de la baja (las clases pasadas que cambien
+ * quedan confirmadas). Antes se re-resolvían TODAS las CAMBIO_DISTRIBUCION
+ * de la asignación, de cualquier versión (R2 del plan).
+ */
+export async function reactivarDistribucion(
+  id: number,
+  tenantId: number,
+  body?: { reescribirPasado?: boolean }
+) {
   const existente = await distribucionRepository.existeEliminada(id, tenantId)
   if (!existente) throw new DistribucionNoEncontradaError()
   if (existente.estado === "ACTIVO") {
@@ -34,24 +51,24 @@ export async function reactivarDistribucion(id: number, tenantId: number) {
     })
     if (yaHayActiva) throw new YaExisteActivaError()
   }
-  await distribucionRepository.reactivar(id, tenantId)
-  // Las clases que quedaron SUSPENDIDA (causa CAMBIO_DISTRIBUCION) al
-  // eliminar esta distribución no tienen por qué seguir así ahora que
-  // existe de nuevo -- se re-resuelven una por una para que el motor
-  // decida el estado actual (mismo patrón que reactivarAsignacion.ts).
-  const clases = await prisma.claseProgramada.findMany({
-    where: {
-      asignacionId:  existente.asignacionId,
-      institucionId: tenantId,
-      causa:         Causa.CAMBIO_DISTRIBUCION,
-      estado:        EstadoClase.SUSPENDIDA,
-    },
-    select: { id: true },
-  })
-  let clasesResueltas = 0
-  for (const clase of clases) {
-    const r = await resolverClase(clase.id, tenantId)
-    if (r.actualizada) clasesResueltas++
+  const hoy = hoyLocal()
+  const diaBaja = hoyLocal(existente.deletedAt!)
+  const desde = body?.reescribirPasado || diaBaja > hoy ? diaBaja : hoy
+  try {
+    const r = await prisma.$transaction(async (tx) => {
+      await distribucionRepository.reactivar(id, tenantId, tx)
+      return reconciliarAsignacion({
+        tenantId,
+        asignacionId:       existente.asignacionId,
+        desde,
+        reescribirDictadas: body?.reescribirPasado,
+      }, tx)
+    }, OPCIONES_TRANSACCION)
+    return { ok: true, desde: desde.toISOString().slice(0, 10), clasesResueltas: r.clasesActualizadas }
+  } catch (error) {
+    if (error instanceof RequiereConfirmacionError) {
+      return { ok: false, requiereConfirmacion: true, aviso: error.aviso }
+    }
+    throw error
   }
-  return { ok: true, clasesResueltas }
 }
