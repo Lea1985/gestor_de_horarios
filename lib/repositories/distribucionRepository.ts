@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
+import type { Db } from "@/lib/types/db"
 function parseDate(value: unknown): Date | null {
   if (!value) return null
   const d = new Date(value as string)
@@ -109,8 +110,8 @@ listar(tenantId: number) {
   // estaba. Forzarlo a ACTIVO acá rompería el invariante de "una sola
   // versión ACTIVO por asignación" si mientras tanto se creó una versión
   // nueva (ver la guarda YaExisteActivaError en reactivarDistribucion.ts).
-  async reactivar(id: number, tenantId: number) {
-    return prisma.distribucionHoraria.update({
+  async reactivar(id: number, tenantId: number, db: Db = prisma) {
+    return db.distribucionHoraria.update({
       where: { id },
       data: { activo: true, deletedAt: null },
     })
@@ -213,33 +214,36 @@ listar(tenantId: number) {
       data,
     })
   },
-  async eliminar(id: number, tenantId: number) {
-    const existente = await prisma.distribucionHoraria.findFirst({
+  async eliminar(id: number, tenantId: number, db: Db = prisma) {
+    const existente = await db.distribucionHoraria.findFirst({
       where: { id, institucionId: tenantId },
       select: { id: true, deletedAt: true },
     })
     if (!existente)          return { ok: true, deleted: false }
     if (existente.deletedAt) return { ok: true, deleted: false }
-    await prisma.distribucionHoraria.update({
+    await db.distribucionHoraria.update({
       where: { id },
       data: { deletedAt: new Date(), activo: false },
     })
     return { ok: true, deleted: true }
   },
+  // Con db transaccional, el reemplazo de módulos corre en la transacción
+  // del llamador; con el prisma global abre la suya.
   async asignarModulos(
     distribucionId: number,
     tenantId: number,
-    modulos: number[]
+    modulos: number[],
+    db: Db = prisma
   ) {
     const modulosUnicos = [...new Set(modulos.map(Number))]
     if (modulosUnicos.some(isNaN)) return null
-    const distribucion = await prisma.distribucionHoraria.findFirst({
+    const distribucion = await db.distribucionHoraria.findFirst({
       where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
       select: { id: true },
     })
     if (!distribucion) return null
     if (modulosUnicos.length > 0) {
-      const modulosValidos = await prisma.moduloHorario.findMany({
+      const modulosValidos = await db.moduloHorario.findMany({
         where: {
           id: { in: modulosUnicos },
           institucionId: tenantId,
@@ -249,7 +253,7 @@ listar(tenantId: number) {
       })
       if (modulosValidos.length !== modulosUnicos.length) return null
     }
-    return prisma.$transaction(async (tx) => {
+    const reemplazar = async (tx: Db) => {
       await tx.distribucionModulo.deleteMany({
         where: { distribucionHorariaId: distribucionId },
       })
@@ -265,7 +269,8 @@ listar(tenantId: number) {
         where: { distribucionHorariaId: distribucionId },
         include: { moduloHorario: true },
       })
-    })
+    }
+    return "$transaction" in db ? db.$transaction(reemplazar) : reemplazar(db)
   },
   parseDate,
 }

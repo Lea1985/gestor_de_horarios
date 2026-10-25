@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
+import type { Db } from "@/lib/types/db"
 const includeBase = {
   unidad: true,
   materia: {
@@ -158,8 +159,9 @@ export const asignacionRepository = {
       include: includeBase,
     })
   },
-  async softDelete(id: number, tenantId: number) {
-    const existente = await prisma.asignacion.findFirst({
+  // Con db transaccional corre en la transacción del llamador.
+  async softDelete(id: number, tenantId: number, db: Db = prisma) {
+    const existente = await db.asignacion.findFirst({
       where: {
         id,
         institucionId: tenantId,
@@ -171,8 +173,8 @@ export const asignacionRepository = {
       throw new Error("Asignación no encontrada")
     }
     const ahora = new Date()
-    return prisma.$transaction([
-      prisma.titularAsignacion.updateMany({
+    const aplicar = async (tx: Db) => [
+      await tx.titularAsignacion.updateMany({
         where: {
           asignacionId: id,
           fecha_hasta: null,
@@ -183,7 +185,7 @@ export const asignacionRepository = {
           activo: false,
         },
       }),
-      prisma.asignacion.update({
+      await tx.asignacion.update({
         where: { id: existente.id },
         data: {
           deletedAt: ahora,
@@ -191,7 +193,8 @@ export const asignacionRepository = {
           estado: "INACTIVO",
         },
       }),
-    ])
+    ] as const
+    return "$transaction" in db ? db.$transaction(aplicar) : aplicar(db)
   },
   verificarAgente(agenteId: number, tenantId: number) {
     return prisma.agente.findFirst({
@@ -257,8 +260,9 @@ export const asignacionRepository = {
       select: { id: true },
     })
   },
-  async reactivar(id: number, tenantId: number) {
-    return prisma.$transaction(async (tx) => {
+  // Con db transaccional corre en la transacción del llamador.
+  async reactivar(id: number, tenantId: number, db: Db = prisma) {
+    const aplicar = async (tx: Db) => {
       await tx.asignacion.update({
         where: { id },
         data: {
@@ -284,6 +288,7 @@ export const asignacionRepository = {
           },
         })
       }
-    })
+    }
+    return "$transaction" in db ? db.$transaction(aplicar) : aplicar(db)
   },
 }
