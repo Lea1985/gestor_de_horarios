@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { authHeaders, BASE_URL } from "./helpers/auth"
 import { createTestTenant, prisma } from "./helpers/factories"
 import { randomUUID } from "crypto"
+import { asegurarBaseDeTest } from "./helpers/guardiaBaseTest"
 
 let headers:        Record<string, string>
 let institucionId:  number
@@ -85,6 +86,7 @@ async function destroyTestTenant(institucionId: number) {
 }
 
 beforeAll(async () => {
+  asegurarBaseDeTest()
   const tenant  = await createTestTenant()
   institucionId = tenant.institucionId
   headers       = authHeaders(String(institucionId), tenant.token)
