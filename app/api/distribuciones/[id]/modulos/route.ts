@@ -5,6 +5,7 @@ import {
   DistribucionNoEncontradaError,
   ModulosInvalidosError,
   FormatoModulosInvalidoError,
+  FechaDesdeInvalidaError,
   SinPeriodoActivoError,
 } from "@/lib/usecases/distribuciones/asignarModulos"
 
@@ -31,14 +32,17 @@ export async function POST(
 
     try {
       const result = await asignarModulos(distId, tenantId, body)
-      // Si el servicio devolvió requiereConfirmacion, respondemos 200 igual
-      // (no es un error, es una pregunta al frontend), pero con el flag
-      // explícito para que el cliente lo distinga de un éxito definitivo.
+      // Body: { modulos, desde?, confirmarAnulacion?, reescribirPasado?,
+      // mantenerReemplazo? }. Si el servicio devolvió requiereConfirmacion
+      // (con el aviso), respondemos 200 igual (no es un error, es una
+      // pregunta al frontend), con el flag explícito para distinguirlo de
+      // un éxito definitivo.
       return Response.json(result)
     } catch (error) {
       if (
         error instanceof FormatoModulosInvalidoError ||
-        error instanceof ModulosInvalidosError
+        error instanceof ModulosInvalidosError ||
+        error instanceof FechaDesdeInvalidaError
       ) {
         return Response.json({ error: (error as Error).message }, { status: 400 })
       }
