@@ -14,7 +14,7 @@
 import { EstadoClase, Causa } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
-import { claseTermino } from "@/lib/helpers/fechaInstitucion"
+import { claseTermino, hoyLocal } from "@/lib/helpers/fechaInstitucion"
 import type { CondicionesVigentes, ResultadoResolucion } from "@/lib/types/claseProgramada"
 
 /**
@@ -74,6 +74,21 @@ export function resolverEstadoYCausa(condiciones: CondicionesVigentes): Resultad
   return { estado: EstadoClase.PROGRAMADA, causa: Causa.NINGUNA }
 }
 
+// Fecha de calendario de la clase como medianoche UTC (la representación de
+// fechas del sistema; algunas filas traen hora y se normalizan acá).
+function diaDe(fecha: Date): Date {
+  return new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()))
+}
+
+function finDelDia(dia: Date): Date {
+  return new Date(dia.getTime() + 24 * 60 * 60 * 1000 - 1)
+}
+
+// Lo eliminado deja de regir desde el día local de su deletedAt, inclusive.
+function rigeAntesDeLaBaja(dia: Date, deletedAt: Date | null): boolean {
+  return deletedAt === null || dia < hoyLocal(deletedAt)
+}
+
 /**
  * Junta el estado real de una ClaseProgramada puntual desde la base y arma
  * el objeto CondicionesVigentes que consume resolverEstadoYCausa.
@@ -91,6 +106,23 @@ export function resolverEstadoYCausa(condiciones: CondicionesVigentes): Resultad
  * cuando ninguna otra causa aplica -- reemplaza la lógica ad-hoc que antes
  * vivía en cerrarPeriodo.ts (que marcaba DICTADA sin mirar si la fecha
  * era futura, bug real confirmado el 03/08/2026).
+ *
+ * asignacionVigente: la asignación rige en la fecha de la clase -- hasta
+ * fecha_fin inclusive si existe, y si fue eliminada solo para fechas
+ * anteriores al día local de su deletedAt (el día de la baja ya no rige,
+ * igual que suspenderPorFinAsignacion desde hoy). activo=false sin deletedAt
+ * no tiene día de corte: no rige para ninguna fecha.
+ *
+ * moduloVigente: alguna versión de distribución de la asignación cuya
+ * vigencia cubre la fecha incluye el módulo de la clase. No filtra por
+ * estado/activo (las versiones viejas quedan INACTIVO pero siguen rigiendo
+ * su tramo); una versión eliminada cuenta para fechas anteriores al día
+ * local de su deletedAt. Sin módulo (jornal) no aplica.
+ *
+ * tieneIncidenciaActiva: la incidencia vinculada existe, está activa y no
+ * eliminada (incidenciaId solo es el vínculo cacheado). articuloPaga
+ * (porcentajeComputable > 0) se consulta solo si además hay evento de
+ * calendario.
  */
 export async function obtenerCondicionesVigentes(
   claseId: number,
@@ -101,10 +133,17 @@ export async function obtenerCondicionesVigentes(
     select: {
       fecha: true,
       estado: true,
-      incidenciaId: true,
+      asignacionId: true,
+      moduloId: true,
       reemplazos: { where: { activo: true }, take: 1, select: { id: true } },
       modulo:     { select: { hora_hasta: true } },
-      asignacion: { select: { turno: { select: { horaFin: true } } } },
+      asignacion: {
+        select: {
+          activo: true, deletedAt: true, fecha_fin: true,
+          turno: { select: { horaFin: true } },
+        },
+      },
+      incidencia: { select: { activo: true, deletedAt: true, codigarioItemId: true } },
     },
   })
   if (!clase) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
@@ -131,14 +170,46 @@ export async function obtenerCondicionesVigentes(
       })
     : null
 
-  // asignacionVigente, moduloVigente y articuloPaga todavía no se consultan:
-  // valores neutros que reproducen el comportamiento anterior.
+  const dia = diaDe(clase.fecha)
+  const asignacion = clase.asignacion
+  const inactivaSinBaja = !asignacion.activo && asignacion.deletedAt === null
+  const asignacionVigente =
+    !inactivaSinBaja &&
+    rigeAntesDeLaBaja(dia, asignacion.deletedAt) &&
+    (asignacion.fecha_fin === null || dia <= diaDe(asignacion.fecha_fin))
+
+  let moduloVigente = true
+  if (clase.moduloId !== null) {
+    const versiones = await prisma.distribucionHoraria.findMany({
+      where: {
+        asignacionId:         clase.asignacionId,
+        fecha_vigencia_desde: { lte: finDelDia(dia) },
+        OR: [{ fecha_vigencia_hasta: null }, { fecha_vigencia_hasta: { gte: dia } }],
+        distribucionModulos:  { some: { moduloHorarioId: clase.moduloId } },
+      },
+      select: { deletedAt: true },
+    })
+    moduloVigente = versiones.some(v => rigeAntesDeLaBaja(dia, v.deletedAt))
+  }
+
+  const tieneIncidenciaActiva =
+    clase.incidencia !== null && clase.incidencia.activo && clase.incidencia.deletedAt === null
+
+  let articuloPaga: boolean | null = null
+  if (eventoCalendario && tieneIncidenciaActiva) {
+    const item = await prisma.codigarioItem.findUnique({
+      where:  { id: clase.incidencia!.codigarioItemId },
+      select: { porcentajeComputable: true },
+    })
+    articuloPaga = item ? item.porcentajeComputable > 0 : null
+  }
+
   return {
     estadoActual:            clase.estado,
-    asignacionVigente:       true,
-    moduloVigente:           true,
-    articuloPaga:            null,
-    tieneIncidenciaActiva:   clase.incidenciaId !== null,
+    asignacionVigente,
+    moduloVigente,
+    articuloPaga,
+    tieneIncidenciaActiva,
     tieneReemplazoAsignado:  clase.reemplazos.length > 0,
     tieneEventoCalendario:   eventoCalendario !== null,
     eventoCalendarioId:      eventoCalendario?.id ?? null,

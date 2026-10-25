@@ -48,10 +48,23 @@ async function crearEscenario() {
       fecha_inicio: new Date("2026-01-01"),
     },
   })
-  const crearModulo = (dia: "JUEVES" | "VIERNES", desde: number, hasta: number) =>
-    prisma.moduloHorario.create({
+  // Toda clase con módulo tiene que pertenecer a una distribución vigente:
+  // si no, el motor la resuelve como CAMBIO_DISTRIBUCION.
+  const distribucion = await prisma.distribucionHoraria.create({
+    data: {
+      institucionId, asignacionId: asignacion.id, version: 1,
+      fecha_vigencia_desde: new Date("2026-10-19"),
+    },
+  })
+  const crearModulo = async (dia: "JUEVES" | "VIERNES", desde: number, hasta: number) => {
+    const modulo = await prisma.moduloHorario.create({
       data: { institucionId, dia_semana: dia, hora_desde: desde, hora_hasta: hasta },
     })
+    await prisma.distribucionModulo.create({
+      data: { distribucionHorariaId: distribucion.id, moduloHorarioId: modulo.id },
+    })
+    return modulo
+  }
   const crearClase = (fecha: Date, moduloId: number | null) =>
     prisma.claseProgramada.create({
       data: {

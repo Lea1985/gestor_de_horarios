@@ -94,6 +94,21 @@ beforeAll(async () => {
     data: { institucionId, dia_semana: "DOMINGO", hora_desde: 480, hora_hasta: 520 },
   })
 
+  // El módulo de la clase tiene que estar en una distribución vigente: si
+  // no, el motor la resuelve como CAMBIO_DISTRIBUCION. Se borra en cascada
+  // con la asignación.
+  const distribucion = await prisma.distribucionHoraria.create({
+    data: {
+      institucionId,
+      asignacionId,
+      version:              1,
+      fecha_vigencia_desde: new Date("2026-01-01"),
+    },
+  })
+  await prisma.distribucionModulo.create({
+    data: { distribucionHorariaId: distribucion.id, moduloHorarioId: modulo.id },
+  })
+
   // Cubre la fecha de la clase para que, sin incidencia, la resolución dé
   // PROGRAMADA/NINGUNA en vez de SUSPENDIDA/PERIODO_OPERATIVO.
   await prisma.periodoOperativo.create({

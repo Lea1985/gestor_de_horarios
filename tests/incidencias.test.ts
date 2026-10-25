@@ -161,6 +161,23 @@ beforeAll(async () => {
   })
   itemId = item.id
 
+  // El módulo de las clases tiene que estar en una distribución vigente de
+  // cada asignación: si no, el motor las resuelve como CAMBIO_DISTRIBUCION.
+  // Se borran en cascada con la asignación.
+  for (const id of [asignacionId, asignacion2Id]) {
+    const distribucion = await prisma.distribucionHoraria.create({
+      data: {
+        institucionId,
+        asignacionId:         id,
+        version:              1,
+        fecha_vigencia_desde: new Date("2026-01-01"),
+      },
+    })
+    await prisma.distribucionModulo.create({
+      data: { distribucionHorariaId: distribucion.id, moduloHorarioId: modulo.id },
+    })
+  }
+
   // Ventanas de clases para los grupos de CRUD/validación (asignacionId)
   await crearClasesEnRango(asignacionId, modulo.id, unidad.id, institucionId, "2026-08-01", "2026-08-05", clasesAsig1)
   await crearClasesEnRango(asignacionId, modulo.id, unidad.id, institucionId, "2026-09-01", "2026-09-05", clasesAsig1)
