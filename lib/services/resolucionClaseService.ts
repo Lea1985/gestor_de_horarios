@@ -5,11 +5,12 @@
 // decidir el estado final de una clase (ver invariantes de Resolución en el
 // documento de arquitectura).
 //
-// CAMBIO_DISTRIBUCION es un atajo aparte: lo decide claseProgramadaService
-// .suspenderNoVigentes() directamente, sin pasar por acá, porque ese caso
-// ya está probado en producción (asignarModulos, nuevaVersionDistribucion,
-// eliminarDistribucion). Este motor cubre las demás causas: INCIDENCIA,
-// PERIODO_OPERATIVO, CALENDARIO_ESCOLAR, NINGUNA/DICTADA.
+// Cubre todas las causas: FIN_ASIGNACION, CAMBIO_DISTRIBUCION, INCIDENCIA,
+// PERIODO_OPERATIVO, CALENDARIO_ESCOLAR y NINGUNA/DICTADA. Los atajos en
+// lote de claseProgramadaService (suspenderNoVigentes,
+// suspenderPorFinAsignacion) siguen escribiendo FIN_ASIGNACION y
+// CAMBIO_DISTRIBUCION directo hasta la reconciliación de la Fase 3; el motor
+// llega al mismo resultado cuando vuelve a resolver esas clases.
 import { EstadoClase, Causa } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
@@ -19,20 +20,38 @@ import type { CondicionesVigentes, ResultadoResolucion } from "@/lib/types/clase
 /**
  * Función pura: aplica la tabla de precedencia definida en el documento de
  * arquitectura. No toca la base ni el reloj -- recibe "fechaYaPaso" ya
- * calculado, para que siga siendo fácil de testear con tablas de casos.
+ * calculado, para que siga siendo fácil de testear con tablas de casos
+ * (tests/resolverEstadoYCausa.test.ts).
  *
  * Orden de precedencia (mayor a menor):
- *   1. INCIDENCIA           -> REEMPLAZADA (si tiene reemplazo) o SUSPENDIDA
- *   2. PERIODO_OPERATIVO    -> SUSPENDIDA (el período ya no cubre esa fecha)
- *   3. CALENDARIO_ESCOLAR   -> SUSPENDIDA
- *   4. Si nada de lo anterior aplica y la fecha ya pasó -> DICTADA
- *   5. NINGUNA              -> PROGRAMADA
- *
- * NOTA: no evalúa CAMBIO_DISTRIBUCION -- ver comentario de cabecera del
- * archivo.
+ *   1. FIN_ASIGNACION       -> SUSPENDIDA (la asignación no rige en esa fecha)
+ *   2. CAMBIO_DISTRIBUCION  -> SUSPENDIDA (el módulo no está en la distribución
+ *                              vigente en esa fecha)
+ *      1 y 2 no se aplican a una clase ya DICTADA: el hecho pasó, y
+ *      reescribirlo es tarea de la reconciliación explícita, no de una
+ *      re-resolución. Para la DICTADA se sigue evaluando desde 3.
+ *   3. INCIDENCIA           -> REEMPLAZADA (si tiene reemplazo) o SUSPENDIDA.
+ *                              Con evento de calendario y un artículo que NO
+ *                              paga, la incidencia cede y se sigue evaluando
+ *                              (queda CALENDARIO_ESCOLAR; la fila de Reemplazo
+ *                              no se toca, solo deja de estar vigente).
+ *   4. PERIODO_OPERATIVO    -> SUSPENDIDA (el período ya no cubre esa fecha)
+ *   5. CALENDARIO_ESCOLAR   -> SUSPENDIDA
+ *   6. Si nada de lo anterior aplica y la fecha ya pasó -> DICTADA
+ *   7. NINGUNA              -> PROGRAMADA
  */
 export function resolverEstadoYCausa(condiciones: CondicionesVigentes): ResultadoResolucion {
-  if (condiciones.tieneIncidenciaActiva) {
+  const yaDictada = condiciones.estadoActual === EstadoClase.DICTADA
+  if (!yaDictada && !condiciones.asignacionVigente) {
+    return { estado: EstadoClase.SUSPENDIDA, causa: Causa.FIN_ASIGNACION }
+  }
+  if (!yaDictada && !condiciones.moduloVigente) {
+    return { estado: EstadoClase.SUSPENDIDA, causa: Causa.CAMBIO_DISTRIBUCION }
+  }
+  // articuloPaga null (no consultado) cuenta como "paga": la incidencia
+  // conserva la prioridad que tenía antes de esta regla.
+  const feriadoSinPago = condiciones.tieneEventoCalendario && condiciones.articuloPaga === false
+  if (condiciones.tieneIncidenciaActiva && !feriadoSinPago) {
     return {
       estado: condiciones.tieneReemplazoAsignado ? EstadoClase.REEMPLAZADA : EstadoClase.SUSPENDIDA,
       causa:  Causa.INCIDENCIA,
@@ -81,6 +100,7 @@ export async function obtenerCondicionesVigentes(
     where: { id: claseId, institucionId: tenantId },
     select: {
       fecha: true,
+      estado: true,
       incidenciaId: true,
       reemplazos: { where: { activo: true }, take: 1, select: { id: true } },
       modulo:     { select: { hora_hasta: true } },
@@ -111,7 +131,13 @@ export async function obtenerCondicionesVigentes(
       })
     : null
 
+  // asignacionVigente, moduloVigente y articuloPaga todavía no se consultan:
+  // valores neutros que reproducen el comportamiento anterior.
   return {
+    estadoActual:            clase.estado,
+    asignacionVigente:       true,
+    moduloVigente:           true,
+    articuloPaga:            null,
     tieneIncidenciaActiva:   clase.incidenciaId !== null,
     tieneReemplazoAsignado:  clase.reemplazos.length > 0,
     tieneEventoCalendario:   eventoCalendario !== null,
@@ -136,7 +162,8 @@ export async function obtenerCondicionesVigentes(
  * es seguro porque fechaYaPaso es monótono (una vez true, sigue siendo
  * true) y pierde contra INCIDENCIA en la tabla de precedencia -- una
  * DICTADA nunca puede volver sola a PROGRAMADA, solo corregirse hacia
- * SUSPENDIDA/REEMPLAZADA si aparece una causa real.
+ * SUSPENDIDA/REEMPLAZADA si aparece una causa real. FIN_ASIGNACION y
+ * CAMBIO_DISTRIBUCION no alcanzan a una DICTADA (ver resolverEstadoYCausa).
  */
 export async function resolverClase(
   claseId: number,

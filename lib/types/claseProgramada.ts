@@ -33,6 +33,17 @@ export type RangoGeneracion = {
  * arquitectura).
  */
 export type CondicionesVigentes = {
+  // Estado persistido antes de resolver: una clase ya DICTADA no pasa a
+  // FIN_ASIGNACION ni CAMBIO_DISTRIBUCION por re-resolución (la reescritura
+  // del pasado va por la reconciliación explícita).
+  estadoActual:            EstadoClase
+  asignacionVigente:       boolean
+  // Sin módulo (cargos por jornal) no aplica: llega siempre en true.
+  moduloVigente:           boolean
+  // porcentajeComputable > 0 del artículo de la incidencia vinculada. Es
+  // null cuando no se consultó (sin evento de calendario o sin incidencia
+  // activa); con ambos, siempre es true/false.
+  articuloPaga:            boolean | null
   tieneIncidenciaActiva:   boolean
   tieneReemplazoAsignado:  boolean
   tieneEventoCalendario:   boolean
