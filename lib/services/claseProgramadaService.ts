@@ -398,11 +398,14 @@ export const claseProgramadaService = {
         where: {
           asignacionId: params.asignacionId,
           fecha: { gte: desde, lte: hasta },
-          // Sin filtro de estado: incluye también DICTADA -- una incidencia
+          // Solo clases vivas: las dadas de baja (FIN_ASIGNACION,
+          // CAMBIO_DISTRIBUCION) no se vinculan -- esas causas le ganan a la
+          // incidencia en el motor, y vincularlas solo dejaba un vínculo
+          // engañoso (bugs 4 y 16 del piloto). Incluye DICTADA: una incidencia
           // cargada el mismo día (o retroactiva) tiene que poder cubrir una
-          // clase que ya se resolvió a DICTADA. El motor la protege: mientras
-          // tenga incidenciaId seteado, INCIDENCIA gana siempre en la tabla
-          // de precedencia y nunca vuelve a devolver DICTADA.
+          // clase que ya se resolvió a DICTADA; con incidenciaId seteado,
+          // INCIDENCIA le gana a DICTADA en la tabla de precedencia.
+          causa: { notIn: [Causa.FIN_ASIGNACION, Causa.CAMBIO_DISTRIBUCION] },
         },
         select: { id: true },
       })
@@ -437,8 +440,16 @@ export const claseProgramadaService = {
    *
    * El llamador debe volver a resolver cada clase devuelta (normalmente
    * vía resolverClase) para que el estado/causa reflejen el vínculo nuevo.
+   *
+   * Las DICTADA vinculadas solo pierden el vínculo (incidenciaId = null, sin
+   * reclamante): no se devuelven ni cambian de estado -- antes se excluían
+   * y quedaban ligadas a una incidencia eliminada.
    */
   async desvincularIncidencia(incidenciaId: number): Promise<{ ids: number[] }> {
+    await prisma.claseProgramada.updateMany({
+      where: { incidenciaId, estado: EstadoClase.DICTADA },
+      data:  { incidenciaId: null },
+    })
     const clases = await prisma.claseProgramada.findMany({
       where: { incidenciaId, estado: { not: EstadoClase.DICTADA } },
       select: { id: true, fecha: true, asignacionId: true },
