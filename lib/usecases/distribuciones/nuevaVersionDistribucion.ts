@@ -1,8 +1,12 @@
 // lib/usecases/distribuciones/nuevaVersionDistribucion.ts
 import prisma from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
-import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
-import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { distribucionRepository } from "@/lib/repositories/distribucionRepository"
+import {
+  reconciliarAsignacion,
+  RequiereConfirmacionError,
+  OPCIONES_TRANSACCION,
+} from "@/lib/services/reconciliacionService"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class DistribucionNoEncontradaError extends Error {
   constructor() { super("Distribución no encontrada") }
@@ -15,90 +19,61 @@ export class DistribucionNoEncontradaError extends Error {
 export class VersionEnConflictoError extends Error {
   constructor() { super("Ya se creó una nueva versión para esta asignación -- recargá la página e intentá de nuevo.") }
 }
+export class FechaDesdeInvalidaError extends Error {
+  constructor() {
+    super("La nueva versión tiene que empezar después del inicio de la versión actual y dentro de su vigencia")
+  }
+}
 /**
- * Cierra la distribución actual (fecha_vigencia_hasta = ayer, INACTIVO) y
- * crea una nueva versión vacía (sin módulos, a asignar después vía
- * asignarModulos). Ya NO bloquea si no hay período ACTIVO — coherente con
- * el resto del sistema (crearDistribucion, asignarModulos).
+ * "Nueva versión": cierra la distribución actual el día anterior a desde
+ * (INACTIVO) y crea la versión siguiente desde esa fecha con una COPIA de
+ * sus módulos (decisión 3 del plan de la Fase 3). Crear la copia no cambia
+ * ninguna clase ni anula ningún reemplazo: el horario nuevo se carga después
+ * con "Editar" sobre la nueva versión, que rige desde su inicio.
  *
- * Gestión de clases del tramo [hoy, fin de período] de la versión VIEJA:
- *  - Si no hay período ACTIVO: no hay nada que gestionar, se cierra y listo.
- *  - Si hay período ACTIVO: se SUSPENDEN (causa CAMBIO_DISTRIBUCION) las
- *    clases futuras, con el mismo flujo de confirmación de reemplazo que
- *    usa asignarModulos y eliminarDistribucion. Se suspenden, no se borran:
- *    la nueva versión nace sin módulos (modulosNuevos: []), así que
- *    suspenderNoVigentes trata el tramo entero como "ya no vigente" y marca
- *    todo. Cuando el usuario complete la nueva versión con asignarModulos,
- *    ese mismo mecanismo va a reutilizar (no duplicar, por el @@unique) las
- *    clases que vuelvan a coincidir con los módulos nuevos.
- *  - La nueva versión arranca sin módulos, así que NO hay "clases nuevas"
- *    a las que migrar el reemplazo todavía (igual que en eliminarDistribucion).
- *    Se informa igual para que el usuario sepa que se perdió, y lo vuelva
- *    a cargar cuando asigne módulos a la nueva versión.
+ * desde: la fecha elegida (por defecto, hoy local). Tiene que ser posterior
+ * al inicio de la versión actual y no posterior a su fin, si lo tiene.
  *
- * Nunca se elimina ninguna ClaseProgramada en este flujo — la historia y
- * la identidad de cada clase se preservan, solo cambia su Estado/Causa.
+ * Todo (cierre, versión nueva, copia de módulos y reconciliación) va en una
+ * única transacción. La reconciliación es un no-op con la copia, pero corre
+ * igual: si algo no coincide, el aviso de confirmación lo muestra.
  *
- * UX-DIS-009: cerrar la vieja + calcular la próxima versión + crear la
- * nueva van dentro de un único prisma.$transaction -- si algo falla a
- * mitad de camino (ej. se corta la conexión), ya no puede quedar la
- * asignación sin ninguna distribución ACTIVO (la vieja cerrada, la nueva
- * nunca creada). La suspensión de clases (suspenderNoVigentes) queda
- * deliberadamente afuera de esta transacción: claseProgramadaService no
- * acepta hoy un cliente de transacción (lo usan también asignarModulos y
- * eliminarDistribucion, tocarlo es un cambio de mayor alcance), y es una
- * operación idempotente/autocorregible -- un updateMany dirigido; si el
- * swap de versión fallara después, reintentar todo el flujo no duplica
- * nada. El riesgo real que describía la tarea era la asignación sin
- * versión ACTIVO, no la suspensión en sí.
+ * UX-DIS-009: el P2002 de @@unique([asignacionId, version]) (doble click,
+ * dos pestañas) se traduce a VersionEnConflictoError.
  */
 export async function nuevaVersionDistribucion(
   distribucionId: number,
   tenantId: number,
-  body?: { mantenerReemplazo?: boolean }
+  body?: {
+    desde?:              string
+    confirmarAnulacion?: boolean
+    reescribirPasado?:   boolean
+    mantenerReemplazo?:  boolean
+  }
 ) {
   const actual = await prisma.distribucionHoraria.findFirst({
     where: { id: distribucionId, institucionId: tenantId, deletedAt: null },
-    include: { asignacion: { select: { id: true, unidadId: true, comisionId: true } } },
+    include: { distribucionModulos: { select: { moduloHorarioId: true } } },
   })
   if (!actual) throw new DistribucionNoEncontradaError()
-  const periodo = await periodoOperativoRepository.obtenerVigente(tenantId)
-  let clasesSuspendidas = 0
-  let avisoReemplazoNoAplica = false
-  if (periodo) {
-    const hoy = hoyLocal()
-    const hasta = periodo.fecha_hasta
-    if (hoy <= hasta) {
-      const tramos = await claseProgramadaService.resolverCoberturaDelTramo({
-        asignacionId: actual.asignacion.id, desde: hoy, hasta,
-      })
-      if (tramos.length > 0 && body?.mantenerReemplazo === undefined) {
-        return { ok: false, requiereConfirmacion: true, tramos }
-      }
-      const r = await claseProgramadaService.suspenderNoVigentes({
-        institucionId: tenantId,
-        asignacionId:  actual.asignacion.id,
-        unidadId:      actual.asignacion.unidadId,
-        comisionId:    actual.asignacion.comisionId,
-        modulosNuevos: [], // la nueva versión nace vacía, todo el tramo queda no-vigente
-        desde: hoy, hasta,
-      })
-      clasesSuspendidas = r.suspendidas
-      avisoReemplazoNoAplica = body?.mantenerReemplazo === true && tramos.length > 0
-    }
+  let desde = hoyLocal()
+  if (body?.desde !== undefined) {
+    const pedido = distribucionRepository.parseDate(body.desde)
+    if (!pedido) throw new FechaDesdeInvalidaError()
+    desde = pedido
   }
-  const hoy = hoyLocal()
-  const ayerFin = new Date(hoy)
-  ayerFin.setUTCDate(ayerFin.getUTCDate() - 1)
-  ayerFin.setUTCHours(23, 59, 59, 999)
-  let nueva
+  if (desde <= actual.fecha_vigencia_desde) throw new FechaDesdeInvalidaError()
+  if (actual.fecha_vigencia_hasta && desde > actual.fecha_vigencia_hasta) throw new FechaDesdeInvalidaError()
+  const cierre = new Date(desde)
+  cierre.setUTCDate(cierre.getUTCDate() - 1)
+  cierre.setUTCHours(23, 59, 59, 999)
   try {
-    nueva = await prisma.$transaction(async (tx) => {
+    const { nueva, reconciliacion } = await prisma.$transaction(async (tx) => {
       // Cerrar la distribución actual
       await tx.distribucionHoraria.update({
         where: { id: distribucionId },
         data: {
-          fecha_vigencia_hasta: ayerFin,
+          fecha_vigencia_hasta: cierre,
           estado:               "INACTIVO",
           activo:               false,
         },
@@ -110,28 +85,48 @@ export async function nuevaVersionDistribucion(
         select:  { version: true },
       })
       const nuevaVersion = (ultima?.version ?? 0) + 1
-      // Crear nueva distribución sin módulos
-      return tx.distribucionHoraria.create({
+      // Crear la nueva versión con una copia de los módulos de la actual
+      const nueva = await tx.distribucionHoraria.create({
         data: {
           institucionId:        tenantId,
           asignacionId:         actual.asignacionId,
           version:              nuevaVersion,
-          fecha_vigencia_desde: hoy,
+          fecha_vigencia_desde: desde,
           estado:               "ACTIVO",
         },
       })
-    })
+      if (actual.distribucionModulos.length > 0) {
+        await tx.distribucionModulo.createMany({
+          data: actual.distribucionModulos.map(dm => ({
+            distribucionHorariaId: nueva.id,
+            moduloHorarioId:       dm.moduloHorarioId,
+          })),
+        })
+      }
+      const reconciliacion = await reconciliarAsignacion({
+        tenantId,
+        asignacionId:       actual.asignacionId,
+        desde,
+        confirmarAnulacion: body?.confirmarAnulacion,
+        reescribirDictadas: body?.reescribirPasado,
+        mantenerReemplazo:  body?.mantenerReemplazo,
+      }, tx)
+      return { nueva, reconciliacion }
+    }, OPCIONES_TRANSACCION)
+    return {
+      ok:             true,
+      nuevaVersionId: nueva.id,
+      version:        nueva.version,
+      desde:          desde.toISOString().slice(0, 10),
+      ...reconciliacion,
+    }
   } catch (error) {
+    if (error instanceof RequiereConfirmacionError) {
+      return { ok: false, requiereConfirmacion: true, aviso: error.aviso }
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       throw new VersionEnConflictoError()
     }
     throw error
-  }
-  return {
-    ok:             true,
-    nuevaVersionId: nueva.id,
-    version:        nueva.version,
-    clasesSuspendidas,
-    avisoReemplazoNoAplica,
   }
 }

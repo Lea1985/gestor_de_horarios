@@ -4,6 +4,7 @@ import {
   nuevaVersionDistribucion,
   DistribucionNoEncontradaError,
   VersionEnConflictoError,
+  FechaDesdeInvalidaError,
 } from "@/lib/usecases/distribuciones/nuevaVersionDistribucion"
 function parseId(id: string) {
   const n = Number(id)
@@ -17,9 +18,14 @@ export async function POST(
   const distId = parseId(id)
   if (!distId) return Response.json({ error: "ID inválido" }, { status: 400 })
   return withContext(req, async ({ tenantId }) => {
-    // Body opcional: sin body = primer intento (puede volver
-    // requiereConfirmacion). Con { mantenerReemplazo } = confirmación.
-    let body: { mantenerReemplazo?: boolean } = {}
+    // Body opcional: { desde?, confirmarAnulacion?, reescribirPasado?,
+    // mantenerReemplazo? }. Sin desde, la nueva versión rige desde hoy.
+    let body: {
+      desde?:              string
+      confirmarAnulacion?: boolean
+      reescribirPasado?:   boolean
+      mantenerReemplazo?:  boolean
+    } = {}
     try {
       const text = await req.text()
       if (text) body = JSON.parse(text)
@@ -32,6 +38,9 @@ export async function POST(
     } catch (error) {
       if (error instanceof DistribucionNoEncontradaError) {
         return Response.json({ error: error.message }, { status: 404 })
+      }
+      if (error instanceof FechaDesdeInvalidaError) {
+        return Response.json({ error: error.message }, { status: 400 })
       }
       // UX-DIS-009: doble click / dos pestañas creando versión al mismo
       // tiempo -- el @@unique de la DB ya lo protegía; esto solo evita
