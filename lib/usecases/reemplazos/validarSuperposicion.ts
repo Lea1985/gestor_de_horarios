@@ -1,12 +1,14 @@
 // lib/usecases/reemplazos/validarSuperposicion.ts
 import prisma from "@/lib/prisma"
+import type { Db } from "@/lib/types/db"
 
 export async function validarSuperposicionSuplente(
   claseId: number,
   agenteSuplenteId: number,
-  tenantId: number
+  tenantId: number,
+  db: Db = prisma
 ): Promise<boolean> {
-  const clase = await prisma.claseProgramada.findFirst({
+  const clase = await db.claseProgramada.findFirst({
     where: {
       id: claseId,
       institucionId: tenantId,
@@ -17,7 +19,7 @@ export async function validarSuperposicionSuplente(
     },
   })
   if (!clase) return false
-  const titularidades = await prisma.titularAsignacion.findMany({
+  const titularidades = await db.titularAsignacion.findMany({
     where: {
       agenteId: agenteSuplenteId,
       institucionId: tenantId,
@@ -30,7 +32,7 @@ export async function validarSuperposicionSuplente(
   })
   const asignacionIds = titularidades.map(t => t.asignacionId)
   if (asignacionIds.length === 0) return false
-  const conflicto = await prisma.claseProgramada.findFirst({
+  const conflicto = await db.claseProgramada.findFirst({
     where: {
       asignacionId: {
         in: asignacionIds,

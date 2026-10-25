@@ -242,7 +242,8 @@ export async function obtenerCondicionesVigentes(
 export async function resolverClase(
   claseId: number,
   tenantId: number,
-  db: Db = prisma
+  db: Db = prisma,
+  opciones: { reescribirDictada?: boolean } = {}
 ): Promise<ResultadoResolucion & { actualizada: boolean }> {
   const claseActual = await db.claseProgramada.findFirst({
     where: { id: claseId, institucionId: tenantId },
@@ -250,7 +251,13 @@ export async function resolverClase(
   })
   if (!claseActual) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
 
-  const condiciones = await obtenerCondicionesVigentes(claseId, tenantId, db)
+  const vigentes = await obtenerCondicionesVigentes(claseId, tenantId, db)
+  // reescribirDictada: solo la reconciliación explícita con confirmación
+  // ("Editar" retroactivo, decisión 6) evalúa una DICTADA sin la protección
+  // contra FIN_ASIGNACION/CAMBIO_DISTRIBUCION.
+  const condiciones = opciones.reescribirDictada && vigentes.estadoActual === EstadoClase.DICTADA
+    ? { ...vigentes, estadoActual: EstadoClase.PROGRAMADA }
+    : vigentes
   const resultado = resolverEstadoYCausa(condiciones)
 
   const calendarioEscolarIdNuevo = resultado.causa === Causa.CALENDARIO_ESCOLAR
