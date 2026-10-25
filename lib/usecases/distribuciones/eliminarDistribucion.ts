@@ -1,7 +1,7 @@
 // lib/usecases/distribuciones/eliminarDistribucion.ts
 import { distribucionRepository, solapa } from "@/lib/repositories/distribucionRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
-import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
+import { reconciliarAsignacion, OPCIONES_TRANSACCION } from "@/lib/services/reconciliacionService"
 import prisma from "@/lib/prisma"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class DistribucionNoActivaError extends Error {
@@ -31,8 +31,11 @@ export class TieneIncidenciasError extends Error {
  * obtenerDistribucion.ts, que la UI usa para deshabilitar el botón antes
  * de intentar nada).
  *
- * Si pasa ambas validaciones, se suspenden (no se borran) las clases
- * futuras del tramo dentro del período ACTIVO, igual que antes.
+ * Si pasa ambas validaciones, la baja y la reconciliación de la asignación
+ * desde hoy (el día local de la baja) van en una única transacción: las
+ * clases de hoy en adelante de esa versión pasan a CAMBIO_DISTRIBUCION (o a
+ * lo que corresponda si otra versión las cubre); las anteriores no se tocan.
+ * No hay reemplazos que anular: una versión con incidencias no se elimina.
  */
 export async function eliminarDistribucion(id: number, tenantId: number) {
   const distribucion = await prisma.distribucionHoraria.findFirst({
@@ -58,17 +61,13 @@ export async function eliminarDistribucion(id: number, tenantId: number) {
     await distribucionRepository.eliminar(id, tenantId)
     return { ok: true, deleted: true, clasesSuspendidas: 0 }
   }
-  const hoy = hoyLocal()
-  const desde = hoy > periodo.fecha_desde ? hoy : periodo.fecha_desde
-  const hasta = periodo.fecha_hasta
-  const { suspendidas } = await claseProgramadaService.suspenderNoVigentes({
-    institucionId: tenantId,
-    asignacionId:  distribucion.asignacion.id,
-    unidadId:      distribucion.asignacion.unidadId,
-    comisionId:    distribucion.asignacion.comisionId,
-    modulosNuevos: [], // la distribución se elimina por completo, nada queda vigente
-    desde, hasta,
-  })
-  await distribucionRepository.eliminar(id, tenantId)
-  return { ok: true, deleted: true, clasesSuspendidas: suspendidas }
+  const r = await prisma.$transaction(async (tx) => {
+    await distribucionRepository.eliminar(id, tenantId, tx)
+    return reconciliarAsignacion({
+      tenantId,
+      asignacionId: distribucion.asignacion.id,
+      desde:        hoyLocal(),
+    }, tx)
+  }, OPCIONES_TRANSACCION)
+  return { ok: true, deleted: true, clasesSuspendidas: r.clasesActualizadas }
 }
