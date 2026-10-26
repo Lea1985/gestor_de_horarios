@@ -17,6 +17,11 @@
 //  3. Anula los reemplazos activos de clases de hoy en adelante que dejaron de
 //     existir (FIN_ASIGNACION, CAMBIO_DISTRIBUCION), con confirmación
 //     (confirmarAnulacion). Los de fechas pasadas se conservan.
+//  Lo ya terminado no se reescribe por un cambio que rige desde hoy: con
+//  desde >= hoy y sin reescribirDictadas, las clases de hoy cuyo horario ya
+//  terminó (claseTermino) no se generan ni se tocan (ni estado ni
+//  reemplazos), salvo PROGRAMADA -> DICTADA, el paso del tiempo. Todo se
+//  decide con un único "ahora", tomado al inicio.
 //  4. Con mantenerReemplazo, cubre con el suplente de la licencia las clases
 //     nuevas o revividas de esa licencia, solo si tenía un único suplente y
 //     sin superposición. Las que quedan sin cobertura se listan.
@@ -27,7 +32,7 @@
 import prisma from "@/lib/prisma"
 import { EstadoClase, Causa } from "@prisma/client"
 import type { Db } from "@/lib/types/db"
-import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
+import { claseTermino, hoyLocal } from "@/lib/helpers/fechaInstitucion"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
@@ -130,14 +135,20 @@ function ultimoDiaQueRige(a: { activo: boolean; deletedAt: Date | null; fecha_fi
 
 async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<ResultadoReconciliacion> {
   const { tenantId, asignacionId } = params
-  const hoy = hoyLocal()
+  const ahora = new Date()
+  const hoy = hoyLocal(ahora)
   const desde = diaDe(params.desde)
+  const protegerTerminadas = desde >= hoy && !params.reescribirDictadas
 
   const asignacion = await tx.asignacion.findFirst({
     where:  { id: asignacionId, institucionId: tenantId },
-    select: { id: true, unidadId: true, comisionId: true, activo: true, deletedAt: true, fecha_fin: true },
+    select: {
+      id: true, unidadId: true, comisionId: true, activo: true, deletedAt: true, fecha_fin: true,
+      turno: { select: { horaFin: true } },
+    },
   })
   if (!asignacion) throw new AsignacionNoEncontradaError()
+  const horaTurno = asignacion.turno?.horaFin ?? null
 
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId, tx)
   const hasta = params.hasta ? diaDe(params.hasta) : periodo ? diaDe(periodo.fecha_hasta) : null
@@ -172,7 +183,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
         periodoId:      periodo.id,
         desde: gDesde,
         hasta: gHasta,
-      }, tx)
+      }, tx, { ahora, omitirTerminadas: protegerTerminadas })
       idsNuevas.push(...r.ids)
     }
   }
@@ -189,6 +200,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
     where:   { asignacionId, fecha: rangoFechas, id: { notIn: idsNuevas } },
     select: {
       id: true, fecha: true, moduloId: true, estado: true, causa: true,
+      modulo: { select: { hora_hasta: true } },
       reemplazos: {
         where: { activo: true }, take: 1,
         select: { id: true, agenteSuplenteId: true, agenteSuplente: { select: { nombre: true, apellido: true } } },
@@ -200,9 +212,21 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
   const dictadasAReescribir: DictadaAReescribir[] = []
   const pasadasAReescribir: PasadaAReescribir[] = []
   const idsRevividas: number[] = []
+  const idsProtegidas: number[] = []
   for (const c of existentes) {
+    if (protegerTerminadas && claseTermino({ fecha: c.fecha, horaHasta: c.modulo?.hora_hasta ?? horaTurno, ahora })) {
+      idsProtegidas.push(c.id)
+      if (c.estado === EstadoClase.PROGRAMADA) {
+        await tx.claseProgramada.update({
+          where: { id: c.id },
+          data:  { estado: EstadoClase.DICTADA, causa: Causa.NINGUNA, versionResolucion: { increment: 1 } },
+        })
+        clasesActualizadas++
+      }
+      continue
+    }
     const dictada = c.estado === EstadoClase.DICTADA
-    const r = await resolverClase(c.id, tenantId, tx, { reescribirDictada: dictada })
+    const r = await resolverClase(c.id, tenantId, tx, { reescribirDictada: dictada, ahora })
     if (!r.actualizada) continue
     clasesActualizadas++
     const afectada = { claseId: c.id, fecha: iso(c.fecha), moduloId: c.moduloId, estado: r.estado, causa: r.causa }
@@ -225,6 +249,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
   const muertasConReemplazo = await tx.claseProgramada.findMany({
     where: {
       asignacionId,
+      id:         { notIn: idsProtegidas },
       fecha:      hasta ? { gte: maximo(desde, hoy), lte: finDelDia(hasta) } : { gte: maximo(desde, hoy) },
       causa:      { in: CAUSAS_MUERTAS },
       reemplazos: { some: { activo: true } },
@@ -267,7 +292,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
   if (anulados.length > 0) {
     await tx.reemplazo.updateMany({
       where: { id: { in: anulados.map(r => r.reemplazoId) } },
-      data:  { activo: false, deletedAt: new Date() },
+      data:  { activo: false, deletedAt: ahora },
     })
   }
 
@@ -321,7 +346,7 @@ async function reconciliarEn(params: ParametrosReconciliacion, tx: Db): Promise<
         activo:              true,
       },
     })
-    await resolverClase(c.id, tenantId, tx)
+    await resolverClase(c.id, tenantId, tx, { ahora })
     reemplazosMantenidos++
   }
 

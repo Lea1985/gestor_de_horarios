@@ -1,6 +1,6 @@
 // lib/usecases/asignaciones/eliminarAsignacion.ts
 import { asignacionRepository } from "@/lib/repositories/asignacionRepository"
-import { reconciliarAsignacion, OPCIONES_TRANSACCION } from "@/lib/services/reconciliacionService"
+import { reconciliarAsignacion, OPCIONES_TRANSACCION, RequiereConfirmacionError } from "@/lib/services/reconciliacionService"
 import prisma from "@/lib/prisma"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 
@@ -43,11 +43,19 @@ export async function eliminarAsignacion(id: number, tenantId: number) {
   // reconciliación van en una única transacción. La baja rige desde el día
   // local de su deletedAt (hoy), inclusive: las clases de hoy en adelante
   // pasan a FIN_ASIGNACION y las anteriores no se tocan. Sin incidencias ni
-  // reemplazos activos posibles acá (bloqueado arriba).
-  const r = await prisma.$transaction(async (tx) => {
-    await asignacionRepository.softDelete(id, tenantId, tx)
-    return reconciliarAsignacion({ tenantId, asignacionId: id, desde: hoyLocal() }, tx)
-  }, OPCIONES_TRANSACCION)
-
-  return { ok: true, deleted: true, clasesSuspendidas: r.clasesActualizadas }
+  // reemplazos activos posibles acá (bloqueado arriba). Si aun así la baja
+  // cambiara clases ya dictadas, se revierte y se devuelve el aviso, igual
+  // que en las demás operaciones (la ruta responde 409).
+  try {
+    const r = await prisma.$transaction(async (tx) => {
+      await asignacionRepository.softDelete(id, tenantId, tx)
+      return reconciliarAsignacion({ tenantId, asignacionId: id, desde: hoyLocal() }, tx)
+    }, OPCIONES_TRANSACCION)
+    return { ok: true, deleted: true, clasesSuspendidas: r.clasesActualizadas }
+  } catch (error) {
+    if (error instanceof RequiereConfirmacionError) {
+      return { ok: false, requiereConfirmacion: true, aviso: error.aviso }
+    }
+    throw error
+  }
 }

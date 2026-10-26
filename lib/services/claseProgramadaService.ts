@@ -19,6 +19,7 @@ import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRep
 import type { RangoGeneracion } from "@/lib/types/claseProgramada"
 import type { Db } from "@/lib/types/db"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
+import { claseTermino } from "@/lib/helpers/fechaInstitucion"
 
 export class RangoInvalidoError extends Error {
   constructor() { super("desde debe ser menor o igual a hasta") }
@@ -43,11 +44,17 @@ export const claseProgramadaService = {
    * desvincularIncidencia) y pasa por el motor, que decide su estado/causa
    * final -- antes nacían sin licencia y PROGRAMADA (bug 3 del piloto).
    * Con db, todo corre dentro de la transacción del llamador.
+   *
+   * opciones (solo la reconciliación las usa): ahora es el instante de la
+   * operación, para el motor y el filtro; con omitirTerminadas no se crean
+   * las clases cuyo horario ya terminó (claseTermino: módulo, si no el turno,
+   * si no el fin del día) -- un cambio que rige desde hoy no inventa clases
+   * dictadas en horarios que ya pasaron.
    */
   async generarParaRango(params: RangoGeneracion & {
     distribucionId: number
     periodoId:      number
-  }, db: Db = prisma) {
+  }, db: Db = prisma, opciones: { ahora?: Date; omitirTerminadas?: boolean } = {}) {
     const { institucionId, asignacionId, unidadId, comisionId, distribucionId, periodoId } = params
     const { desde, hasta } = normalizarRango(params.desde, params.hasta)
     const vacio = { creadas: 0, saltadasPorExistentes: 0, ids: [] as number[] }
@@ -66,7 +73,7 @@ export const claseProgramadaService = {
       institucionId, periodoId, desde, hasta, db
     )
 
-    const clases = generarClases({
+    const generadas = generarClases({
       institucionId,
       asignacionId,
       unidadId,
@@ -77,6 +84,21 @@ export const claseProgramadaService = {
       hasta,
       diasSuspendidos: feriados,
     })
+    let clases = generadas
+    if (opciones.omitirTerminadas) {
+      const ahora = opciones.ahora ?? new Date()
+      const horaPorModulo = new Map(modulos.map(m => [m.id, m.hora_hasta]))
+      const asignacion = await db.asignacion.findUnique({
+        where:  { id: asignacionId },
+        select: { turno: { select: { horaFin: true } } },
+      })
+      const horaTurno = asignacion?.turno?.horaFin ?? null
+      clases = generadas.filter(c => !claseTermino({
+        fecha:     c.fecha,
+        horaHasta: (c.moduloId !== null ? horaPorModulo.get(c.moduloId) : undefined) ?? horaTurno,
+        ahora,
+      }))
+    }
 
     if (clases.length === 0) return vacio
 
@@ -108,7 +130,7 @@ export const claseProgramadaService = {
         await db.claseProgramada.updateMany({ where: { id: { in: ids } }, data: { incidenciaId } })
       }
       for (const clase of creadas) {
-        await resolverClase(clase.id, institucionId, db)
+        await resolverClase(clase.id, institucionId, db, { ahora: opciones.ahora })
       }
     }
 

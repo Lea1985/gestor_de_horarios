@@ -103,7 +103,10 @@ export async function DELETE(
 
   return withContext(req, async ({ tenantId }) => {
     try {
-      return Response.json(await eliminarAsignacion(id, tenantId))
+      const result = await eliminarAsignacion(id, tenantId)
+      // La baja cambiaría clases ya dictadas: no se aplicó nada.
+      if ("requiereConfirmacion" in result) return Response.json(result, { status: 409 })
+      return Response.json(result)
     } catch (error) {
       if (error instanceof TieneIncidenciasActivasError) {
         return Response.json({ error: error.message }, { status: 409 })

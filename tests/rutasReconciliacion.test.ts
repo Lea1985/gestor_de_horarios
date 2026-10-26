@@ -3,7 +3,9 @@
 // Rutas de la Fase 3c: POST /api/distribuciones/[id]/modulos y
 // /api/distribuciones/[id]/nueva-version aceptan desde (400 si es inválido) y
 // devuelven el aviso de confirmación de la reconciliación (200 con
-// requiereConfirmacion, sin aplicar nada).
+// requiereConfirmacion, sin aplicar nada). DELETE /api/asignaciones/[id] y
+// /api/distribuciones/[id] responden 409 con el mismo aviso cuando la baja
+// cambiaría clases ya dictadas.
 //
 // HTTP contra el servidor de tests (TEST_BASE_URL, puerto 3100 verificado
 // contra gestor_test), con el reloj real: las aserciones no dependen de la
@@ -20,6 +22,9 @@ let institucionId: number
 let distribucionId: number
 let lunes: number
 let martes: number
+let unidadId: number
+let turnoId: number
+let comisionId: number
 
 const hace = (dias: number) => {
   const f = new Date()
@@ -29,6 +34,27 @@ const hace = (dias: number) => {
 
 const post = (ruta: string, body: unknown) =>
   fetch(`${BASE_URL}${ruta}`, { method: "POST", headers, body: JSON.stringify(body) })
+const borrar = (ruta: string) => fetch(`${BASE_URL}${ruta}`, { method: "DELETE", headers })
+
+// Asignación con los lunes y una clase futura marcada DICTADA: la baja la
+// reescribiría, así que tiene que pedir confirmación.
+async function asignacionConDictadaFutura() {
+  const asignacion = await prisma.asignacion.create({
+    data: {
+      institucionId, unidadId, turnoId, comisionId,
+      identificadorEstructural: `BAJA-${randomUUID()}`, fecha_inicio: new Date(hace(90)),
+    },
+  })
+  const dist = await prisma.distribucionHoraria.create({
+    data: { institucionId, asignacionId: asignacion.id, version: 1, fecha_vigencia_desde: new Date(hace(30)) },
+  })
+  expect((await post(`/distribuciones/${dist.id}/modulos`, { modulos: [lunes] })).status).toBe(200)
+  const futura = await prisma.claseProgramada.findFirst({
+    where: { asignacionId: asignacion.id, fecha: { gt: new Date(hace(-1)) } }, orderBy: { fecha: "asc" },
+  })
+  await prisma.claseProgramada.update({ where: { id: futura!.id }, data: { estado: "DICTADA", causa: "NINGUNA" } })
+  return { asignacionId: asignacion.id, distribucionId: dist.id }
+}
 
 describe("rutas de distribución con reconciliación", () => {
   beforeAll(async () => {
@@ -40,6 +66,9 @@ describe("rutas de distribución con reconciliación", () => {
     const unidad = await prisma.unidadOrganizativa.create({ data: { institucionId, codigoUnidad: 1, nombre: `U-${randomUUID()}` } })
     const curso = await prisma.curso.create({ data: { institucionId, nombre: `Curso-${randomUUID()}` } })
     const comision = await prisma.comision.create({ data: { institucionId, cursoId: curso.id, turnoId: turno.id, nombre: `Com-${randomUUID()}` } })
+    unidadId = unidad.id
+    turnoId = turno.id
+    comisionId = comision.id
     await prisma.periodoOperativo.create({
       data: { institucionId, nombre: `P-${randomUUID()}`, estado: "ACTIVO", fecha_desde: new Date(hace(60)), fecha_hasta: new Date(hace(-30)) },
     })
@@ -92,6 +121,30 @@ describe("rutas de distribución con reconciliación", () => {
     expect(data.aviso.clasesPasadasNuevas.length).toBeGreaterThan(0)
     const modulos = await prisma.distribucionModulo.findMany({ where: { distribucionHorariaId: distribucionId } })
     expect(modulos.map(m => m.moduloHorarioId)).toEqual([lunes])
+  })
+
+  it("Baja de asignación que reescribiría una clase dictada: 409 con requiereConfirmacion y el aviso, sin aplicar nada", async () => {
+    const { asignacionId } = await asignacionConDictadaFutura()
+    const res = await borrar(`/asignaciones/${asignacionId}`)
+    expect(res.status).toBe(409)
+    const data = await res.json()
+    expect(data.ok).toBe(false)
+    expect(data.requiereConfirmacion).toBe(true)
+    expect(data.aviso.dictadasAReescribir).toHaveLength(1)
+    const asignacion = await prisma.asignacion.findUnique({ where: { id: asignacionId } })
+    expect(asignacion?.deletedAt).toBeNull()
+  })
+
+  it("Baja de distribución que reescribiría una clase dictada: 409 con requiereConfirmacion y el aviso, sin aplicar nada", async () => {
+    const { distribucionId: id } = await asignacionConDictadaFutura()
+    const res = await borrar(`/distribuciones/${id}`)
+    expect(res.status).toBe(409)
+    const data = await res.json()
+    expect(data.ok).toBe(false)
+    expect(data.requiereConfirmacion).toBe(true)
+    expect(data.aviso.dictadasAReescribir).toHaveLength(1)
+    const dist = await prisma.distribucionHoraria.findUnique({ where: { id } })
+    expect(dist?.deletedAt).toBeNull()
   })
 
   it("Nueva versión con desde inválido (no posterior al inicio de la actual): 400", async () => {

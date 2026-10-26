@@ -53,6 +53,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   return withContext(req, async ({ tenantId }) => {
     try {
       const result = await eliminarDistribucion(distId, tenantId)
+      // La baja cambiaría clases ya dictadas: no se aplicó nada.
+      if ("requiereConfirmacion" in result) return Response.json(result, { status: 409 })
       return Response.json(result)
     } catch (error) {
       if (error instanceof DistribucionNoActivaError) return Response.json({ error: error.message }, { status: 409 })

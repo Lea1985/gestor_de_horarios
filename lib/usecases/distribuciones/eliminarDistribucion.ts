@@ -1,7 +1,7 @@
 // lib/usecases/distribuciones/eliminarDistribucion.ts
 import { distribucionRepository, solapa } from "@/lib/repositories/distribucionRepository"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
-import { reconciliarAsignacion, OPCIONES_TRANSACCION } from "@/lib/services/reconciliacionService"
+import { reconciliarAsignacion, OPCIONES_TRANSACCION, RequiereConfirmacionError } from "@/lib/services/reconciliacionService"
 import prisma from "@/lib/prisma"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 export class DistribucionNoActivaError extends Error {
@@ -61,13 +61,22 @@ export async function eliminarDistribucion(id: number, tenantId: number) {
     await distribucionRepository.eliminar(id, tenantId)
     return { ok: true, deleted: true, clasesSuspendidas: 0 }
   }
-  const r = await prisma.$transaction(async (tx) => {
-    await distribucionRepository.eliminar(id, tenantId, tx)
-    return reconciliarAsignacion({
-      tenantId,
-      asignacionId: distribucion.asignacion.id,
-      desde:        hoyLocal(),
-    }, tx)
-  }, OPCIONES_TRANSACCION)
-  return { ok: true, deleted: true, clasesSuspendidas: r.clasesActualizadas }
+  // Si la baja cambiara clases ya dictadas, se revierte y se devuelve el
+  // aviso, igual que en las demás operaciones (la ruta responde 409).
+  try {
+    const r = await prisma.$transaction(async (tx) => {
+      await distribucionRepository.eliminar(id, tenantId, tx)
+      return reconciliarAsignacion({
+        tenantId,
+        asignacionId: distribucion.asignacion.id,
+        desde:        hoyLocal(),
+      }, tx)
+    }, OPCIONES_TRANSACCION)
+    return { ok: true, deleted: true, clasesSuspendidas: r.clasesActualizadas }
+  } catch (error) {
+    if (error instanceof RequiereConfirmacionError) {
+      return { ok: false, requiereConfirmacion: true, aviso: error.aviso }
+    }
+    throw error
+  }
 }
