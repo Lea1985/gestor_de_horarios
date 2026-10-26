@@ -159,12 +159,14 @@ describe("obtenerCondicionesVigentes — condiciones leídas de la base", () => 
       expect((await condiciones(c23.id)).asignacionVigente).toBe(false)
     })
 
-    it("B5: eliminada el 22/10 a las 23:30 AR (ya 23/10 en UTC) -> el corte es el día local 22/10", async () => {
+    it("B5: eliminada el 22/10 a las 23:30 AR (ya 23/10 en UTC) -> el corte es el día local 22/10; la clase de ese día ya había terminado (fin de turno 12:00) y rige", async () => {
       const a = await nuevaAsignacion({ activo: false, deletedAt: new Date("2026-10-23T02:30:00.000Z") })
       const c21 = await nuevaClase(a.id, d("2026-10-21"), null)
       const c22 = await nuevaClase(a.id, d("2026-10-22"), null)
+      const c23 = await nuevaClase(a.id, d("2026-10-23"), null)
       expect((await condiciones(c21.id)).asignacionVigente).toBe(true)
-      expect((await condiciones(c22.id)).asignacionVigente).toBe(false)
+      expect((await condiciones(c22.id)).asignacionVigente).toBe(true)
+      expect((await condiciones(c23.id)).asignacionVigente).toBe(false)
     })
 
     it("B6: eliminada y reactivada -> vigente otra vez", async () => {
@@ -200,14 +202,19 @@ describe("obtenerCondicionesVigentes — condiciones leídas de la base", () => 
       expect((await condiciones(c22b.id)).moduloVigente).toBe(true)
     })
 
-    it("C2: distribución eliminada hoy -> rige el 21/10, no el 22/10", async () => {
+    it("C2: distribución eliminada hoy a las 10:00 -> rige el 21/10 y la de hoy ya terminada (8:00-8:40); no la de hoy que no terminó (14:00-14:40)", async () => {
       const a = await nuevaAsignacion()
-      const dist = await nuevaDistribucion(a.id, { desde: d("2026-03-01"), modulos: [moduloA] })
+      const moduloTarde = (await prisma.moduloHorario.create({
+        data: { institucionId, dia_semana: "JUEVES", hora_desde: 840, hora_hasta: 880 },
+      })).id
+      const dist = await nuevaDistribucion(a.id, { desde: d("2026-03-01"), modulos: [moduloA, moduloTarde] })
       const c21 = await nuevaClase(a.id, d("2026-10-21"), moduloA)
       const c22 = await nuevaClase(a.id, d("2026-10-22"), moduloA)
+      const c22tarde = await nuevaClase(a.id, d("2026-10-22"), moduloTarde)
       await distribucionRepository.eliminar(dist.id, institucionId) // deletedAt = 22/10 13:00Z
       expect((await condiciones(c21.id)).moduloVigente).toBe(true)
-      expect((await condiciones(c22.id)).moduloVigente).toBe(false)
+      expect((await condiciones(c22.id)).moduloVigente).toBe(true)
+      expect((await condiciones(c22tarde.id)).moduloVigente).toBe(false)
     })
 
     it("C3: distribución eliminada y reactivada -> rige otra vez", async () => {

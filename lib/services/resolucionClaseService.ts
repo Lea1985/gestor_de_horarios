@@ -12,7 +12,7 @@
 import { EstadoClase, Causa } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
-import { claseTermino, hoyLocal } from "@/lib/helpers/fechaInstitucion"
+import { claseTermino } from "@/lib/helpers/fechaInstitucion"
 import type { CondicionesVigentes, ResultadoResolucion } from "@/lib/types/claseProgramada"
 import type { Db } from "@/lib/types/db"
 
@@ -83,9 +83,11 @@ function finDelDia(dia: Date): Date {
   return new Date(dia.getTime() + 24 * 60 * 60 * 1000 - 1)
 }
 
-// Lo eliminado deja de regir desde el día local de su deletedAt, inclusive.
-function rigeAntesDeLaBaja(dia: Date, deletedAt: Date | null): boolean {
-  return deletedAt === null || dia < hoyLocal(deletedAt)
+// Lo eliminado sigue rigiendo para las clases que ya habían terminado en el
+// momento de la baja (días anteriores, o el mismo día con la hora de fin ya
+// pasada); para el resto deja de regir desde el día local de su deletedAt.
+function rigeEn(dia: Date, horaHasta: number | null, deletedAt: Date | null): boolean {
+  return deletedAt === null || claseTermino({ fecha: dia, horaHasta, ahora: deletedAt })
 }
 
 /**
@@ -107,9 +109,9 @@ function rigeAntesDeLaBaja(dia: Date, deletedAt: Date | null): boolean {
  * era futura, bug real confirmado el 03/08/2026).
  *
  * asignacionVigente: la asignación rige en la fecha de la clase -- hasta
- * fecha_fin inclusive si existe, y si fue eliminada solo para fechas
- * anteriores al día local de su deletedAt (el día de la baja ya no rige,
- * igual que eliminarAsignacion desde hoy). activo=false sin deletedAt
+ * fecha_fin inclusive si existe, y si fue eliminada solo para las clases que
+ * ya habían terminado al momento de la baja (el día de la baja rige para las
+ * que terminaron antes de su hora, no para las demás). activo=false sin deletedAt
  * no tiene día de corte: no rige para ninguna fecha.
  *
  * moduloVigente: alguna versión de distribución de la asignación cuya
@@ -126,7 +128,8 @@ function rigeAntesDeLaBaja(dia: Date, deletedAt: Date | null): boolean {
 export async function obtenerCondicionesVigentes(
   claseId: number,
   tenantId: number,
-  db: Db = prisma
+  db: Db = prisma,
+  ahora: Date = new Date()
 ): Promise<CondicionesVigentes> {
   const clase = await db.claseProgramada.findFirst({
     where: { id: claseId, institucionId: tenantId },
@@ -148,7 +151,6 @@ export async function obtenerCondicionesVigentes(
   })
   if (!clase) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
 
-  const ahora = new Date()
   const horaHasta = clase.modulo?.hora_hasta ?? clase.asignacion?.turno?.horaFin ?? null
 
   const periodo = await periodoOperativoRepository.obtenerVigente(tenantId, db)
@@ -175,7 +177,7 @@ export async function obtenerCondicionesVigentes(
   const inactivaSinBaja = !asignacion.activo && asignacion.deletedAt === null
   const asignacionVigente =
     !inactivaSinBaja &&
-    rigeAntesDeLaBaja(dia, asignacion.deletedAt) &&
+    rigeEn(dia, horaHasta, asignacion.deletedAt) &&
     (asignacion.fecha_fin === null || dia <= diaDe(asignacion.fecha_fin))
 
   let moduloVigente = true
@@ -189,7 +191,7 @@ export async function obtenerCondicionesVigentes(
       },
       select: { deletedAt: true },
     })
-    moduloVigente = versiones.some(v => rigeAntesDeLaBaja(dia, v.deletedAt))
+    moduloVigente = versiones.some(v => rigeEn(dia, horaHasta, v.deletedAt))
   }
 
   const tieneIncidenciaActiva =
@@ -241,7 +243,9 @@ export async function resolverClase(
   claseId: number,
   tenantId: number,
   db: Db = prisma,
-  opciones: { reescribirDictada?: boolean } = {}
+  // ahora: el instante de la operación (por defecto, el reloj), para que una
+  // reconciliación decida todo con el mismo "ahora".
+  opciones: { reescribirDictada?: boolean; ahora?: Date } = {}
 ): Promise<ResultadoResolucion & { actualizada: boolean }> {
   const claseActual = await db.claseProgramada.findFirst({
     where: { id: claseId, institucionId: tenantId },
@@ -249,7 +253,7 @@ export async function resolverClase(
   })
   if (!claseActual) throw new Error(`ClaseProgramada ${claseId} no encontrada`)
 
-  const vigentes = await obtenerCondicionesVigentes(claseId, tenantId, db)
+  const vigentes = await obtenerCondicionesVigentes(claseId, tenantId, db, opciones.ahora)
   // reescribirDictada: solo la reconciliación explícita con confirmación
   // ("Editar" retroactivo, decisión 6) evalúa una DICTADA sin la protección
   // contra FIN_ASIGNACION/CAMBIO_DISTRIBUCION.
