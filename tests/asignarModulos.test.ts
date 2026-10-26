@@ -181,4 +181,25 @@ describe("asignarModulos — Editar con reconciliación", () => {
     expect(estados(m, MARTES_FUTUROS)).toEqual(todos(5, "REEMPLAZADA/INCIDENCIA"))
     expect(MARTES_FUTUROS.every(f => m[f].reemplazos[0]?.incidenciaId === incidenciaId)).toBe(true)
   })
+
+  it("Editar sin desde en una versión que empieza en el futuro: rige desde el inicio de la versión y no hay clases antes", async () => {
+    const a = await prisma.asignacion.create({
+      data: {
+        institucionId, unidadId, turnoId, comisionId,
+        identificadorEstructural: `ASM-FUT-${randomUUID()}`, fecha_inicio: d("2026-01-01"),
+      },
+    })
+    const dist = await prisma.distribucionHoraria.create({
+      data: { institucionId, asignacionId: a.id, version: 1, fecha_vigencia_desde: d("2026-11-02") },
+    })
+    await asignarModulos(dist.id, institucionId, { modulos: [lunes] })
+
+    const r = await asignarModulos(dist.id, institucionId, { modulos: [lunes, martes] })
+
+    expect(r.ok).toBe(true)
+    expect(r.desde).toBe("2026-11-02")
+    expect(await prisma.claseProgramada.count({ where: { asignacionId: a.id, fecha: { lt: d("2026-11-02") } } })).toBe(0)
+    expect(Object.keys(await clases(a.id, lunes))[0]).toBe("2026-11-02")
+    expect(Object.keys(await clases(a.id, martes))[0]).toBe("2026-11-03")
+  })
 })
