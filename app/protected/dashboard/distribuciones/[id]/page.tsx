@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { ModalConfirmar } from "@/features/distribuciones"
+import { mensajeErrorBaja } from "@/lib/helpers/mensajeBaja"
 type Distribucion = {
   id:                    number
   version:               number
@@ -120,7 +121,7 @@ export default function EditarDistribucionPage({
         headers: authHeaders,
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? "Error eliminando"); return }
+      if (!res.ok) { setError(mensajeErrorBaja(data, "Error eliminando")); return }
       router.push("/protected/dashboard/distribuciones")
     } catch {
       setError("Error de red")

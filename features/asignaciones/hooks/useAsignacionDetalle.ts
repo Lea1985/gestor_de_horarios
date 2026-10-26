@@ -5,6 +5,7 @@ import { useAuth } from "@/app/hooks/useAuth"
 import { asignacionesService } from "../services/asignacionesService"
 import type { Agente, TitularHistorial } from "../types"
 import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
+import { mensajeErrorBaja } from "@/lib/helpers/mensajeBaja"
 
 type TitularVigente = {
   id: number
@@ -125,7 +126,7 @@ export function useAsignacionDetalle(id: string) {
       })
       if (!res.ok) {
         const d = await res.json()
-        setError(d.error ?? "Error eliminando")
+        setError(mensajeErrorBaja(d, "Error eliminando"))
         setConfirmar(false)
         return
       }

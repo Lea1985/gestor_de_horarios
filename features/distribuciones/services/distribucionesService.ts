@@ -1,6 +1,7 @@
 // features/distribuciones/services/distribucionesService.ts
 // Capa de acceso a la API REST para la feature Distribuciones.
 import type { Distribucion, Asignacion, EliminarDistribucionResult } from "../types"
+import { mensajeErrorBaja } from "@/lib/helpers/mensajeBaja"
 type CreateDistribucionPayload = {
   asignacionId:         number
   version:              number
@@ -40,7 +41,7 @@ export const distribucionesService = {
       headers,
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error ?? "Error eliminando distribución")
+    if (!res.ok) throw new Error(mensajeErrorBaja(data, "Error eliminando distribución"))
     return data
   },
 }
