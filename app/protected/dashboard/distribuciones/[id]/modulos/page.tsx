@@ -18,8 +18,9 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
     esActivo, tieneModulos, checkboxHabilitado, totalSeleccionados,
     editando, setEditando, modalVersion, setModalVersion, creandoVersion,
     confirmarEdicion, confirmarGuardarEdicion, cancelarConfirmarEdicion,
-    tramoAConfirmar, cancelarMigracion, avisoSinPeriodo,
-    tramoNuevaVersion, cancelarNuevaVersion,
+    desdeEdicion, setDesdeEdicion, fechaNuevaVersion, setFechaNuevaVersion,
+    avisoAConfirmar, cancelarMigracion, avisoSinPeriodo,
+    avisoNuevaVersion, cancelarNuevaVersion,
     toggle, toggleDia, cancelarEdicion, guardar, pedirGuardar, crearNuevaVersion,
   } = useModulosDistribucion(id)
   if (loading) return (
@@ -33,19 +34,26 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
   // la pantalla donde se origina el dato y no explicaba por qué se tildan
   // "todos los módulos del día" para estos cargos.
   const esCargoJornalizado = !!dist && !dist.asignacion.materia
+  // La nueva versión tiene que regir después del inicio de la actual.
+  const inicioDist = dist?.fecha_vigencia_desde.slice(0, 10) ?? ""
+  const minimoNuevaVersion = inicioDist
+    ? new Date(new Date(`${inicioDist}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10)
+    : ""
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", maxWidth: 900 }}>
-      {modalVersion && tramoNuevaVersion === null && (
+      {modalVersion && avisoNuevaVersion === null && (
         <ModalNuevaVersion
+          fecha={fechaNuevaVersion}
+          fechaMinima={minimoNuevaVersion}
+          onCambiarFecha={setFechaNuevaVersion}
           onConfirmar={() => crearNuevaVersion()}
           onCancelar={cancelarNuevaVersion}
           guardando={creandoVersion}
         />
       )}
-      {tramoNuevaVersion !== null && (
+      {avisoNuevaVersion !== null && (
         <ModalMigrarReemplazos
-          tramo={tramoNuevaVersion}
-          contexto="nuevaVersion"
+          aviso={avisoNuevaVersion}
           onConfirmar={(mantenerReemplazo) => crearNuevaVersion(mantenerReemplazo)}
           onCancelar={cancelarNuevaVersion}
           guardando={creandoVersion}
@@ -56,15 +64,17 @@ export default function ModulosDistribucionPage({ params }: { params: Promise<{ 
           ModalMigrarReemplazos más abajo, con su propia confirmación). */}
       {confirmarEdicion && (
         <ModalConfirmarEdicion
+          desde={desdeEdicion}
+          inicio={inicioDist}
+          onCambiarDesde={setDesdeEdicion}
           onConfirmar={confirmarGuardarEdicion}
           onCancelar={cancelarConfirmarEdicion}
           guardando={guardando}
         />
       )}
-      {tramoAConfirmar && (
+      {avisoAConfirmar && (
         <ModalMigrarReemplazos
-          tramo={tramoAConfirmar}
-          contexto="modulos"
+          aviso={avisoAConfirmar}
           onConfirmar={(mantenerReemplazo) => guardar(mantenerReemplazo)}
           onCancelar={cancelarMigracion}
           guardando={guardando}

@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/app/hooks/useAuth"
 import { modulosDistribucionService } from "../services/modulosDistribucionService"
-import type { Modulo, Distribucion, TramoReemplazo } from "../types"
+import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
+import type { Modulo, Distribucion, AvisoReconciliacion, OpcionesReconciliacion } from "../types"
 import { ORDEN_DIAS } from "../types"
 export function useModulosDistribucion(distribuidonId: string) {
   const { authHeaders } = useAuth()
@@ -28,18 +29,20 @@ export function useModulosDistribucion(distribuidonId: string) {
   // asignación de módulos a una distribución vacía no pasa por acá porque
   // ahí no hay clases previas que puedan verse afectadas.
   const [confirmarEdicion, setConfirmarEdicion] = useState(false)
-  // ── migración de reemplazos ───────────────────────────────────────────────
-  // Antes: lista de incidencias para elegir cuáles migrar (checkboxes).
-  // Ahora: un único tramo (o ninguno) — la pregunta es sí/no mantenerlo.
-  const [tramoAConfirmar, setTramoAConfirmar] = useState<TramoReemplazo | null>(null)
+  // Fase 3c — "Editar" rige por defecto desde hoy; "inicio" manda como desde
+  // el inicio de la distribución (edición retroactiva, con confirmación).
+  const [desdeEdicion, setDesdeEdicion] = useState<"hoy" | "inicio">("hoy")
+  // ── confirmación de la reconciliación ─────────────────────────────────────
+  // Aviso del backend (reemplazos a anular, clases pasadas que cambian): nada
+  // se aplicó todavía; se reintenta con la confirmación del usuario.
+  const [avisoAConfirmar, setAvisoAConfirmar] = useState<AvisoReconciliacion | null>(null)
   // Aviso informativo: se guardaron los módulos pero no hay período ACTIVO,
   // así que no se generó ninguna clase todavía (se generarán cuando se
   // active un período, vía activarPeriodo).
   const [avisoSinPeriodo, setAvisoSinPeriodo] = useState(false)
-  // Tramo a confirmar al crear una NUEVA VERSIÓN (distinto del tramo de
-  // reasignar módulos — acá nunca hay migración posible porque la versión
-  // nueva todavía no tiene módulos, solo se informa antes de perderlo).
-  const [tramoNuevaVersion, setTramoNuevaVersion] = useState<TramoReemplazo | null>(null)
+  // "Nueva versión": fecha desde la que rige (por defecto, hoy) y su aviso.
+  const [fechaNuevaVersion, setFechaNuevaVersion] = useState(() => hoyLocalISO())
+  const [avisoNuevaVersion, setAvisoNuevaVersion] = useState<AvisoReconciliacion | null>(null)
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!distribuidonId || authHeaders.Authorization === "Bearer ") return
@@ -97,25 +100,38 @@ export function useModulosDistribucion(distribuidonId: string) {
     setSeleccionados(seleccionadosOriginal)
     setEditando(false)
     setGuardado(false)
+    setDesdeEdicion("hoy")
+  }
+  // Con la respuesta del usuario al aviso se confirma todo lo que listó
+  // (anular reemplazos y reescribir el pasado); mantenerReemplazo lo elige él.
+  function opcionesConfirmadas(mantenerReemplazo?: boolean): OpcionesReconciliacion {
+    if (mantenerReemplazo === undefined) return {}
+    return { confirmarAnulacion: true, reescribirPasado: true, mantenerReemplazo }
   }
   // mantenerReemplazo: undefined = primer intento (puede volver requiereConfirmacion).
   //                     true/false = respuesta del usuario al modal.
   async function guardar(mantenerReemplazo?: boolean) {
+    if (guardando) return
     setGuardando(true)
     setError(null)
     setGuardado(false)
     try {
+      const desde = editando && desdeEdicion === "inicio" && dist
+        ? { desde: dist.fecha_vigencia_desde.slice(0, 10) }
+        : {}
       const data = await modulosDistribucionService.guardarModulos(
-        distribuidonId, seleccionados, authHeaders, mantenerReemplazo
+        distribuidonId, seleccionados, authHeaders,
+        { ...desde, ...opcionesConfirmadas(mantenerReemplazo) }
       )
       if (data.requiereConfirmacion) {
-        setTramoAConfirmar(data.tramos?.[0] ?? null)
+        setAvisoAConfirmar(data.aviso ?? null)
         return // esperamos que el usuario decida en el modal
       }
-      setTramoAConfirmar(null)
+      setAvisoAConfirmar(null)
       setAvisoSinPeriodo(!!data.avisoSinPeriodoActivo)
       setGuardado(true)
       setEditando(false)
+      setDesdeEdicion("hoy")
       setSeleccionadosOriginal(seleccionados)
       setDist(prev => prev
         ? { ...prev, distribucionModulos: seleccionados.map(id => ({ moduloHorarioId: id })) }
@@ -147,23 +163,25 @@ export function useModulosDistribucion(distribuidonId: string) {
     setConfirmarEdicion(false)
   }
   function cancelarMigracion() {
-    setTramoAConfirmar(null)
+    setAvisoAConfirmar(null)
   }
   // Primer intento: sin decisión sobre reemplazo todavía. Si el backend
-  // responde requiereConfirmacion, guardamos el tramo y esperamos a que
-  // el usuario decida (confirmarNuevaVersion) antes de seguir.
+  // responde requiereConfirmacion, guardamos el aviso y esperamos a que
+  // el usuario decida antes de seguir.
   async function crearNuevaVersion(mantenerReemplazo?: boolean) {
+    if (creandoVersion) return
     setCreandoVersion(true)
     setError(null)
     try {
       const data = await modulosDistribucionService.crearNuevaVersion(
-        distribuidonId, authHeaders, mantenerReemplazo
+        distribuidonId, authHeaders,
+        { desde: fechaNuevaVersion, ...opcionesConfirmadas(mantenerReemplazo) }
       )
       if (data.requiereConfirmacion) {
-        setTramoNuevaVersion(data.tramos?.[0] ?? null)
-        return // el modal de tramo reemplaza a ModalNuevaVersion, no navegamos
+        setAvisoNuevaVersion(data.aviso ?? null)
+        return // el modal del aviso reemplaza a ModalNuevaVersion, no navegamos
       }
-      setTramoNuevaVersion(null)
+      setAvisoNuevaVersion(null)
       setModalVersion(false)
       router.push(`/protected/dashboard/distribuciones/${data.nuevaVersionId}/modulos`)
     } catch (e) {
@@ -173,7 +191,7 @@ export function useModulosDistribucion(distribuidonId: string) {
     }
   }
   function cancelarNuevaVersion() {
-    setTramoNuevaVersion(null)
+    setAvisoNuevaVersion(null)
     setModalVersion(false)
   }
   // ── return ─────────────────────────────────────────────────────────────────
@@ -203,11 +221,15 @@ export function useModulosDistribucion(distribuidonId: string) {
     confirmarEdicion,
     confirmarGuardarEdicion,
     cancelarConfirmarEdicion,
-    // migración de reemplazos
-    tramoAConfirmar,
+    desdeEdicion,
+    setDesdeEdicion,
+    fechaNuevaVersion,
+    setFechaNuevaVersion,
+    // confirmación de la reconciliación
+    avisoAConfirmar,
     cancelarMigracion,
     avisoSinPeriodo,
-    tramoNuevaVersion,
+    avisoNuevaVersion,
     cancelarNuevaVersion,
     // acciones
     toggle,

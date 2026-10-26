@@ -9,6 +9,7 @@ export type Distribucion = {
   id:      number
   version: number
   estado:  string
+  fecha_vigencia_desde: string
   asignacion: {
     identificadorEstructural: string
     titularidades?: { agente: { nombre: string; apellido: string } }[]
@@ -30,18 +31,20 @@ export const LABEL_DIAS: Record<string, string> = {
   SABADO:    "Sábado",
   DOMINGO:   "Domingo",
 }
-// Reemplaza a IncidenciaAfectada: antes se evaluaba por incidencia
-// individual, ahora se evalúa el tramo exacto de fechas que se va a
-// recrear/eliminar en la distribución.
-export type TramoReemplazo = {
-  desde:               string
-  hasta:               string
-  totalClases:         number
-  clasesConReemplazo:  number
-  migrable:            boolean
-  suplente: {
-    asignacionTitularId: number
-    agenteSuplenteId:    number
-    nombre:              string
-  } | null
+// Aviso de la reconciliación (lib/services/reconciliacionService.ts): lo
+// que el cambio iba a producir y requiere confirmación. Nada se aplicó.
+export type ClaseAfectada = { claseId: number; fecha: string; moduloId: number | null }
+export type AvisoReconciliacion = {
+  reemplazosAAnular:   (ClaseAfectada & { reemplazoId: number; agenteSuplenteId: number; suplente: string; incidenciaId: number | null })[]
+  dictadasAReescribir: ClaseAfectada[]
+  pasadasAReescribir:  ClaseAfectada[]
+  reemplazadasPasadas: number
+  clasesPasadasNuevas: ClaseAfectada[]
+}
+// Opciones de "Editar" y "Nueva versión" (body de las rutas).
+export type OpcionesReconciliacion = {
+  desde?:              string
+  confirmarAnulacion?: boolean
+  reescribirPasado?:   boolean
+  mantenerReemplazo?:  boolean
 }

@@ -1,5 +1,5 @@
 // features/modulosDistribucion/services/modulosDistribucionService.ts
-import type { Modulo, Distribucion, TramoReemplazo } from "../types"
+import type { Modulo, Distribucion, AvisoReconciliacion, OpcionesReconciliacion } from "../types"
 
 export const modulosDistribucionService = {
   async listarModulos(headers: Record<string, string>): Promise<Modulo[]> {
@@ -18,25 +18,19 @@ export const modulosDistribucionService = {
     id: string,
     modulos: number[],
     headers: Record<string, string>,
-    mantenerReemplazo?: boolean
+    opciones: OpcionesReconciliacion = {}
   ): Promise<{
     ok: boolean
     requiereConfirmacion?: boolean
-    tramos?: TramoReemplazo[]
+    aviso?: AvisoReconciliacion
     total?: number
     clasesCreadas?: number
-    clasesSuspendidas?: number
-    reemplazosMigrados?: number
-    noMigrable?: TramoReemplazo | null
     avisoSinPeriodoActivo?: boolean
   }> {
     const res = await fetch(`/api/distribuciones/${id}/modulos`, {
       method:  "POST",
       headers,
-      body:    JSON.stringify({
-        modulos,
-        ...(mantenerReemplazo !== undefined ? { mantenerReemplazo } : {}),
-      }),
+      body:    JSON.stringify({ modulos, ...opciones }),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error ?? "Error guardando módulos")
@@ -46,22 +40,18 @@ export const modulosDistribucionService = {
   async crearNuevaVersion(
     id: string,
     headers: Record<string, string>,
-    mantenerReemplazo?: boolean
+    opciones: OpcionesReconciliacion = {}
   ): Promise<{
     ok: boolean
     nuevaVersionId?: number
     version?: number
     requiereConfirmacion?: boolean
-    tramos?: TramoReemplazo[]
-    clasesSuspendidas?: number
-    avisoReemplazoNoAplica?: boolean
+    aviso?: AvisoReconciliacion
   }> {
     const res = await fetch(`/api/distribuciones/${id}/nueva-version`, {
       method:  "POST",
       headers,
-      body: JSON.stringify(
-        mantenerReemplazo !== undefined ? { mantenerReemplazo } : {}
-      ),
+      body:    JSON.stringify(opciones),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error ?? "Error creando nueva versión")
