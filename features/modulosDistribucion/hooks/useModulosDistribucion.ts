@@ -102,11 +102,20 @@ export function useModulosDistribucion(distribuidonId: string) {
     setGuardado(false)
     setDesdeEdicion("hoy")
   }
-  // Con la respuesta del usuario al aviso se confirma todo lo que listó
-  // (anular reemplazos y reescribir el pasado); mantenerReemplazo lo elige él.
-  function opcionesConfirmadas(mantenerReemplazo?: boolean): OpcionesReconciliacion {
-    if (mantenerReemplazo === undefined) return {}
-    return { confirmarAnulacion: true, reescribirPasado: true, mantenerReemplazo }
+  // Con la respuesta del usuario al aviso se confirma solo lo que el aviso
+  // listó: anular reemplazos si traía reemplazos, reescribir el pasado si
+  // traía cambios en el pasado. mantenerReemplazo lo elige él.
+  function opcionesConfirmadas(aviso: AvisoReconciliacion | null, mantenerReemplazo?: boolean): OpcionesReconciliacion {
+    if (mantenerReemplazo === undefined || !aviso) return {}
+    const cambiaPasado =
+      aviso.dictadasAReescribir.length > 0 ||
+      aviso.pasadasAReescribir.length > 0 ||
+      aviso.clasesPasadasNuevas.length > 0
+    return {
+      ...(aviso.reemplazosAAnular.length > 0 ? { confirmarAnulacion: true } : {}),
+      ...(cambiaPasado ? { reescribirPasado: true } : {}),
+      mantenerReemplazo,
+    }
   }
   // mantenerReemplazo: undefined = primer intento (puede volver requiereConfirmacion).
   //                     true/false = respuesta del usuario al modal.
@@ -121,7 +130,7 @@ export function useModulosDistribucion(distribuidonId: string) {
         : {}
       const data = await modulosDistribucionService.guardarModulos(
         distribuidonId, seleccionados, authHeaders,
-        { ...desde, ...opcionesConfirmadas(mantenerReemplazo) }
+        { ...desde, ...opcionesConfirmadas(avisoAConfirmar, mantenerReemplazo) }
       )
       if (data.requiereConfirmacion) {
         setAvisoAConfirmar(data.aviso ?? null)
@@ -175,7 +184,7 @@ export function useModulosDistribucion(distribuidonId: string) {
     try {
       const data = await modulosDistribucionService.crearNuevaVersion(
         distribuidonId, authHeaders,
-        { desde: fechaNuevaVersion, ...opcionesConfirmadas(mantenerReemplazo) }
+        { desde: fechaNuevaVersion, ...opcionesConfirmadas(avisoNuevaVersion, mantenerReemplazo) }
       )
       if (data.requiereConfirmacion) {
         setAvisoNuevaVersion(data.aviso ?? null)

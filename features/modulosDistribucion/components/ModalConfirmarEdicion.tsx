@@ -7,16 +7,20 @@
 // hueco con un aviso previo genérico, sin conteo exacto.
 // Fase 3c — el usuario elige desde cuándo rige: hoy (por defecto) o el inicio
 // de la distribución. Si eso cambia el pasado, el backend lo avisa con el
-// detalle antes de aplicar nada (ModalMigrarReemplazos).
+// detalle antes de aplicar nada (ModalMigrarReemplazos). Si la versión
+// empieza hoy o después, las dos opciones son lo mismo: se muestra una sola.
+import { hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
+const ddmmaaaa = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/")
 type Props = {
   desde:         "hoy" | "inicio"
-  inicio:        string
+  inicio:        string // AAAA-MM-DD
   onCambiarDesde: (desde: "hoy" | "inicio") => void
   onConfirmar: () => void
   onCancelar:  () => void
   guardando:   boolean
 }
 export function ModalConfirmarEdicion({ desde, inicio, onCambiarDesde, onConfirmar, onCancelar, guardando }: Props) {
+  const unaSolaOpcion = inicio.slice(0, 10) >= hoyLocalISO()
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "var(--z-modal)" }}
@@ -34,6 +38,11 @@ export function ModalConfirmarEdicion({ desde, inicio, onCambiarDesde, onConfirm
           la nueva selección quedarán suspendidas (no se eliminan) — si volvés a incluir esos
           módulos, se recuperan automáticamente.
         </p>
+        {unaSolaOpcion ? (
+          <p style={{ marginBottom: "var(--space-6)", fontSize: "var(--text-sm)", color: "var(--color-text-primary)" }}>
+            Rige desde el inicio de la versión, {ddmmaaaa(inicio)}
+          </p>
+        ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", marginBottom: "var(--space-6)", fontSize: "var(--text-sm)", color: "var(--color-text-primary)" }}>
           <label style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", cursor: "pointer" }}>
             <input type="radio" name="desdeEdicion" checked={desde === "hoy"} onChange={() => onCambiarDesde("hoy")} disabled={guardando} />
@@ -41,9 +50,10 @@ export function ModalConfirmarEdicion({ desde, inicio, onCambiarDesde, onConfirm
           </label>
           <label style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", cursor: "pointer" }}>
             <input type="radio" name="desdeEdicion" checked={desde === "inicio"} onChange={() => onCambiarDesde("inicio")} disabled={guardando} />
-            Desde el inicio de la distribución ({new Date(inicio).toLocaleDateString("es-AR", { timeZone: "UTC" })})
+            Desde el inicio de la distribución ({ddmmaaaa(inicio)})
           </label>
         </div>
+        )}
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button
             onClick={onCancelar}
