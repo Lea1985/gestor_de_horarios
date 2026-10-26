@@ -10,7 +10,7 @@
 // TitularAsignacion, el test arma sus propios fixtures mínimos y su propia
 // limpieza, evitando esa deuda preexistente sin necesidad de tocarla.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest"
 import { randomUUID } from "crypto"
 import prisma from "../lib/prisma"
 import { EstadoClase, Causa } from "@prisma/client"
@@ -19,6 +19,16 @@ import { activarPeriodo } from "../lib/usecases/periodosOperativos/activarPeriod
 import { crearDistribucion } from "../lib/usecases/distribuciones/crearDistribucion"
 import { asignarModulos } from "../lib/usecases/distribuciones/asignarModulos"
 import { nuevaVersionDistribucion } from "../lib/usecases/distribuciones/nuevaVersionDistribucion"
+
+// Reloj fijo (solo Date): las fechas de estos escenarios son de 2026 y el
+// motor decide DICTADA/PROGRAMADA según "hoy". Antes del 1/1/2026 todo el
+// rango es futuro; el 10/6/2026 (miércoles) cae a mitad del período.
+const ANTES_DEL_PERIODO = new Date("2025-12-15T12:00:00Z")
+const MITAD_DEL_PERIODO = new Date("2026-06-10T12:00:00Z")
+function fijarReloj(fecha: Date) {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(fecha)
+}
 
 const DIA_JS = {
   LUNES: 1, MARTES: 2, MIERCOLES: 3, JUEVES: 4, VIERNES: 5, SABADO: 6, DOMINGO: 0,
@@ -157,9 +167,13 @@ describe("Disparador 1 — activarPeriodo genera clases de distribuciones vigent
     periodoId = periodo.id
   })
 
-  afterAll(() => destroyTestInstitucion(institucionId))
+  afterAll(async () => {
+    vi.useRealTimers()
+    await destroyTestInstitucion(institucionId)
+  })
 
   it("genera las clases de la distribución con módulos y reporta aparte la que no tiene módulos", async () => {
+    fijarReloj(ANTES_DEL_PERIODO)
     const resultado = await activarPeriodo(institucionId, periodoId)
 
     expect(resultado.periodo.estado).toBe("ACTIVO")
@@ -262,9 +276,13 @@ describe("Disparador 1b — activarPeriodo reconcilia clases existentes contra e
     periodoId = periodo.id
   })
 
-  afterAll(() => destroyTestInstitucion(institucionId))
+  afterAll(async () => {
+    vi.useRealTimers()
+    await destroyTestInstitucion(institucionId)
+  })
 
   it("suspende por PERIODO_OPERATIVO lo que queda fuera del nuevo rango, revierte lo que vuelve a estar dentro, y no pisa INCIDENCIA/CAMBIO_DISTRIBUCION/DICTADA", async () => {
+    fijarReloj(ANTES_DEL_PERIODO)
     const resultado = await activarPeriodo(institucionId, periodoId)
 
     expect(resultado.suspendidasPorPeriodo).toBe(2)
@@ -377,9 +395,13 @@ describe("Disparador 3 — asignarModulos y nuevaVersionDistribucion con períod
     })
   })
 
-  afterAll(() => destroyTestInstitucion(institucionId))
+  afterAll(async () => {
+    vi.useRealTimers()
+    await destroyTestInstitucion(institucionId)
+  })
 
   it("reemplaza módulos: suspende lo que ya no corresponde, genera lo nuevo, reactiva sin duplicar al volver atrás", async () => {
+    fijarReloj(ANTES_DEL_PERIODO)
     const comisionId = await crearComision(institucionId, turnoId)
     const asig = await crearAsignacion(institucionId, unidadId, turnoId, comisionId)
     const dist = await crearDistribucion(institucionId, {
@@ -396,11 +418,11 @@ describe("Disparador 3 — asignarModulos y nuevaVersionDistribucion con períod
 
     const r2 = await asignarModulos(dist.id, institucionId, { modulos: [moduloLunes.id] })
     expect(r2.clasesCreadas).toBe(0)
-    expect(r2.clasesSuspendidas).toBe(0)
+    expect(r2.clasesActualizadas).toBe(0)
     expect(await prisma.claseProgramada.count({ where: { asignacionId: asig.id } })).toBe(esperadasLunes)
 
     const r3 = await asignarModulos(dist.id, institucionId, { modulos: [moduloMartes.id] })
-    expect(r3.clasesSuspendidas).toBe(esperadasLunes)
+    expect(r3.clasesActualizadas).toBe(esperadasLunes)
     expect(r3.clasesCreadas).toBe(esperadasMartes)
 
     const lunesTrasR3 = await prisma.claseProgramada.findMany({
@@ -416,7 +438,9 @@ describe("Disparador 3 — asignarModulos y nuevaVersionDistribucion con períod
     expect(martesTrasR3.every(c => c.estado === "PROGRAMADA" && c.causa === "NINGUNA")).toBe(true)
 
     const r4 = await asignarModulos(dist.id, institucionId, { modulos: [moduloLunes.id] })
-    expect(r4.clasesSuspendidas).toBe(esperadasMartes)
+    // Desde la Fase 3 el resultado cuenta todas las clases que cambian: se
+    // suspenden las de martes y reviven las de lunes.
+    expect(r4.clasesActualizadas).toBe(esperadasMartes + esperadasLunes)
     expect(r4.clasesCreadas).toBe(0)
 
     const lunesFinal = await prisma.claseProgramada.findMany({
@@ -429,7 +453,8 @@ describe("Disparador 3 — asignarModulos y nuevaVersionDistribucion con períod
     expect(totalClases).toBe(esperadasLunes + esperadasMartes)
   })
 
-  it("nuevaVersionDistribucion cierra la versión vieja, suspende clases futuras, y la nueva versión reactiva sin duplicar al completarse", async () => {
+  it("nuevaVersionDistribucion cierra la versión vieja y la nueva copia los módulos sin suspender clases futuras ni duplicar", async () => {
+    fijarReloj(MITAD_DEL_PERIODO)
     const asig = await crearAsignacion(institucionId, unidadId, turnoId)
     const dist = await crearDistribucion(institucionId, {
       asignacionId: asig.id, version: 1, fecha_vigencia_desde: "2026-01-01",
@@ -444,7 +469,7 @@ describe("Disparador 3 — asignarModulos y nuevaVersionDistribucion con períod
 
     const rNueva = await nuevaVersionDistribucion(dist.id, institucionId)
     expect(rNueva.ok).toBe(true)
-    expect(rNueva.clasesSuspendidas).toBe(esperadasFuturas)
+    expect(rNueva.clasesActualizadas).toBe(0)
 
     const vieja = await prisma.distribucionHoraria.findUnique({ where: { id: dist.id } })
     expect(vieja?.estado).toBe("INACTIVO")
@@ -456,7 +481,7 @@ describe("Disparador 3 — asignarModulos y nuevaVersionDistribucion con períod
         estado: "SUSPENDIDA", causa: "CAMBIO_DISTRIBUCION",
       },
     })
-    expect(futurasSuspendidas).toBe(esperadasFuturas)
+    expect(futurasSuspendidas).toBe(0)
 
     const rAsignar = await asignarModulos(rNueva.nuevaVersionId, institucionId, { modulos: [moduloLunes.id] })
     expect(rAsignar.clasesCreadas).toBe(0)
