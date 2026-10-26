@@ -92,7 +92,9 @@ function ModalConfirmar({
         display: "flex", alignItems: "center", justifyContent: "center",
         zIndex: "var(--z-modal)",
       }}
-      onClick={onCancelar}
+      // Mientras la acción corre (activar tarda ~25 s) el modal no se cierra:
+      // cerrarlo no la cancela y dejaría al usuario sin saber cuándo termina.
+      onClick={deshabilitado ? undefined : onCancelar}
     >
       <div
         style={{
@@ -111,7 +113,8 @@ function ModalConfirmar({
         <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "flex-end" }}>
           <button
             onClick={onCancelar}
-            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: "pointer" }}
+            disabled={deshabilitado}
+            style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border-strong)", background: "transparent", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "var(--color-text-primary)", cursor: deshabilitado ? "not-allowed" : "pointer", opacity: deshabilitado ? 0.6 : 1 }}
           >
             Cancelar
           </button>
@@ -121,7 +124,7 @@ function ModalConfirmar({
             style={{ padding: "8px 16px", borderRadius: "var(--radius-lg)", border: "none", background: "var(--color-error)", fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)", color: "white", cursor: deshabilitado ? "not-allowed" : "pointer", opacity: deshabilitado ? 0.6 : 1 }}
             aria-busy={deshabilitado}
           >
-            {textoConfirmar}
+            {deshabilitado ? "Procesando..." : textoConfirmar}
           </button>
         </div>
       </div>
