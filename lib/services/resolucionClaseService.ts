@@ -6,11 +6,9 @@
 // documento de arquitectura).
 //
 // Cubre todas las causas: FIN_ASIGNACION, CAMBIO_DISTRIBUCION, INCIDENCIA,
-// PERIODO_OPERATIVO, CALENDARIO_ESCOLAR y NINGUNA/DICTADA. Los atajos en
-// lote de claseProgramadaService (suspenderNoVigentes,
-// suspenderPorFinAsignacion) siguen escribiendo FIN_ASIGNACION y
-// CAMBIO_DISTRIBUCION directo hasta la reconciliación de la Fase 3; el motor
-// llega al mismo resultado cuando vuelve a resolver esas clases.
+// PERIODO_OPERATIVO, CALENDARIO_ESCOLAR y NINGUNA/DICTADA. Desde la Fase 3,
+// FIN_ASIGNACION y CAMBIO_DISTRIBUCION también se escriben solo por acá (vía
+// reconciliarAsignacion); los atajos en lote se retiraron.
 import { EstadoClase, Causa } from "@prisma/client"
 import prisma from "@/lib/prisma"
 import { periodoOperativoRepository } from "@/lib/repositories/periodoOperativoRepository"
@@ -111,7 +109,7 @@ function rigeAntesDeLaBaja(dia: Date, deletedAt: Date | null): boolean {
  * asignacionVigente: la asignación rige en la fecha de la clase -- hasta
  * fecha_fin inclusive si existe, y si fue eliminada solo para fechas
  * anteriores al día local de su deletedAt (el día de la baja ya no rige,
- * igual que suspenderPorFinAsignacion desde hoy). activo=false sin deletedAt
+ * igual que eliminarAsignacion desde hoy). activo=false sin deletedAt
  * no tiene día de corte: no rige para ninguna fecha.
  *
  * moduloVigente: alguna versión de distribución de la asignación cuya

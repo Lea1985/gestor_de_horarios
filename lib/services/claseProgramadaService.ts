@@ -6,12 +6,14 @@
 //
 // Garantías que este servicio ofrece:
 //  1. generarParaRango es idempotente (skipDuplicates + @@unique real en DB).
-//  2. resolverCoberturaDelTramo evalúa el tramo EXACTO pedido, no por incidencia.
-//  3. suspenderNoVigentes nunca elimina: solo cambia Estado/Causa. La historia
-//     y la identidad de cada ClaseProgramada se preservan siempre.
+//  2. Nunca elimina clases: solo cambia Estado/Causa. La historia y la
+//     identidad de cada ClaseProgramada se preservan siempre.
+//
+// Los cambios de módulos, versiones y bajas de una asignación pasan por
+// reconciliarAsignacion (reconciliacionService), no por atajos en lote.
 
 import prisma from "@/lib/prisma"
-import { EstadoClase, Causa, Dias } from "@prisma/client"
+import { EstadoClase, Causa } from "@prisma/client"
 import { generarClases } from "@/lib/helpers/clases"
 import { claseProgramadaRepository } from "@/lib/repositories/claseProgramadaRepository"
 import type { RangoGeneracion } from "@/lib/types/claseProgramada"
@@ -20,15 +22,6 @@ import { resolverClase } from "@/lib/services/resolucionClaseService"
 
 export class RangoInvalidoError extends Error {
   constructor() { super("desde debe ser menor o igual a hasta") }
-}
-
-export type TramoReemplazo = {
-  desde: string
-  hasta: string
-  totalClases: number
-  clasesConReemplazo: number
-  migrable: boolean
-  suplente: { asignacionTitularId: number; agenteSuplenteId: number; nombre: string } | null
 }
 
 function normalizarRango(desde: Date, hasta: Date) {
@@ -126,199 +119,6 @@ export const claseProgramadaService = {
     }
   },
 
-  /**
-   * Reconcilia el tramo contra la nueva lista de módulos cuando cambia la
-   * distribución, en las dos direcciones:
-   *   - SUSPENDE (causa CAMBIO_DISTRIBUCION) las clases que ya no corresponden.
-   *   - REACTIVA (PROGRAMADA, causa NINGUNA) las que habíamos suspendido por
-   *     CAMBIO_DISTRIBUCION en un cambio anterior y que vuelven a corresponder
-   *     (ej. lunes -> martes -> lunes: al volver a lunes, se reactivan solas).
-   * Las que ya estaban vigentes y siguen vigentes quedan intactas (para que
-   * generarParaRango las reutilice via skipDuplicates, sin duplicar).
-   *
-   * No toca DICTADA. No toca el Reemplazo asociado a las clases que cambian
-   * de estado en ninguna dirección (se deja intacto a propósito, como
-   * historial, hasta definir si necesita un estado propio a futuro).
-   */
-  async suspenderNoVigentes(params: RangoGeneracion & {
-    modulosNuevos: { id: number; dia_semana: Dias }[]
-  }) {
-    const { institucionId, asignacionId, unidadId, comisionId, modulosNuevos } = params
-    const { desde, hasta } = normalizarRango(params.desde, params.hasta)
-
-    const clavesEsperadas = modulosNuevos.length === 0
-      ? new Set<string>()
-      : new Set(
-          generarClases({
-            institucionId,
-            asignacionId,
-            unidadId,
-            comisionId,
-            incidenciaId: null,
-            modulos: modulosNuevos,
-            desde,
-            hasta,
-            diasSuspendidos: [],
-          }).map(c => `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`)
-        )
-
-    const existentes = await prisma.claseProgramada.findMany({
-      where: {
-        asignacionId,
-        fecha: { gte: desde, lte: hasta },
-        estado: { in: [EstadoClase.PROGRAMADA, EstadoClase.SUSPENDIDA, EstadoClase.REEMPLAZADA] },
-      },
-      select: { id: true, fecha: true, moduloId: true, estado: true, causa: true },
-    })
-
-    const idsASuspender = existentes
-      .filter(c => {
-        // Protegidas: una clase cuya causa actual es INCIDENCIA no se toca acá.
-        // INCIDENCIA está por encima de CAMBIO_DISTRIBUCION en la precedencia
-        // del motor -- confirmado con datos reales que sin este filtro se
-        // pisaba silenciosamente la causa real al reasignar módulos.
-        if (c.causa === Causa.INCIDENCIA) return false
-        const clave = `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`
-        return !clavesEsperadas.has(clave)
-      })
-      .map(c => c.id)
-
-    const idsAReactivar = existentes
-      .filter(c => {
-        const clave = `${c.fecha.toISOString().slice(0, 10)}-${c.moduloId ?? "null"}`
-        return c.estado === EstadoClase.SUSPENDIDA
-          && c.causa === Causa.CAMBIO_DISTRIBUCION
-          && clavesEsperadas.has(clave)
-      })
-      .map(c => c.id)
-
-    if (idsASuspender.length === 0 && idsAReactivar.length === 0) {
-      return { suspendidas: 0, reactivadas: 0 }
-    }
-
-    const [rSuspender, rReactivar] = await Promise.all([
-      idsASuspender.length > 0
-        ? prisma.claseProgramada.updateMany({
-            where: { id: { in: idsASuspender } },
-            data:  { estado: EstadoClase.SUSPENDIDA, causa: Causa.CAMBIO_DISTRIBUCION },
-          })
-        : Promise.resolve({ count: 0 }),
-      idsAReactivar.length > 0
-        ? prisma.claseProgramada.updateMany({
-            where: { id: { in: idsAReactivar } },
-            data:  { estado: EstadoClase.PROGRAMADA, causa: Causa.NINGUNA },
-          })
-        : Promise.resolve({ count: 0 }),
-    ])
-
-    return { suspendidas: rSuspender.count, reactivadas: rReactivar.count }
-  },
-
-  /**
-   * Evalúa el tramo EXACTO [desde, hasta] de una asignación (no por incidencia
-   * individual) y determina si un único suplente cubre el 100% de las clases
-   * con reemplazo activo en ese tramo. Se usa para decidir si se puede
-   * "mantener el reemplazo" al modificar/eliminar una distribución.
-   */
-  async resolverCoberturaDelTramo(params: {
-    asignacionId: number
-    desde: Date
-    hasta: Date
-  }): Promise<TramoReemplazo[]> {
-    const { desde, hasta } = normalizarRango(params.desde, params.hasta)
-
-    const clases = await prisma.claseProgramada.findMany({
-      where: {
-        asignacionId: params.asignacionId,
-        fecha: { gte: desde, lte: hasta },
-      },
-      orderBy: { fecha: "asc" },
-      select: {
-        fecha: true,
-        reemplazos: {
-          where: { activo: true },
-          take: 1,
-          orderBy: { createdAt: "desc" },
-          select: {
-            asignacionTitularId: true,
-            agenteSuplenteId: true,
-            agenteSuplente: { select: { nombre: true, apellido: true } },
-          },
-        },
-      },
-    })
-
-    if (clases.length === 0) return []
-
-    const totalClases = clases.length
-    const conReemplazo = clases.filter(c => c.reemplazos.length > 0)
-    const suplentesUnicos = new Set(
-      conReemplazo.map(c => `${c.reemplazos[0].asignacionTitularId}-${c.reemplazos[0].agenteSuplenteId}`)
-    )
-
-    const migrable = conReemplazo.length === totalClases && suplentesUnicos.size === 1
-
-    if (conReemplazo.length === 0) return []
-
-    const r = conReemplazo[0].reemplazos[0]
-
-    return [{
-      desde: clases[0].fecha.toISOString().slice(0, 10),
-      hasta: clases[clases.length - 1].fecha.toISOString().slice(0, 10),
-      totalClases,
-      clasesConReemplazo: conReemplazo.length,
-      migrable,
-      suplente: migrable ? {
-        asignacionTitularId: r.asignacionTitularId,
-        agenteSuplenteId:    r.agenteSuplenteId,
-        nombre: `${r.agenteSuplente.apellido}, ${r.agenteSuplente.nombre}`,
-      } : null,
-    }]
-  },
-
-  /**
-   * Aplica el suplente detectado como migrable a las clases nuevas generadas
-   * para el mismo rango (ya deben existir, generadas por generarParaRango).
-   */
-  async migrarReemplazoATramo(params: {
-    asignacionId: number
-    desde: Date
-    hasta: Date
-    asignacionTitularId: number
-    agenteSuplenteId: number
-  }) {
-    const { desde, hasta } = normalizarRango(params.desde, params.hasta)
-
-    const clasesNuevas = await prisma.claseProgramada.findMany({
-      where: {
-        asignacionId: params.asignacionId,
-        estado: EstadoClase.PROGRAMADA,
-        fecha: { gte: desde, lte: hasta },
-      },
-      select: { id: true },
-    })
-    if (clasesNuevas.length === 0) return { migradas: 0 }
-
-    const ids = clasesNuevas.map(c => c.id)
-
-    await prisma.$transaction(async (tx) => {
-      await tx.claseProgramada.updateMany({
-        where: { id: { in: ids } },
-        data:  { estado: EstadoClase.REEMPLAZADA },
-      })
-      await tx.reemplazo.createMany({
-        data: ids.map(claseId => ({
-          claseId,
-          asignacionTitularId: params.asignacionTitularId,
-          agenteSuplenteId:    params.agenteSuplenteId,
-          observacion:         "Migrado automáticamente al modificar la distribución",
-          activo:              true,
-        })),
-      })
-    })
-
-    return { migradas: ids.length }
-  },
 /**
    * Re-resuelve todas las clases de una institución en una fecha puntual
    * cuando se crea, elimina o reactiva un evento de CalendarioEscolar que
@@ -512,34 +312,6 @@ export const claseProgramadaService = {
     }))
 
     return { ids: clases.map(c => c.id) }
-  },
-
-  /**
-   * Suspende en bloque las clases futuras de una asignación cuando esta se
-   * elimina. No hace falta pasar por resolverClase ni proteger INCIDENCIA:
-   * eliminarAsignacion ya bloquea el borrado si hay incidencias o
-   * reemplazos activos, así que para cuando se llega acá no puede quedar
-   * ninguna clase con esas causas. No toca DICTADA -- es historia.
-   */
-  async suspenderPorFinAsignacion(params: {
-    institucionId: number
-    asignacionId:  number
-    desde:         Date
-  }) {
-    const r = await prisma.claseProgramada.updateMany({
-      where: {
-        institucionId: params.institucionId,
-        asignacionId:  params.asignacionId,
-        fecha:         { gte: params.desde },
-        estado:        { not: EstadoClase.DICTADA },
-      },
-      data: {
-        estado:             EstadoClase.SUSPENDIDA,
-        causa:              Causa.FIN_ASIGNACION,
-        versionResolucion:  { increment: 1 },
-      },
-    })
-    return { suspendidas: r.count }
   },
   
 }
