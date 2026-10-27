@@ -3,7 +3,7 @@ import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
-import { FechaFueraDePadreError } from "./crearIncidencia"
+import { FechaFueraDePadreError, IncidenciaDuplicadaError, esIncidenciaDuplicada } from "./crearIncidencia"
 import prisma from "@/lib/prisma"
 
 export class IncidenciaNoEncontradaError extends Error {
@@ -32,7 +32,7 @@ export class TieneHijosError extends Error {
 export class TieneReemplazosError extends Error {
   constructor() { super("No se puede editar una incidencia que tiene reemplazos asignados en sus clases") }
 }
-export { FechaFueraDePadreError }
+export { FechaFueraDePadreError, IncidenciaDuplicadaError }
 
 export async function actualizarIncidencia(
   id:       number,
@@ -101,12 +101,18 @@ export async function actualizarIncidencia(
   )
   if (conflicto) throw new SuperposicionError(conflicto)
 
-  const actualizada = await incidenciaRepository.actualizar(id, tenantId, {
-    fecha_desde:     nuevaDesde,
-    fecha_hasta:     nuevaHasta,
-    codigarioItemId,
-    observacion:     body.observacion as string | undefined,
-  })
+  let actualizada
+  try {
+    actualizada = await incidenciaRepository.actualizar(id, tenantId, {
+      fecha_desde:     nuevaDesde,
+      fecha_hasta:     nuevaHasta,
+      codigarioItemId,
+      observacion:     body.observacion as string | undefined,
+    })
+  } catch (error) {
+    if (esIncidenciaDuplicada(error)) throw new IncidenciaDuplicadaError()
+    throw error
+  }
 
   // Si cambió el rango de fechas (desde y/o hasta), desvinculamos TODO lo
   // que tenía esta incidencia antes de re-vincular con el rango nuevo --

@@ -1,7 +1,7 @@
 //app/api/incidencias/[id]/route.ts
 import { withContext } from "@/lib/auth/withContext"
 import { obtenerIncidencia, IncidenciaNoEncontradaError as ObtenerNotFound } from "@/lib/usecases/incidencias/obtenerIncidencia"
-import { actualizarIncidencia, IncidenciaNoEncontradaError as ActualizarNotFound, RangoFechasInvalidoError, CodigarioItemNoValidoError, SuperposicionError, TieneHijosError as EditarHijosError, TieneReemplazosError as EditarReemplazosError, FechaFueraDePadreError } from "@/lib/usecases/incidencias/actualizarIncidencia"
+import { actualizarIncidencia, IncidenciaNoEncontradaError as ActualizarNotFound, RangoFechasInvalidoError, CodigarioItemNoValidoError, SuperposicionError, TieneHijosError as EditarHijosError, TieneReemplazosError as EditarReemplazosError, FechaFueraDePadreError, IncidenciaDuplicadaError } from "@/lib/usecases/incidencias/actualizarIncidencia"
 import { eliminarIncidencia, TieneHijosError, TieneReemplazosError } from "@/lib/usecases/incidencias/eliminarIncidencia"
 
 function parseId(id: string) {
@@ -44,7 +44,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       if (error instanceof SuperposicionError) {
         return Response.json({ error: error.message, conflicto: error.conflicto }, { status: 409 })
       }
-      if (error instanceof EditarHijosError || error instanceof EditarReemplazosError) {
+      if (error instanceof EditarHijosError || error instanceof EditarReemplazosError || error instanceof IncidenciaDuplicadaError) {
         return Response.json({ error: (error as Error).message }, { status: 409 })
       }
       return Response.json({ error: "Error actualizando incidencia" }, { status: 500 })

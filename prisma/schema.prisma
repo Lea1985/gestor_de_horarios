@@ -443,7 +443,9 @@ model Incidencia {
   ClaseProgramada ClaseProgramada[]
   
 
-  @@unique([asignacionId, fecha_desde], name: "asignacionId_fecha_desde")
+  // Unicidad (asignacionId, incidenciaPadreId, fecha_desde) solo entre filas
+  // vivas: índice parcial "Incidencia_unica_viva_key", creado por SQL en la
+  // migración 20261027120000 (Prisma no lo expresa).
   @@index([asignacionId])
   @@index([codigarioItemId, fecha_desde])
   @@index([fecha_desde, fecha_hasta])

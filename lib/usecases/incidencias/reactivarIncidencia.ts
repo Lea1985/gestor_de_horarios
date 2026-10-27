@@ -2,6 +2,9 @@
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
+import { IncidenciaDuplicadaError, esIncidenciaDuplicada } from "./crearIncidencia"
+
+export { IncidenciaDuplicadaError }
 
 export class IncidenciaNoEncontradaError extends Error {
   constructor() { super("Incidencia no encontrada") }
@@ -31,7 +34,12 @@ export async function reactivarIncidencia(id: number, tenantId: number) {
   )
   if (superposicion) throw new SuperposicionError()
 
-  await incidenciaRepository.reactivar(id)
+  try {
+    await incidenciaRepository.reactivar(id)
+  } catch (error) {
+    if (esIncidenciaDuplicada(error)) throw new IncidenciaDuplicadaError()
+    throw error
+  }
   await resolverClasesIncidencia(id, tenantId)
   return { ok: true }
 }

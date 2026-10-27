@@ -1,6 +1,7 @@
 // lib/usecases/incidencias/crearIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import prisma from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 
 export class DatosIncidenciaInvalidosError extends Error {
@@ -23,6 +24,15 @@ export class FechaFueraDePadreError extends Error {
 }
 export class SinClasesProgramadasError extends Error {
   constructor() { super("No hay clases programadas para esta asignación en el rango de fechas indicado") }
+}
+// P2002 del índice único parcial "Incidencia_unica_viva_key" (misma
+// asignación, mismo padre y misma fecha de inicio entre licencias vivas): solo
+// se llega en una carrera, porque verificarSuperposicion ya lo rechaza antes.
+export class IncidenciaDuplicadaError extends Error {
+  constructor() { super("Ya existe otra licencia vigente de esta asignación que empieza en la misma fecha") }
+}
+export function esIncidenciaDuplicada(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
 export class SuperposicionError extends Error {
   constructor(
@@ -105,14 +115,20 @@ let excludeIds: number[] | undefined
   )
   if (conflicto) throw new SuperposicionError(conflicto)
 
-  const nueva = await incidenciaRepository.crear({
-    asignacionId,
-    fecha_desde:      fechaDesde,
-    fecha_hasta:      fechaHasta,
-    codigarioItemId,
-    incidenciaPadreId,
-    observacion,
-  })
+  let nueva
+  try {
+    nueva = await incidenciaRepository.crear({
+      asignacionId,
+      fecha_desde:      fechaDesde,
+      fecha_hasta:      fechaHasta,
+      codigarioItemId,
+      incidenciaPadreId,
+      observacion,
+    })
+  } catch (error) {
+    if (esIncidenciaDuplicada(error)) throw new IncidenciaDuplicadaError()
+    throw error
+  }
 
   await resolverClasesIncidencia(nueva.id, tenantId)
 

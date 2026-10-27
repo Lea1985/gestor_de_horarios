@@ -11,6 +11,7 @@ import {
   FechaFueraDePadreError,
   SinClasesProgramadasError,
   SuperposicionError,
+  IncidenciaDuplicadaError,
 } from "@/lib/usecases/incidencias/crearIncidencia"
 
 export async function GET(req: Request) {
@@ -50,6 +51,9 @@ export async function POST(req: Request) {
       }
       if (error instanceof SuperposicionError) {
         return Response.json({ error: error.message, conflicto: error.conflicto }, { status: 409 })
+      }
+      if (error instanceof IncidenciaDuplicadaError) {
+        return Response.json({ error: error.message }, { status: 409 })
       }
       console.error("Error creando incidencia:", error)
       return Response.json({ error: "Error creando incidencia" }, { status: 500 })

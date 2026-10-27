@@ -5,6 +5,7 @@ import {
   IncidenciaNoEncontradaError,
   SuperposicionError,
   FechaPasadaError,
+  IncidenciaDuplicadaError,
 } from "@/lib/usecases/incidencias/reactivarIncidencia"
 
 function parseId(id: string) {
@@ -31,7 +32,7 @@ export async function POST(
       if (error instanceof FechaPasadaError) {
         return Response.json({ error: error.message }, { status: 400 })
       }
-      if (error instanceof SuperposicionError) {
+      if (error instanceof SuperposicionError || error instanceof IncidenciaDuplicadaError) {
         return Response.json({ error: error.message }, { status: 409 })
       }
       console.error("Error reactivando incidencia:", error)
