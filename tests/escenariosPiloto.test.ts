@@ -257,12 +257,19 @@ describe("Escenarios del piloto — motor de clases", () => {
       expect((await reemplazoActivo(X.clases["2026-11-24"]))?.incidenciaId).toBe(X.padre.id)
       expect((await reemplazoActivo(X.clases["2026-11-25"]))?.incidenciaId).toBe(X.hija.id)
       expect((await leer(X.clases["2026-11-25"])).incidenciaId).toBe(X.hija.id)
+      // El reemplazo de la padre en los días de la hija queda en pausa (Fase 4, B).
+      for (const dia of ["2026-11-25", "2026-11-26"]) {
+        const dePadre = await prisma.reemplazo.findFirstOrThrow({
+          where: { claseId: X.clases[dia], incidenciaId: X.padre.id },
+        })
+        expect({ activo: dePadre.activo, deletedAt: dePadre.deletedAt }).toEqual({ activo: false, deletedAt: null })
+      }
     }
   })
 
   it("5) licencia hija: crearReemplazo toma el incidenciaId de la hija y rechaza la clase muerta de su rango", async () => {
-    // La hija no puede empezar el mismo día que la padre: lo impide el
-    // índice único (asignacionId, fecha_desde) de Incidencia (Fase 4).
+    // La hija empieza un día después de la padre solo para que haya una clase
+    // de la padre fuera de la hija (desde la Fase 4 podría empezar el mismo día).
     const a = await nuevaAsignacion()
     await nuevaClase(a.id, "2026-11-30", moduloVigente)
     const viva   = await nuevaClase(a.id, "2026-12-01", moduloVigente)
