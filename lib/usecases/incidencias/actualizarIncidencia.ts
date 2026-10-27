@@ -96,10 +96,22 @@ export async function actualizarIncidencia(
     if (!valido) throw new CodigarioItemNoValidoError()
   }
 
-  const conflicto = await incidenciaRepository.verificarSuperposicion(
-    incidencia.asignacionId, nuevaDesde, nuevaHasta, tenantId, id
-  )
-  if (conflicto) throw new SuperposicionError(conflicto)
+  const rangoCambio =
+    nuevaDesde.getTime() !== incidencia.fecha_desde.getTime() ||
+    nuevaHasta.getTime() !== incidencia.fecha_hasta.getTime()
+
+  // Solo si cambia el rango (con el mismo rango no puede aparecer una
+  // superposición nueva). Como al crear, se excluye la cadena de ancestros:
+  // una hija se superpone con su padre por definición.
+  if (rangoCambio) {
+    const ancestros = incidencia.incidenciaPadreId
+      ? await incidenciaRepository.obtenerAncestros(incidencia.incidenciaPadreId, tenantId)
+      : undefined
+    const conflicto = await incidenciaRepository.verificarSuperposicion(
+      incidencia.asignacionId, nuevaDesde, nuevaHasta, tenantId, id, ancestros
+    )
+    if (conflicto) throw new SuperposicionError(conflicto)
+  }
 
   let actualizada
   try {
@@ -119,9 +131,6 @@ export async function actualizarIncidencia(
   // así una clase que queda afuera al achicar el rango se libera y se
   // resuelve sola a su estado correcto, en vez de quedar pegada a una
   // incidencia que ya no la cubre.
-  const rangoCambio =
-    nuevaDesde.getTime() !== incidencia.fecha_desde.getTime() ||
-    nuevaHasta.getTime() !== incidencia.fecha_hasta.getTime()
   if (rangoCambio) {
     const { ids: idsDesvinculados } = await claseProgramadaService.desvincularIncidencia(id)
     for (const claseId of idsDesvinculados) {

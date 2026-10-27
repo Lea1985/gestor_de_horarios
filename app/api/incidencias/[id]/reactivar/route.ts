@@ -6,6 +6,8 @@ import {
   SuperposicionError,
   FechaPasadaError,
   IncidenciaDuplicadaError,
+  IncidenciaPadreNoValidaError,
+  FechaFueraDePadreError,
 } from "@/lib/usecases/incidencias/reactivarIncidencia"
 
 function parseId(id: string) {
@@ -29,7 +31,11 @@ export async function POST(
       if (error instanceof IncidenciaNoEncontradaError) {
         return Response.json({ error: error.message }, { status: 404 })
       }
-      if (error instanceof FechaPasadaError) {
+      if (
+        error instanceof FechaPasadaError ||
+        error instanceof IncidenciaPadreNoValidaError ||
+        error instanceof FechaFueraDePadreError
+      ) {
         return Response.json({ error: error.message }, { status: 400 })
       }
       if (error instanceof SuperposicionError || error instanceof IncidenciaDuplicadaError) {

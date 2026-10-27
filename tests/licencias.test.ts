@@ -15,6 +15,15 @@ import { asegurarBaseDeTest } from "./helpers/guardiaBaseTest"
 import { incidenciaRepository } from "../lib/repositories/incidenciaRepository"
 import { crearIncidencia, IncidenciaDuplicadaError } from "../lib/usecases/incidencias/crearIncidencia"
 import { eliminarIncidencia } from "../lib/usecases/incidencias/eliminarIncidencia"
+import {
+  actualizarIncidencia,
+  SuperposicionError as SuperposicionAlEditarError,
+} from "../lib/usecases/incidencias/actualizarIncidencia"
+import {
+  reactivarIncidencia,
+  IncidenciaPadreNoValidaError,
+  SuperposicionError as SuperposicionAlReactivarError,
+} from "../lib/usecases/incidencias/reactivarIncidencia"
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const LUNES = ["2026-11-02", "2026-11-09", "2026-11-16"]
@@ -156,6 +165,74 @@ describe("Licencias — Fase 4", () => {
       vi.spyOn(incidenciaRepository, "verificarSuperposicion").mockResolvedValue(null)
 
       await expect(licencia(a.id, "2026-11-02", "2026-11-09")).rejects.toBeInstanceOf(IncidenciaDuplicadaError)
+    })
+  })
+
+  describe("ancestros al editar y reactivar una hija", () => {
+    it("editar la observación de una hija no choca con su padre", async () => {
+      const { a } = await asignacionConClases()
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      const hija = await licencia(a.id, "2026-11-09", "2026-11-09", padre.id)
+
+      const editada = await actualizarIncidencia(hija.id, institucionId, { observacion: "aviso tardío" })
+
+      expect(editada?.observacion).toBe("aviso tardío")
+    })
+
+    it("cambiar el rango de una hija dentro de la padre re-vincula sus clases", async () => {
+      const { a, clases } = await asignacionConClases()
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      const hija = await licencia(a.id, "2026-11-09", "2026-11-09", padre.id)
+
+      await actualizarIncidencia(hija.id, institucionId, { fecha_hasta: "2026-11-16" })
+
+      expect((await leer(clases["2026-11-02"])).incidenciaId).toBe(padre.id)
+      expect((await leer(clases["2026-11-09"])).incidenciaId).toBe(hija.id)
+      expect((await leer(clases["2026-11-16"])).incidenciaId).toBe(hija.id)
+    })
+
+    it("una hija sigue sin poder superponerse con una hermana", async () => {
+      const { a } = await asignacionConClases()
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      const hija = await licencia(a.id, "2026-11-02", "2026-11-02", padre.id)
+      const hermana = await licencia(a.id, "2026-11-16", "2026-11-16", padre.id)
+
+      const error = await actualizarIncidencia(hija.id, institucionId, { fecha_hasta: "2026-11-16" }).catch(e => e)
+
+      expect(error).toBeInstanceOf(SuperposicionAlEditarError)
+      expect(error.conflicto.id).toBe(hermana.id)
+    })
+
+    it("reactivar una hija vuelve a vincular sus clases", async () => {
+      const { a, clases } = await asignacionConClases()
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      const hija = await licencia(a.id, "2026-11-09", "2026-11-09", padre.id)
+      await eliminarIncidencia(hija.id, institucionId)
+      expect((await leer(clases["2026-11-09"])).incidenciaId).toBe(padre.id)
+
+      await reactivarIncidencia(hija.id, institucionId)
+
+      expect((await leer(clases["2026-11-09"])).incidenciaId).toBe(hija.id)
+    })
+
+    it("reactivar una hija con la padre eliminada se rechaza", async () => {
+      const { a } = await asignacionConClases()
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      const hija = await licencia(a.id, "2026-11-09", "2026-11-09", padre.id)
+      await eliminarIncidencia(hija.id, institucionId)
+      await eliminarIncidencia(padre.id, institucionId)
+
+      await expect(reactivarIncidencia(hija.id, institucionId)).rejects.toBeInstanceOf(IncidenciaPadreNoValidaError)
+    })
+
+    it("reactivar una hija que choca con una hermana cargada después se rechaza", async () => {
+      const { a } = await asignacionConClases()
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      const hija = await licencia(a.id, "2026-11-09", "2026-11-09", padre.id)
+      await eliminarIncidencia(hija.id, institucionId)
+      await licencia(a.id, "2026-11-09", "2026-11-16", padre.id)
+
+      await expect(reactivarIncidencia(hija.id, institucionId)).rejects.toBeInstanceOf(SuperposicionAlReactivarError)
     })
   })
 })

@@ -177,6 +177,11 @@ async obtenerPorId(id: number, tenantId: number) {
     excludeId?: number,
     excludeIds?: number[]
   ) {
+    // Excluye la propia incidencia (excludeId) y permite superposición con
+    // toda la cadena de ancestros (excludeIds: padre, abuelo...), NO con
+    // hermanas ni incidencias no relacionadas. Un solo notIn: antes eran dos
+    // claves `id` y la segunda pisaba a la primera.
+    const excluidas = [...(excludeId ? [excludeId] : []), ...(excludeIds ?? [])]
     return prisma.incidencia.findFirst({
       where: {
         asignacionId,
@@ -185,13 +190,7 @@ async obtenerPorId(id: number, tenantId: number) {
         asignacion: {
           institucionId: tenantId,
         },
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-        // Permitir superposición con toda la cadena de ancestros
-        // (padre, abuelo, bisabuelo...), NO con hermanas ni incidencias
-        // no relacionadas.
-        ...(excludeIds && excludeIds.length > 0
-          ? { id: { notIn: excludeIds } }
-          : {}),
+        ...(excluidas.length > 0 ? { id: { notIn: excluidas } } : {}),
         AND: [
           { fecha_desde: { lte: fechaHasta } },
           { fecha_hasta: { gte: fechaDesde } },
@@ -384,7 +383,7 @@ async obtenerPorId(id: number, tenantId: number) {
         activo: false,
         asignacion: { institucionId: tenantId },
       },
-      select: { id: true, asignacionId: true, fecha_desde: true, fecha_hasta: true },
+      select: { id: true, asignacionId: true, fecha_desde: true, fecha_hasta: true, incidenciaPadreId: true },
     })
   },
   reactivar(id: number) {
