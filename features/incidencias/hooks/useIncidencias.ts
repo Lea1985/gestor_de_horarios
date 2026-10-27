@@ -4,6 +4,7 @@ import { useAuth } from "@/app/hooks/useAuth"
 import { fetchIncidencias, deleteIncidencia, reactivarIncidencia, fetchPeriodos } from "../services/incidenciasService"
 import type { Incidencia, PeriodoOperativo } from "../types"
 import { hoyLocal, hoyLocalISO } from "@/lib/helpers/fechaInstitucion"
+import { coincideBusqueda } from "../utils/coincideBusqueda"
 
 export type VenceFiltro = "hoy" | "manana" | "resto-semana" | "7dias" | null
 
@@ -106,14 +107,7 @@ export function useIncidencias(soloHoyInicial: boolean = false, venceFiltroInici
     }
 
     if (busqueda.trim()) {
-      const q = busqueda.toLowerCase()
-      resultado = resultado.filter(i =>
-        i.asignacion?.identificadorEstructural.toLowerCase().includes(q) ||
-        i.codigarioItem?.nombre.toLowerCase().includes(q) ||
-        i.codigarioItem?.codigo.toLowerCase().includes(q) ||
-        (i.agenteMostrado?.apellido.toLowerCase().includes(q) ?? false) ||
-        (i.agenteMostrado?.nombre.toLowerCase().includes(q) ?? false)
-      )
+      resultado = resultado.filter(i => coincideBusqueda(i, busqueda))
     }
 
     // UX-101: orden estable por id, ascendente.

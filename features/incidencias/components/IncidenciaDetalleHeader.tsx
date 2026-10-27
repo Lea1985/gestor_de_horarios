@@ -23,7 +23,9 @@ export function IncidenciaDetalleHeader({ incidencia, clases, cobertura }: {
   const esSuplente = !!incidencia.padre?.asignacion
   const reemplazosOrdenados = [...(clases[0]?.reemplazos ?? [])].sort((a, b) => a.id - b.id)
   const inactivos = reemplazosOrdenados.filter(r => !r.activo)
-  const suplenteSaliente = inactivos[inactivos.length - 1]?.agenteSuplente ?? null
+  // El ausente de una hija lo resuelve el backend (reemplazo de la padre en
+  // pausa); la inferencia por el último inactivo queda solo de respaldo.
+  const suplenteSaliente = incidencia.agenteMostrado ?? inactivos[inactivos.length - 1]?.agenteSuplente ?? null
   const suplenteEntrante = reemplazosOrdenados.find(r => r.activo)?.agenteSuplente ?? null
   const agente = esSuplente
     ? suplenteSaliente

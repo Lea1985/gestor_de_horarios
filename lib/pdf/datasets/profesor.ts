@@ -1,5 +1,6 @@
 // lib/pdf/datasets/profesor.ts
 import prisma from "@/lib/prisma"
+import { REEMPLAZO_PAUSADO } from "@/lib/helpers/reemplazoPausado"
 
 export type DatosReporteProfesor = {
   agente: {
@@ -131,11 +132,13 @@ export async function obtenerDatosProfesor(
   // solo los que este agente sigue cubriendo hoy. Un reemplazo que ya
   // terminó (porque a este agente también lo reemplazaron después) sigue
   // siendo un hecho real que pasó, y el reporte del profesor debe
-  // mostrarlo igual.
+  // mostrarlo igual. Salvo los que están en pausa: ese día el agente faltó
+  // (licencia hija) y no cuenta como clase dada por él.
   const reemplazos = await prisma.reemplazo.findMany({
     where: {
       agenteSuplenteId: agenteId,
       clase: { institucionId: tenantId },
+      NOT: REEMPLAZO_PAUSADO,
     },
     orderBy: { clase: { fecha: "desc" } },
     select: {

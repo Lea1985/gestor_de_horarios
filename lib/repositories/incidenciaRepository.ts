@@ -1,5 +1,6 @@
 // lib/repositories/incidenciaRepository.ts
 import prisma from "@/lib/prisma"
+import { esPausado } from "@/lib/helpers/reemplazoPausado"
 const incidenciaInclude = {
   codigarioItem: true,
   padre: {
@@ -80,7 +81,7 @@ async listar(tenantId: number, asignacionId?: number, incluirEliminadas = false)
   return Promise.all(
     incidencias.map(async (i) => {
       const agenteMostrado = i.incidenciaPadreId
-        ? await incidenciaRepository.obtenerSuplenteSaliente(i.id, tenantId)
+        ? await incidenciaRepository.obtenerSuplenteSaliente(i.id, i.incidenciaPadreId, tenantId)
         : (i.asignacion?.titularidades.find(
             t => t.fecha_desde <= i.fecha_desde && (!t.fecha_hasta || t.fecha_hasta >= i.fecha_desde)
           )?.agente ?? null)
@@ -102,7 +103,12 @@ async obtenerPorId(id: number, tenantId: number) {
     const raizFechaDesde = incidencia.incidenciaPadreId
       ? await incidenciaRepository.obtenerRaizFechaDesde(id, tenantId)
       : incidencia.fecha_desde
-    return { ...incidencia, raizFechaDesde }
+    // Ausente de una hija (el suplente de la padre que falta); en una raíz lo
+    // resuelve el front con el titular vigente.
+    const agenteMostrado = incidencia.incidenciaPadreId
+      ? await incidenciaRepository.obtenerSuplenteSaliente(id, incidencia.incidenciaPadreId, tenantId)
+      : null
+    return { ...incidencia, raizFechaDesde, agenteMostrado }
   },
   existeEnTenant(id: number, tenantId: number) {
     return prisma.incidencia.findFirst({
@@ -241,7 +247,27 @@ async obtenerPorId(id: number, tenantId: number) {
     `
     return rows[0]?.fecha_desde ?? null
   },
-  async obtenerSuplenteSaliente(incidenciaId: number, tenantId: number) {
+  // Ausente de una licencia hija: el suplente del reemplazo de la PADRE en las
+  // clases de la hija (en pausa, o desactivado con el modelo anterior a la
+  // Fase 4). Antes se tomaba el último reemplazo inactivo de la primera clase:
+  // al quitar el reemplazo de la hija, el ausente pasaba a ser su propio
+  // reemplazante (bug A). Sin reemplazos de la padre vinculados (datos
+  // previos a Reemplazo.incidenciaId) se usa esa inferencia vieja.
+  async obtenerSuplenteSaliente(incidenciaId: number, incidenciaPadreId: number, tenantId: number) {
+  const dePadre = await prisma.reemplazo.findMany({
+    where: {
+      incidenciaId: incidenciaPadreId,
+      clase:        { incidenciaId, institucionId: tenantId },
+    },
+    orderBy: [{ clase: { fecha: "asc" } }, { id: "desc" }],
+    take:    20,
+    select: {
+      activo: true, deletedAt: true,
+      agenteSuplente: { select: { nombre: true, apellido: true, documento: true } },
+    },
+  })
+  const elegido = dePadre.find(esPausado) ?? dePadre[0]
+  if (elegido) return elegido.agenteSuplente
   const clase = await prisma.claseProgramada.findFirst({
     where: { incidenciaId, institucionId: tenantId },
     orderBy: { fecha: "asc" },

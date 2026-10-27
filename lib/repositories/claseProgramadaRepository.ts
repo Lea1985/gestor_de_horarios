@@ -95,6 +95,8 @@ const claseIncludeConReemplazos = {
       asignacionTitularId: true,
       observacion:         true,
       activo:              true,
+      deletedAt:           true,
+      incidenciaId:        true,
       agenteSuplente: {
         select: {
           id: true,

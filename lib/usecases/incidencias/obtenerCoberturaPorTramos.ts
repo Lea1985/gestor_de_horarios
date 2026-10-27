@@ -1,5 +1,6 @@
 //lib/usecases/incidencias/obtenerCoberturaPorTramos.ts
 import prisma from "@/lib/prisma"
+import { REEMPLAZO_PAUSADO } from "@/lib/helpers/reemplazoPausado"
 
 export type TramoCobertura = {
   desde:    string
@@ -27,17 +28,21 @@ export async function obtenerCoberturaPorTramos(
     select: {
       fecha: true,
       reemplazos: {
-        // Sin filtro por incidenciaId a propósito: dentro del rango de la
-        // incidencia raíz, el reemplazo activo puede pertenecer a una
-        // incidencia hija (ej: el suplente también se ausentó y se
-        // reasignó la cobertura) -- igual corresponde mostrarlo acá, es
-        // parte de la misma cadena. El sistema no permite incidencias
-        // superpuestas sobre la misma asignación salvo padre-hijo, así
-        // que cualquier activo en este rango pertenece a esta cadena.
-        where:   { activo: true },
-        take:    1,
+        // Cada licencia muestra su propio reemplazo (Fase 4, B): en los días
+        // de una hija, la padre sigue mostrando a su suplente (en pausa: es
+        // quien falta) y la hija a quien lo cubre, o nadie. Los activos sin
+        // incidenciaId (anteriores a ese campo) se muestran como antes.
+        where: {
+          OR: [
+            { incidenciaId, activo: true },
+            { incidenciaId, ...REEMPLAZO_PAUSADO },
+            { incidenciaId: null, activo: true },
+          ],
+        },
         orderBy: { createdAt: "desc" },
         select: {
+          activo:         true,
+          incidenciaId:   true,
           agenteSuplente: { select: { id: true, nombre: true, apellido: true } },
         },
       },
@@ -47,7 +52,11 @@ export async function obtenerCoberturaPorTramos(
   const tramos: TramoCobertura[] = []
   for (const clase of clases) {
     const fecha    = clase.fecha.toISOString().slice(0, 10)
-    const suplente = clase.reemplazos[0]?.agenteSuplente ?? null
+    const propio =
+      clase.reemplazos.find(r => r.incidenciaId === incidenciaId && r.activo) ??
+      clase.reemplazos.find(r => r.incidenciaId === incidenciaId) ??
+      clase.reemplazos[0]
+    const suplente = propio?.agenteSuplente ?? null
     const ultimo   = tramos[tramos.length - 1]
     const mismoSuplente =
       ultimo && (ultimo.suplente?.id ?? null) === (suplente?.id ?? null)

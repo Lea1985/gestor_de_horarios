@@ -2,6 +2,7 @@
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
+import { reanudarEnClases } from "@/lib/helpers/reemplazoPausado"
 import prisma from "@/lib/prisma"
 
 export class IncidenciaNoEncontradaError extends Error {
@@ -48,8 +49,10 @@ export async function eliminarIncidencia(id: number, tenantId: number) {
 
   // Liberar las clases que quedaron vinculadas a esta incidencia y volver a
   // resolver su estado (normalmente vuelven a PROGRAMADA, o a lo que
-  // corresponda por período/calendario si esas causas siguen vigentes).
+  // corresponda por período/calendario si esas causas siguen vigentes). Si
+  // vuelven a la padre, se reanuda el reemplazo que esta hija había pausado.
   const { ids } = await claseProgramadaService.desvincularIncidencia(id)
+  await reanudarEnClases(ids)
   for (const claseId of ids) {
     await resolverClase(claseId, tenantId)
   }

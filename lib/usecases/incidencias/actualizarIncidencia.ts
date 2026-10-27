@@ -3,6 +3,7 @@ import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 import { claseProgramadaService } from "@/lib/services/claseProgramadaService"
 import { resolverClase } from "@/lib/services/resolucionClaseService"
+import { reanudarEnClases } from "@/lib/helpers/reemplazoPausado"
 import { FechaFueraDePadreError, IncidenciaDuplicadaError, esIncidenciaDuplicada } from "./crearIncidencia"
 import prisma from "@/lib/prisma"
 
@@ -132,7 +133,10 @@ export async function actualizarIncidencia(
   // resuelve sola a su estado correcto, en vez de quedar pegada a una
   // incidencia que ya no la cubre.
   if (rangoCambio) {
+    // Las que vuelven a la padre reanudan su reemplazo pausado; las que
+    // siguen en el rango nuevo se vuelven a pausar al re-vincular.
     const { ids: idsDesvinculados } = await claseProgramadaService.desvincularIncidencia(id)
+    await reanudarEnClases(idsDesvinculados)
     for (const claseId of idsDesvinculados) {
       await resolverClase(claseId, tenantId)
     }

@@ -220,6 +220,7 @@ export default function IncidenciaDetallePage() {
           ) : (
             <ClasesAfectadasTable
               clases={clases}
+              incidenciaId={incidencia.id}
               esRaiz={!incidencia.padre}
               onAgregarReemplazo={abrirModal}
               onEliminarReemplazo={setConfirmarEliminarReemplazoId}

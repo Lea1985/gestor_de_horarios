@@ -77,6 +77,8 @@ export type IncidenciaDetalle = {
     }[]
   } | null
   hijos?: { id: number }[]
+  // Hija: el suplente de la padre que falta (lo resuelve el backend).
+  agenteMostrado?: { nombre: string; apellido: string; documento?: string } | null
 }
 export type CadenaItem = {
   id:          number
@@ -92,6 +94,9 @@ export type ReemplazoClase = {
   id:                  number
   asignacionTitularId: number
   activo:              boolean
+  // activo = false con deletedAt = null: en pausa (ver lib/helpers/reemplazoPausado.ts).
+  deletedAt?:          string | null
+  incidenciaId?:       number | null
   asignacionSuplente?: {
     identificadorEstructural: string
     titularidades: {
@@ -108,6 +113,8 @@ export type ReemplazoClase = {
 export type ClaseAfectada = {
   id:     number
   fecha:  string
+  // Licencia que hoy tiene la clase (una hija, en los días en que el suplente falta).
+  incidenciaId?: number | null
   estado: "PROGRAMADA" | "DICTADA" | "SUSPENDIDA" | "REEMPLAZADA"
   modulo?: {
     dia_semana: string

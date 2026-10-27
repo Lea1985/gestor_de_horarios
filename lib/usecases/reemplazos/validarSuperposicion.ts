@@ -1,6 +1,7 @@
 // lib/usecases/reemplazos/validarSuperposicion.ts
 import prisma from "@/lib/prisma"
 import type { Db } from "@/lib/types/db"
+import { REEMPLAZO_PAUSADO } from "@/lib/helpers/reemplazoPausado"
 
 export async function validarSuperposicionSuplente(
   claseId: number,
@@ -54,8 +55,10 @@ export async function validarSuperposicionSuplente(
  * Determina qué agente está siendo reemplazado en esta clase puntual:
  * el agente del Reemplazo ACTIVO registrado para esa clase (si existe)
  * -- porque ese es, en los hechos, quien la está cubriendo ahora mismo.
- * Si no hay ningún Reemplazo activo (nunca se asignó, o el anterior se
- * quitó), es el titular vigente en la fecha de esa clase.
+ * Si no hay activo pero hay uno en pausa (la clase es de una licencia hija:
+ * ese suplente es quien falta), es el agente del pausado más reciente.
+ * Si no hay ninguno de los dos (nunca se asignó, o el anterior se quitó),
+ * es el titular vigente en la fecha de esa clase.
  *
  * IMPORTANTE: solo mira reemplazos ACTIVOS, no cualquiera histórico --
  * si mirara también los soft-deleted (activo:false), volver a agregar
@@ -81,6 +84,12 @@ export async function obtenerAgenteQueSeReemplaza(
     select: { agenteSuplenteId: true },
   })
   if (ultimoReemplazo) return ultimoReemplazo.agenteSuplenteId
+  const pausado = await prisma.reemplazo.findFirst({
+    where:   { claseId, ...REEMPLAZO_PAUSADO, clase: { institucionId: tenantId } },
+    orderBy: { id: "desc" },
+    select:  { agenteSuplenteId: true },
+  })
+  if (pausado) return pausado.agenteSuplenteId
   const clase = await prisma.claseProgramada.findFirst({
     where: { id: claseId, institucionId: tenantId },
     select: { fecha: true },

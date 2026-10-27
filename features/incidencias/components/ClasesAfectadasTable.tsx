@@ -39,6 +39,7 @@ const estadoBadge: Record<ClaseAfectada["estado"], { label: string; color: strin
 const UMBRAL_AUTO_COLAPSO = 5
 export function ClasesAfectadasTable({
   clases,
+  incidenciaId,
   esRaiz,
   onAgregarReemplazo,
   onEliminarReemplazo,
@@ -46,6 +47,7 @@ export function ClasesAfectadasTable({
   errorEliminarReemplazo,
 }: {
   clases:                  ClaseAfectada[]
+  incidenciaId:            number
   esRaiz:                  boolean
   onAgregarReemplazo:      (clase: ClaseAfectada) => void
   onEliminarReemplazo:     (reemplazoId: number) => void
@@ -110,7 +112,14 @@ const hayPendientes = clases.some(
               </tr>
             ) : clases.map(clase => {
               const badge          = estadoBadge[clase.estado]
-              const reemplazoActivo = clase.reemplazos.find(r => r.activo) ?? null
+              // Clase tomada por una licencia hija (el suplente de esta falta
+              // ese día): se muestra el reemplazo de ESTA licencia, en pausa,
+              // sin acciones -- quién cubre y los cambios van en la hija.
+              const tomadaPorHija   = clase.incidenciaId != null && clase.incidenciaId !== incidenciaId
+              const pausadoPropio   = tomadaPorHija
+                ? clase.reemplazos.find(r => !r.activo && r.deletedAt === null && r.incidenciaId === incidenciaId) ?? null
+                : null
+              const reemplazoActivo = tomadaPorHija ? null : clase.reemplazos.find(r => r.activo) ?? null
               const estaEliminando = reemplazoActivo !== null && eliminandoReemplazoId === reemplazoActivo.id
               const errorFila = reemplazoActivo !== null && errorEliminarReemplazo?.reemplazoId === reemplazoActivo.id
                 ? errorEliminarReemplazo.mensaje
@@ -153,7 +162,11 @@ const hayPendientes = clases.some(
                       porque mezclaba reemplazantes de OTRAS incidencias de la
                       misma cadena como si fueran de esta (hallazgo 18/08/2026). */}
                   <td style={td}>
-                    {reemplazoActivo ? (
+                    {tomadaPorHija ? (
+                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-secondary)" }}>
+                        {pausadoPropio ? `${nombreSuplente(pausadoPropio)} — ` : ""}ausente (licencia #{clase.incidenciaId})
+                      </span>
+                    ) : reemplazoActivo ? (
                       <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-primary)", fontWeight: "var(--font-medium)" }}>
                         {nombreSuplente(reemplazoActivo)}
                       </span>
@@ -163,7 +176,7 @@ const hayPendientes = clases.some(
                   </td>
                   <td style={td}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", alignItems: "flex-start" }}>
-                      {reemplazoActivo ? (
+                      {tomadaPorHija ? null : reemplazoActivo ? (
                         <>
                           <button
                             onClick={() => !estaEliminando && onEliminarReemplazo(reemplazoActivo.id)}

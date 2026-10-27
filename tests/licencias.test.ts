@@ -19,6 +19,15 @@ import {
   SinClasesProgramadasError,
 } from "../lib/usecases/incidencias/crearIncidencia"
 import { listarAsignacionesParaIncidencia } from "../lib/usecases/asignaciones/listarAsignaciones"
+import { listarIncidencias } from "../lib/usecases/incidencias/listarIncidencias"
+import { obtenerIncidencia } from "../lib/usecases/incidencias/obtenerIncidencia"
+import { obtenerCoberturaPorTramos } from "../lib/usecases/incidencias/obtenerCoberturaPorTramos"
+import { crearReemplazo, AutoReemplazoError } from "../lib/usecases/reemplazos/crearReemplazo"
+import { eliminarReemplazo } from "../lib/usecases/reemplazos/eliminarReemplazo"
+import { reasignarReemplazoAIncidencia } from "../lib/usecases/reemplazos/reasignarReemplazoAIncidencia"
+import { reanudarEnClases } from "../lib/helpers/reemplazoPausado"
+import { obtenerDatosProfesor } from "../lib/pdf/datasets/profesor"
+import { coincideBusqueda } from "../features/incidencias/utils/coincideBusqueda"
 import { eliminarIncidencia } from "../lib/usecases/incidencias/eliminarIncidencia"
 import {
   actualizarIncidencia,
@@ -38,6 +47,10 @@ let unidadId: number
 let turnoId: number
 let modulo: number
 let item: number
+let titularX: number
+let lelli: number
+let cubre: number
+let otro: number
 
 async function asignacionConClases(dias: string[] = LUNES) {
   const a = await prisma.asignacion.create({
@@ -99,6 +112,16 @@ describe("Licencias — Fase 4", () => {
     item = (await prisma.codigarioItem.create({
       data: { codigarioId: codigario.id, codigo: "LIC", nombre: "Licencia", porcentajeComputable: 100 },
     })).id
+    const agente = async (apellido: string) => (await prisma.agente.create({
+      data: {
+        institucionId, nombre: "Ag", apellido,
+        documento: `DOC-${randomUUID()}`, email: `ag-${randomUUID()}@test.dev`, estado: "ACTIVO",
+      },
+    })).id
+    titularX = await agente("TitularX")
+    lelli = await agente("Lelli")
+    cubre = await agente("Cubre")
+    otro = await agente("Otro")
   })
 
   afterEach(() => {
@@ -273,6 +296,242 @@ describe("Licencias — Fase 4", () => {
 
       expect(lista.find(x => x.id === muerta.id)?.tieneClasesVigentes).toBe(false)
       expect(lista.find(x => x.id === viva.id)?.tieneClasesVigentes).toBe(true)
+    })
+  })
+
+  // ── B: licencias encadenadas y reemplazos en pausa ────────────────────────
+  // X titular de licencia (padre), Lelli lo reemplaza los tres lunes. Lelli
+  // falta el lunes D = 09/11 (hija). Cubre reemplaza a Lelli ese día.
+  describe("Licencias encadenadas — reemplazos en pausa (B)", () => {
+    const D = "2026-11-09"
+    const fila = (claseId: number) => prisma.claseProgramada.findUniqueOrThrow({
+      where: { id: claseId }, include: { reemplazos: { orderBy: { id: "asc" } } },
+    })
+    const estadoDe = async (claseId: number) => {
+      const c = await fila(claseId)
+      return {
+        estado: c.estado, causa: c.causa, incidenciaId: c.incidenciaId,
+        reemplazos: c.reemplazos.map(r => ({
+          agente: r.agenteSuplenteId, incidenciaId: r.incidenciaId,
+          estado: r.activo ? "activo" : r.deletedAt === null ? "pausado" : "quitado",
+        })),
+      }
+    }
+    const suplenteEnCobertura = async (incidenciaId: number, fecha: string) =>
+      (await obtenerCoberturaPorTramos(incidenciaId, institucionId))
+        .find(t => t.desde <= fecha && fecha <= t.hasta)?.suplente?.id ?? null
+
+    // Padre con Lelli cubriendo los tres lunes; titular X.
+    async function cadenaConLelli() {
+      const { a, clases } = await asignacionConClases()
+      await prisma.titularAsignacion.create({
+        data: { institucionId, asignacionId: a.id, agenteId: titularX, fecha_desde: d("2026-01-01") },
+      })
+      const padre = await licencia(a.id, "2026-11-02", "2026-11-16")
+      for (const id of Object.values(clases)) {
+        await crearReemplazo(institucionId, { claseId: id, asignacionTitularId: a.id, agenteSuplenteId: lelli })
+      }
+      return { a, clases, padre }
+    }
+    // Secuencia de "Ausencia del suplente" (ModalAusenciaSuplente): crea la
+    // hija y, si se eligió suplente nuevo, reasigna cada clase PROGRAMADA o
+    // REEMPLAZADA de la hija (hoy el modal usa reasignar; también se prueba
+    // con crearReemplazo desde el detalle).
+    async function ausenciaDelSuplente(
+      a: { id: number }, padreId: number, desde: string, hasta: string,
+      suplenteNuevo: number | null, via: "reasignar" | "crear" = "reasignar",
+    ) {
+      const hija = await licencia(a.id, desde, hasta, padreId)
+      if (suplenteNuevo !== null) {
+        const clasesHija = await prisma.claseProgramada.findMany({ where: { incidenciaId: hija.id } })
+        for (const c of clasesHija.filter(c => c.estado === "PROGRAMADA" || c.estado === "REEMPLAZADA" || c.estado === "SUSPENDIDA")) {
+          if (via === "reasignar") {
+            await reasignarReemplazoAIncidencia(institucionId, {
+              claseId: c.id, nuevaIncidenciaId: hija.id, asignacionTitularId: a.id, agenteSuplenteId: suplenteNuevo,
+            })
+          } else {
+            await crearReemplazo(institucionId, { claseId: c.id, asignacionTitularId: a.id, agenteSuplenteId: suplenteNuevo })
+          }
+        }
+      }
+      return hija
+    }
+
+    it("crear la hija pausa el reemplazo de Lelli en D y la clase queda SUSPENDIDA hasta que alguien la cubra", async () => {
+      const { a, clases, padre } = await cadenaConLelli()
+
+      const hija = await licencia(a.id, D, D, padre.id)
+
+      expect(await estadoDe(clases[D])).toEqual({
+        estado: "SUSPENDIDA", causa: "INCIDENCIA", incidenciaId: hija.id,
+        reemplazos: [{ agente: lelli, incidenciaId: padre.id, estado: "pausado" }],
+      })
+      // Los otros días, sin cambios.
+      expect((await estadoDe(clases["2026-11-02"])).reemplazos[0].estado).toBe("activo")
+      expect((await fila(clases["2026-11-16"])).estado).toBe("REEMPLAZADA")
+    })
+
+    for (const via of ["reasignar", "crear"] as const) {
+      it(`hija con cobertura (modal + ${via}): Cubre cubre D, Lelli queda en pausa y la padre la sigue mostrando`, async () => {
+        const { a, clases, padre } = await cadenaConLelli()
+
+        const hija = await ausenciaDelSuplente(a, padre.id, D, D, cubre, via)
+
+        expect(await estadoDe(clases[D])).toEqual({
+          estado: "REEMPLAZADA", causa: "INCIDENCIA", incidenciaId: hija.id,
+          reemplazos: [
+            { agente: lelli, incidenciaId: padre.id, estado: "pausado" },
+            { agente: cubre, incidenciaId: hija.id, estado: "activo" },
+          ],
+        })
+        expect(await suplenteEnCobertura(padre.id, D)).toBe(lelli)
+        expect(await suplenteEnCobertura(padre.id, "2026-11-02")).toBe(lelli)
+        expect(await suplenteEnCobertura(hija.id, D)).toBe(cubre)
+        expect((await obtenerIncidencia(hija.id, institucionId)).agenteMostrado?.apellido).toBe("Lelli")
+      })
+    }
+
+    it("hija sin cobertura (modal sin suplente nuevo): D SUSPENDIDA, la padre muestra a Lelli y la hija a nadie", async () => {
+      const { a, clases, padre } = await cadenaConLelli()
+
+      const hija = await ausenciaDelSuplente(a, padre.id, D, D, null)
+
+      expect((await fila(clases[D])).estado).toBe("SUSPENDIDA")
+      expect(await suplenteEnCobertura(padre.id, D)).toBe(lelli)
+      expect(await suplenteEnCobertura(hija.id, D)).toBe(null)
+      const enListado = (await listarIncidencias(institucionId)).find(i => i.id === hija.id)
+      expect(enListado?.agenteMostrado?.apellido).toBe("Lelli")
+    })
+
+    it("A: quitar el reemplazo de la hija deja D SUSPENDIDA y la hija se sigue encontrando por Lelli", async () => {
+      // Antes de la Fase 4, tras quitar a Cubre la hija figuraba con Cubre como
+      // ausente: la búsqueda por Lelli (o por X) no la encontraba.
+      const { a, clases, padre } = await cadenaConLelli()
+      const hija = await ausenciaDelSuplente(a, padre.id, D, D, cubre)
+      const deCubre = await prisma.reemplazo.findFirstOrThrow({ where: { claseId: clases[D], activo: true } })
+
+      await eliminarReemplazo(deCubre.id, institucionId)
+
+      expect(await estadoDe(clases[D])).toEqual({
+        estado: "SUSPENDIDA", causa: "INCIDENCIA", incidenciaId: hija.id,
+        reemplazos: [
+          { agente: lelli, incidenciaId: padre.id, estado: "pausado" },
+          { agente: cubre, incidenciaId: hija.id, estado: "quitado" },
+        ],
+      })
+      expect(await suplenteEnCobertura(padre.id, D)).toBe(lelli)
+      const enListado = (await listarIncidencias(institucionId)).find(i => i.id === hija.id)!
+      expect(enListado.agenteMostrado?.apellido).toBe("Lelli")
+      expect(coincideBusqueda(enListado, "lelli")).toBe(true)
+      expect(coincideBusqueda(enListado, "cubre")).toBe(false)
+      // El buscador mira el ausente, no el titular: la hija no aparece por X
+      // (la padre sí). Filtro por profesor: Fase 6.
+      expect(coincideBusqueda(enListado, "titularx")).toBe(false)
+    })
+
+    it("eliminar la hija sin cobertura reanuda a Lelli en D (REEMPLAZADA de la padre); reactivarla la vuelve a pausar", async () => {
+      const { a, clases, padre } = await cadenaConLelli()
+      const hija = await ausenciaDelSuplente(a, padre.id, D, D, cubre)
+      const deCubre = await prisma.reemplazo.findFirstOrThrow({ where: { claseId: clases[D], activo: true } })
+      await eliminarReemplazo(deCubre.id, institucionId)
+
+      await eliminarIncidencia(hija.id, institucionId)
+
+      expect(await estadoDe(clases[D])).toEqual({
+        estado: "REEMPLAZADA", causa: "INCIDENCIA", incidenciaId: padre.id,
+        reemplazos: [
+          { agente: lelli, incidenciaId: padre.id, estado: "activo" },
+          { agente: cubre, incidenciaId: hija.id, estado: "quitado" },
+        ],
+      })
+
+      await reactivarIncidencia(hija.id, institucionId)
+
+      const c = await estadoDe(clases[D])
+      expect([c.estado, c.incidenciaId, c.reemplazos[0].estado]).toEqual(["SUSPENDIDA", hija.id, "pausado"])
+    })
+
+    it("Lelli no puede cubrirse a sí misma en D (ni creando ni reasignando el reemplazo)", async () => {
+      const { a, clases, padre } = await cadenaConLelli()
+      const hija = await ausenciaDelSuplente(a, padre.id, D, D, null)
+
+      await expect(crearReemplazo(institucionId, {
+        claseId: clases[D], asignacionTitularId: a.id, agenteSuplenteId: lelli,
+      })).rejects.toBeInstanceOf(AutoReemplazoError)
+      await expect(reasignarReemplazoAIncidencia(institucionId, {
+        claseId: clases[D], nuevaIncidenciaId: hija.id, asignacionTitularId: a.id, agenteSuplenteId: lelli,
+      })).rejects.toBeInstanceOf(AutoReemplazoError)
+    })
+
+    it("tres niveles: la nieta pausa a Cubre; al eliminarla vuelve Cubre (no Lelli); al eliminar la hija vuelve Lelli", async () => {
+      const { a, clases, padre: abuela } = await cadenaConLelli()
+      const hija = await ausenciaDelSuplente(a, abuela.id, D, D, cubre)
+
+      // Cubre también falta en D: nieta, cubierta por Otro.
+      const nieta = await ausenciaDelSuplente(a, hija.id, D, D, otro)
+
+      expect(await estadoDe(clases[D])).toEqual({
+        estado: "REEMPLAZADA", causa: "INCIDENCIA", incidenciaId: nieta.id,
+        reemplazos: [
+          { agente: lelli, incidenciaId: abuela.id, estado: "pausado" },
+          { agente: cubre, incidenciaId: hija.id, estado: "pausado" },
+          { agente: otro, incidenciaId: nieta.id, estado: "activo" },
+        ],
+      })
+      expect((await obtenerIncidencia(nieta.id, institucionId)).agenteMostrado?.apellido).toBe("Cubre")
+      expect(await suplenteEnCobertura(abuela.id, D)).toBe(lelli)
+      expect(await suplenteEnCobertura(hija.id, D)).toBe(cubre)
+      expect(await suplenteEnCobertura(nieta.id, D)).toBe(otro)
+
+      // La nieta, sin su cobertura, se elimina: vuelve Cubre, Lelli sigue en pausa.
+      const deOtro = await prisma.reemplazo.findFirstOrThrow({ where: { claseId: clases[D], activo: true } })
+      await eliminarReemplazo(deOtro.id, institucionId)
+      await eliminarIncidencia(nieta.id, institucionId)
+
+      let c = await estadoDe(clases[D])
+      expect([c.estado, c.incidenciaId]).toEqual(["REEMPLAZADA", hija.id])
+      expect(c.reemplazos.map(r => r.estado)).toEqual(["pausado", "activo", "quitado"])
+
+      // Luego la hija (sin cobertura: se quita a Cubre): vuelve Lelli.
+      const deCubre = await prisma.reemplazo.findFirstOrThrow({ where: { claseId: clases[D], activo: true } })
+      await eliminarReemplazo(deCubre.id, institucionId)
+      await eliminarIncidencia(hija.id, institucionId)
+
+      c = await estadoDe(clases[D])
+      expect([c.estado, c.incidenciaId]).toEqual(["REEMPLAZADA", abuela.id])
+      expect(c.reemplazos.map(r => r.estado)).toEqual(["activo", "quitado", "quitado"])
+    })
+
+    it("reanudarEnClases no actúa sobre una clase dada de baja ni sobre una con otro reemplazo activo", async () => {
+      const { a, clases, padre } = await cadenaConLelli()
+      // Dos días en pausa (hija del 09 al 16), y la clase vuelve a la padre "a
+      // mano" para llamar al helper aislado.
+      const hija = await licencia(a.id, D, "2026-11-16", padre.id)
+      const muerta = clases[D]
+      const conOtro = clases["2026-11-16"]
+      await prisma.claseProgramada.updateMany({ where: { id: { in: [muerta, conOtro] } }, data: { incidenciaId: padre.id } })
+      await prisma.claseProgramada.update({ where: { id: muerta }, data: { estado: "SUSPENDIDA", causa: Causa.CAMBIO_DISTRIBUCION } })
+      await prisma.reemplazo.create({
+        data: { claseId: conOtro, asignacionTitularId: a.id, agenteSuplenteId: otro, incidenciaId: hija.id },
+      })
+
+      expect(await reanudarEnClases([muerta, conOtro])).toBe(0)
+
+      expect((await estadoDe(muerta)).reemplazos).toEqual([{ agente: lelli, incidenciaId: padre.id, estado: "pausado" }])
+      expect((await estadoDe(conOtro)).reemplazos.map(r => r.estado)).toEqual(["pausado", "activo"])
+    })
+
+    it("reporte del profesor: el día en pausa no cuenta como clase dada por Lelli; sí por Cubre", async () => {
+      const { a, padre } = await cadenaConLelli()
+      await ausenciaDelSuplente(a, padre.id, D, D, cubre)
+
+      const fechas = async (agenteId: number) =>
+        (await obtenerDatosProfesor(institucionId, agenteId))!.reemplazosComoSuplente
+          .filter(r => r.asignacion === a.identificadorEstructural)
+          .map(r => r.fecha.toISOString().slice(0, 10)).sort()
+
+      expect(await fechas(lelli)).toEqual(["2026-11-02", "2026-11-16"])
+      expect(await fechas(cubre)).toEqual([D])
     })
   })
 })
