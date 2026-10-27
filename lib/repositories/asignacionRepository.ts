@@ -1,6 +1,6 @@
 // lib/repositories/asignacionRepository.ts
 import prisma from "@/lib/prisma"
-import { Prisma } from "@prisma/client"
+import { Prisma, Causa } from "@prisma/client"
 import { hoyLocal } from "@/lib/helpers/fechaInstitucion"
 import type { Db } from "@/lib/types/db"
 const includeBase = {
@@ -56,8 +56,13 @@ export const asignacionRepository = {
       },
       include: {
         ...includeBase,
+        // Alguna clase viva de hoy en adelante (las dadas de baja no admiten
+        // licencia: crearIncidencia las rechaza).
         ClaseProgramada: {
-          where: { fecha: { gte: hoy } },
+          where: {
+            fecha: { gte: hoy },
+            causa: { notIn: [Causa.FIN_ASIGNACION, Causa.CAMBIO_DISTRIBUCION] },
+          },
           select: { id: true },
           take: 1,
         },

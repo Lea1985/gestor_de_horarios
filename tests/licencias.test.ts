@@ -8,12 +8,17 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest"
 import { randomUUID } from "crypto"
-import { Prisma } from "@prisma/client"
+import { Prisma, Causa, EstadoClase } from "@prisma/client"
 import prisma from "../lib/prisma"
 import { createTestInstitucion } from "./helpers/factories"
 import { asegurarBaseDeTest } from "./helpers/guardiaBaseTest"
 import { incidenciaRepository } from "../lib/repositories/incidenciaRepository"
-import { crearIncidencia, IncidenciaDuplicadaError } from "../lib/usecases/incidencias/crearIncidencia"
+import {
+  crearIncidencia,
+  IncidenciaDuplicadaError,
+  SinClasesProgramadasError,
+} from "../lib/usecases/incidencias/crearIncidencia"
+import { listarAsignacionesParaIncidencia } from "../lib/usecases/asignaciones/listarAsignaciones"
 import { eliminarIncidencia } from "../lib/usecases/incidencias/eliminarIncidencia"
 import {
   actualizarIncidencia,
@@ -233,6 +238,41 @@ describe("Licencias — Fase 4", () => {
       await licencia(a.id, "2026-11-09", "2026-11-16", padre.id)
 
       await expect(reactivarIncidencia(hija.id, institucionId)).rejects.toBeInstanceOf(SuperposicionAlReactivarError)
+    })
+  })
+
+  describe("una licencia exige clases vivas en el rango", () => {
+    const darDeBaja = (claseId: number, causa: Causa) =>
+      prisma.claseProgramada.update({ where: { id: claseId }, data: { estado: EstadoClase.SUSPENDIDA, causa } })
+
+    it("un rango con solo clases dadas de baja se rechaza", async () => {
+      const { a, clases } = await asignacionConClases()
+      await darDeBaja(clases["2026-11-02"], Causa.CAMBIO_DISTRIBUCION)
+      await darDeBaja(clases["2026-11-09"], Causa.FIN_ASIGNACION)
+
+      await expect(licencia(a.id, "2026-11-02", "2026-11-09")).rejects.toBeInstanceOf(SinClasesProgramadasError)
+      expect(await prisma.incidencia.count({ where: { asignacionId: a.id } })).toBe(0)
+    })
+
+    it("con alguna clase viva en el rango se crea y vincula solo las vivas", async () => {
+      const { a, clases } = await asignacionConClases()
+      await darDeBaja(clases["2026-11-02"], Causa.CAMBIO_DISTRIBUCION)
+
+      const inc = await licencia(a.id, "2026-11-02", "2026-11-09")
+
+      expect((await leer(clases["2026-11-02"])).incidenciaId).toBe(null)
+      expect((await leer(clases["2026-11-09"])).incidenciaId).toBe(inc.id)
+    })
+
+    it("el wizard no habilita una asignación cuyas clases futuras están todas dadas de baja", async () => {
+      const { a: muerta, clases } = await asignacionConClases()
+      for (const id of Object.values(clases)) await darDeBaja(id, Causa.CAMBIO_DISTRIBUCION)
+      const { a: viva } = await asignacionConClases()
+
+      const lista = await listarAsignacionesParaIncidencia(institucionId)
+
+      expect(lista.find(x => x.id === muerta.id)?.tieneClasesVigentes).toBe(false)
+      expect(lista.find(x => x.id === viva.id)?.tieneClasesVigentes).toBe(true)
     })
   })
 })

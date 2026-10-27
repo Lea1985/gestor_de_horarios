@@ -8,8 +8,8 @@ export function listarAsignaciones(
 }
 
 // UX-INC-014: variante para el wizard de "Nueva incidencia" — trae, además
-// de los datos habituales, si la asignación tiene al menos una clase
-// programada de hoy en adelante (tieneClasesVigentes). Se usa para
+// de los datos habituales, si la asignación tiene al menos una clase viva
+// (no dada de baja) de hoy en adelante (tieneClasesVigentes). Se usa para
 // deshabilitar la selección de asignaciones que van a fallar igual al
 // crear la incidencia.
 export async function listarAsignacionesParaIncidencia(tenantId: number) {

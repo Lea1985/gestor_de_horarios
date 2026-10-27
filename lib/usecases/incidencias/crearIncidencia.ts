@@ -1,7 +1,7 @@
 // lib/usecases/incidencias/crearIncidencia.ts
 import { incidenciaRepository } from "@/lib/repositories/incidenciaRepository"
 import prisma from "@/lib/prisma"
-import { Prisma } from "@prisma/client"
+import { Prisma, Causa } from "@prisma/client"
 import { resolverClasesIncidencia } from "./resolverClasesIncidencia"
 
 export class DatosIncidenciaInvalidosError extends Error {
@@ -90,12 +90,15 @@ export async function crearIncidencia(
     }
   }
 
-  // Validar que existan clases programadas en el rango para esta asignación
+  // Validar que existan clases vivas en el rango para esta asignación: las
+  // dadas de baja (FIN_ASIGNACION, CAMBIO_DISTRIBUCION) no se vinculan
+  // (vincularIncidencia), así que no alcanzan para cargar una licencia.
   const claseEnRango = await prisma.claseProgramada.findFirst({
     where: {
       asignacionId,
       institucionId: tenantId,
       fecha: { gte: fechaDesde, lte: fechaHasta },
+      causa: { notIn: [Causa.FIN_ASIGNACION, Causa.CAMBIO_DISTRIBUCION] },
     },
     select: { id: true },
   })
